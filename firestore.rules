@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // profile only for owner
+    match /Profile/{profileID} {
+      allow read, write: if checkIfOwner(profileID);
+    }
+    // Sites for owners
+    match /Profile/{profileID}/Sites/{siteID} {
+      allow read, write: if checkIfOwner(profileID) || siteIsShared(siteID);
+    }
+    
+    // Sites for owners
+    match /Profile/{profileID}/Sites/{siteID}/Snags/{SnagID} {
+      allow read, write: if checkIfOwner(profileID) || siteIsShared(siteID);
+    }
+    
+    function checkIfOwner(profileID){
+    	return request.auth.uid == profileID;
+    }
+    
+    function siteIsShared(siteID){
+    	return request.auth.token.email in resource.data.SHARED_WITH;
+    }
+  }
+}

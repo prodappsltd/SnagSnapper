@@ -1,0 +1,212 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# iOS/XCode related
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# macOS
+**/Flutter/ephemeral/
+**/Pods/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral
+**/xcuserdata/
+
+# Windows
+**/windows/flutter/ephemeral/
+
+# Linux
+**/linux/flutter/ephemeral/
+
+# Coverage
+coverage/
+*.lcov
+
+# Exceptions to above rules.
+!**/ios/**/default.mode1v3
+!**/ios/**/default.mode2v3
+!**/ios/**/default.pbxuser
+!**/ios/**/default.perspectivev3
+
+# Generated files
+*.g.dart
+*.freezed.dart
+*.gr.dart
+
+# Private keys and secrets
+*.pem
+*.key
+.env
+.env.*
+key.properties
+/android/key.properties
+
+# Firebase
+# Comment out these if you want to track Firebase config files
+# google-services.json
+# GoogleService-Info.plist
+# firebase_app_id_file.json
+.firebaserc
+
+# Firebase config files (specific paths)
+/ios/Runner/GoogleService-Info.plist
+/ios/firebase_app_id_file.json
+/macos/Runner/GoogleService-Info.plist
+/macos/firebase_app_id_file.json
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Code coverage
+*.lcov
+coverage/
+
+# Testing
+test/.test_coverage.dart
+coverage_badge.svg
+
+# Fvm
+.fvm/
+
+# Mason
+.mason/
+
+# Very Good CLI
+*.gen.dart
+
+# Local properties
+local.properties
+
+# Android specific
+/android/local.properties
+/android/app/google-services.json
+/android/gradle.properties
+/android/.gradle/
+
+# iOS specific  
+/ios/Podfile.lock
+
+# macOS specific
+/macos/Podfile.lock
+
+# Flutter DevTools
+devtools_options.yaml
+
+# Xcode user state
+*.xcuserstate
+**/project.xcworkspace/xcuserdata/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Editor backups and swap files
+*~
+*.swp
+*.swo
+*.swn
+.*.swp
+.*.swo
+.*.swn
+*.bak
+*.backup
+*.tmp
+*.temp
+\#*\#
+.\#*
+
+# Additional macOS files
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Additional Flutter/Dart
+.packages
+**/Flutter/flutter_assets/
+
+# Android generated files
+**/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+**/android/**/GeneratedPluginRegistrant.java

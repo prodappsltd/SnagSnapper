@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "Sites",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "ARCHIVE",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "DATE",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
