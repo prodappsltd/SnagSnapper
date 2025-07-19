@@ -37,17 +37,47 @@ import 'firebase_options.dart';
 Future<void> main() async {
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    FlutterError.onError = (errorDetails) {
-      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-    };
-    // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
-    PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      return true;
-    };
+    
+    // Initialize Firebase with proper error handling
+    try {
+      // Check if Firebase is already initialized to prevent duplicate app error
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        if (kDebugMode) print('Firebase initialized successfully');
+        
+        // Initialize Firebase App Check immediately after core initialization for better security
+        await FirebaseAppCheck.instance.activate(
+          androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+          appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.appAttestWithDeviceCheckFallback,
+        );
+        if (kDebugMode) print('Firebase App Check activated');
+      }
+      
+      // Set up crash reporting handlers after successful Firebase initialization
+      FlutterError.onError = (errorDetails) {
+        FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+      };
+      // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+      
+      // Enable crashlytics logs
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+      
+    } catch (e, stackTrace) {
+      // Log Firebase initialization error
+      if (kDebugMode) {
+        print('Firebase initialization error: $e');
+        print('Stack trace: $stackTrace');
+      }
+      // Continue app execution but with limited Firebase functionality
+    }
+    
+    // Configure device settings (these can continue even if Firebase fails)
     // So as the app does not sleep, screen always awake
     await WakelockPlus.enable();
     await SystemChrome.setPreferredOrientations([
@@ -57,8 +87,6 @@ Future<void> main() async {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
     ));
-    // Enable crashlytics logs
-    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
     runApp(const StartSnagSnapper());
   }, (error, stackTrace) {
     if (kDebugMode) print('runZonedGuarded: Caught error in my root zone.');
@@ -96,8 +124,8 @@ class MySubAppState extends State<MySubApp> {
     minLaunches: 10,
     remindDays: 7,
     remindLaunches: 8,
-    googlePlayIdentifier: 'com.productiveapps.snagsnapper',
-    appStoreIdentifier: '6474559094',
+    googlePlayIdentifier: 'uk.co.productiveapps.snagsnapper',
+    appStoreIdentifier: '6748839667',
   );
 
   @override
@@ -204,11 +232,16 @@ class HomePageState extends State<HomePage> {
     bool status = await Provider.of<CP>(context, listen: false).getNetworkStatus();
     if (!status) return 'No internet';
     if (!context.mounted) return "";
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.appAttestWithDeviceCheckFallback,
-    );
-    if (kDebugMode) print(await FirebaseAppCheck.instance.getToken());
+    // Firebase App Check is now initialized in main() for better security
+    // Just verify token generation here if needed in debug mode
+    if (kDebugMode) {
+      try {
+        final token = await FirebaseAppCheck.instance.getToken();
+        print('App Check token verified: ${token != null}');
+      } catch (e) {
+        print('App Check token error: $e');
+      }
+    }
     return await _checkAndLoadUser();
   }
 

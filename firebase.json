@@ -1,15 +1,1 @@
-{
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "hosting": {
-    "appAssociation": "AUTO",
-    "rewrites": [
-      {
-        "source": "/**",
-        "dynamicLinks": true
-      }
-    ]
-  }
-}
+{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"hosting":{"appAssociation":"AUTO","rewrites":[{"source":"/**","dynamicLinks":true}]},"flutter":{"platforms":{"android":{"default":{"projectId":"snagsnapperpro","appId":"1:752613191889:android:96a5ae97bdf562676015f0","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"snagsnapperpro","appId":"1:752613191889:ios:b41cf90e8c75c4ad6015f0","uploadDebugSymbols":true,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"snagsnapperpro","appId":"1:752613191889:ios:b41cf90e8c75c4ad6015f0","uploadDebugSymbols":true,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"snagsnapperpro","configurations":{"android":"1:752613191889:android:96a5ae97bdf562676015f0","ios":"1:752613191889:ios:b41cf90e8c75c4ad6015f0","macos":"1:752613191889:ios:b41cf90e8c75c4ad6015f0","web":"1:752613191889:web:e3fd39a226189c1b6015f0","windows":"1:752613191889:web:fcf01a2cfba8e27a6015f0"}}}}}}

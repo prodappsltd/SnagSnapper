@@ -9,7 +9,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+// import 'package:image_gallery_saver/image_gallery_saver.dart'; // Removed outdated package
 import 'package:image_picker/image_picker.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:intl/intl.dart';
@@ -141,7 +141,7 @@ class CP extends ChangeNotifier {
       hasInternet = false;
       _timer = Timer.periodic(Duration(seconds: 3), (time) async {
         //if (kDebugMode) print ('DATA_INN: Pinging to see Internet...');
-        hasInternet = await InternetConnectionChecker().hasConnection;
+        hasInternet = await InternetConnectionChecker.instance.hasConnection;
         if (hasInternet) {
           if (kDebugMode) print('DATA_INN: We have Internet...');
           _timer.cancel();
@@ -159,7 +159,7 @@ class CP extends ChangeNotifier {
   /// Not just wifi/4G etc check, it is actual data transmission test
   getNetworkStatus() async {
     if (kDebugMode) print('DATA-F_GNS: Getting Network Status');
-    hasInternet = await InternetConnectionChecker().hasConnection;
+    hasInternet = await InternetConnectionChecker.instance.hasConnection;
     //notifyListeners();
     if (!hasInternet) _informNoNetwork();
     if (kDebugMode) print('DATA-L_GNS: Got Internet?: $hasInternet');
@@ -724,11 +724,12 @@ class CP extends ChangeNotifier {
     if (storeExternally) {
       try {
         var t = await picture.readAsBytes();
-        ImageGallerySaver.saveImage(
-          t.buffer.asUint8List(),
-          quality: 100,
-          name: "${DateTime.now().toIso8601String()}.png",
-        );
+        // ImageGallerySaver.saveImage(
+        //   t.buffer.asUint8List(),
+        //   quality: 100,
+        //   name: "${DateTime.now().toIso8601String()}.png",
+        // );
+        // TODO: Replace with modern image saving solution
       } on Exception catch (e) {
         if (!kDebugMode) FirebaseCrashlytics.instance.log('** ERROR SAVING NEW PICTURE EXTERNALLY ** $e');
         if (kDebugMode) print('** ERROR SAVING NEW PICTURE EXTERNALLY ** $e');

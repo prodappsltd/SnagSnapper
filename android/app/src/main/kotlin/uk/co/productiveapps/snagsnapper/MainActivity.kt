@@ -1,4 +1,4 @@
-package com.productiveapps.snagsnapper
+package uk.co.productiveapps.snagsnapper
 
 import io.flutter.embedding.android.FlutterActivity
 

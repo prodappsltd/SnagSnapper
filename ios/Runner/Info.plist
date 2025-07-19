@@ -37,7 +37,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.productiveapps.snagsnapper</string>
+				<string>uk.co.productiveapps.snagsnapper</string>
 			</array>
 		</dict>
 	</array>

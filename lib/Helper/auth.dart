@@ -9,7 +9,7 @@ import 'package:snagsnapper/Helper/error.dart';
 
 class Auth extends BaseAuth {
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   @override
   Future<Information> createUserWithEmailAndPassword(String email, String password) async {
@@ -139,18 +139,17 @@ class Auth extends BaseAuth {
   ///Could be used later
   @override
   Future<Information> signInWithGoogle() async {
-    final GoogleSignInAccount? _account = await _googleSignIn.signIn();
-    final GoogleSignInAuthentication? _auth = await _account?.authentication;
-    if (_account != null && _auth !=null) {
+    try {
+      final GoogleSignInAccount _account = await _googleSignIn.authenticate();
+      final GoogleSignInAuthentication _auth = _account.authentication;
       final AuthCredential _credential = GoogleAuthProvider.credential(
-          idToken: _auth.idToken,
-          accessToken: _auth.accessToken);
+          idToken: _auth.idToken);
       await FirebaseAuth.instance.signInWithCredential(_credential);
       return Information();
-    } else {
+    } catch (e) {
       Information info = Information();
       info.error = true;
-      info.message = 'Error signing in with google';
+      info.message = 'Error signing in with google: $e';
       return info;
     }
   }

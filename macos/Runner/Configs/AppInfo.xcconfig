@@ -8,7 +8,7 @@
 PRODUCT_NAME = snagsnapper
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.productiveapps.snagsnapper.snagsnapper
+PRODUCT_BUNDLE_IDENTIFIER = uk.co.productiveapps.snagsnapper
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2024 com.productiveapps.snagsnapper. All rights reserved.

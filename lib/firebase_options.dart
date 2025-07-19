@@ -27,10 +27,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -44,38 +41,53 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCopmvO1hyy2hsk_Xigse6geSXcTFQ2k3w',
-    appId: '1:567752366185:web:7042b05cb24997d49aeaf8',
-    messagingSenderId: '567752366185',
-    projectId: 'snag-snapper',
-    authDomain: 'snag-snapper.firebaseapp.com',
-    storageBucket: 'snag-snapper.appspot.com',
-    measurementId: 'G-CL4DYHH1XQ',
+    apiKey: 'AIzaSyAcG754qcTGDU2-8lNPMEtMudZa6VhFVeM',
+    appId: '1:752613191889:web:e3fd39a226189c1b6015f0',
+    messagingSenderId: '752613191889',
+    projectId: 'snagsnapperpro',
+    authDomain: 'snagsnapperpro.firebaseapp.com',
+    storageBucket: 'snagsnapperpro.firebasestorage.app',
+    measurementId: 'G-5KQKLMVRQ2',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAKiUIjP5pIEpJxVleM_ifILE0c6ijhHZQ',
-    appId: '1:567752366185:android:1b999537e42d52369aeaf8',
-    messagingSenderId: '567752366185',
-    projectId: 'snag-snapper',
-    storageBucket: 'snag-snapper.appspot.com',
+    apiKey: 'AIzaSyBllI-VE9Zs-brZu_Hp7CjkuR3xq6hIbBc',
+    appId: '1:752613191889:android:96a5ae97bdf562676015f0',
+    messagingSenderId: '752613191889',
+    projectId: 'snagsnapperpro',
+    storageBucket: 'snagsnapperpro.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCH908ODozlKWl_hPofSzF1UU1ZBYbwEAU',
-    appId: '1:567752366185:ios:ff31862b29a3bac49aeaf8',
-    messagingSenderId: '567752366185',
-    projectId: 'snag-snapper',
-    storageBucket: 'snag-snapper.appspot.com',
-    iosBundleId: 'com.productiveapps.snagsnapper',
+    apiKey: 'AIzaSyB0YuXDgrh8bJeF0m0CzCfotu0MUscHgQk',
+    appId: '1:752613191889:ios:b41cf90e8c75c4ad6015f0',
+    messagingSenderId: '752613191889',
+    projectId: 'snagsnapperpro',
+    storageBucket: 'snagsnapperpro.firebasestorage.app',
+    androidClientId: '752613191889-qeguuktpan1hskvg46orkhd1561mfjnj.apps.googleusercontent.com',
+    iosClientId: '752613191889-9ir7991g9edtl69hviacf2k4rag9heou.apps.googleusercontent.com',
+    iosBundleId: 'uk.co.productiveapps.snagsnapper',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCH908ODozlKWl_hPofSzF1UU1ZBYbwEAU',
-    appId: '1:567752366185:ios:74c57f02c2ec1b989aeaf8',
-    messagingSenderId: '567752366185',
-    projectId: 'snag-snapper',
-    storageBucket: 'snag-snapper.appspot.com',
-    iosBundleId: 'com.productiveapps.snagsnapper.snagsnapper.RunnerTests',
+    apiKey: 'AIzaSyB0YuXDgrh8bJeF0m0CzCfotu0MUscHgQk',
+    appId: '1:752613191889:ios:b41cf90e8c75c4ad6015f0',
+    messagingSenderId: '752613191889',
+    projectId: 'snagsnapperpro',
+    storageBucket: 'snagsnapperpro.firebasestorage.app',
+    androidClientId: '752613191889-qeguuktpan1hskvg46orkhd1561mfjnj.apps.googleusercontent.com',
+    iosClientId: '752613191889-9ir7991g9edtl69hviacf2k4rag9heou.apps.googleusercontent.com',
+    iosBundleId: 'uk.co.productiveapps.snagsnapper',
   );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyAcG754qcTGDU2-8lNPMEtMudZa6VhFVeM',
+    appId: '1:752613191889:web:fcf01a2cfba8e27a6015f0',
+    messagingSenderId: '752613191889',
+    projectId: 'snagsnapperpro',
+    authDomain: 'snagsnapperpro.firebaseapp.com',
+    storageBucket: 'snagsnapperpro.firebasestorage.app',
+    measurementId: 'G-S98Z8QE4WP',
+  );
+
 }
