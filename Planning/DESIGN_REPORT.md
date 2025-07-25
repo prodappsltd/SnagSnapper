@@ -42,6 +42,7 @@ SnagSnapper is an offline-first mobile application designed for construction sit
 
 ---
 
+
 ## 1. Authentication & Signup Flow
 
 ### Authentication Flow Overview
