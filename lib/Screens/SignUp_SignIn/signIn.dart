@@ -1,3 +1,7 @@
+// TODO: DELETE THIS FILE - Replaced by UnifiedAuthScreen
+// This old sign-in screen is no longer used.
+// UnifiedAuthScreen now handles both login and signup in one screen.
+
 import 'dart:developer';
 
 import 'package:another_flushbar/flushbar.dart';

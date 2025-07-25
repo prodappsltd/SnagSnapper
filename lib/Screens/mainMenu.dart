@@ -1,10 +1,7 @@
-
 import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:rflutter_alert/rflutter_alert.dart';
@@ -12,11 +9,7 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Screens/moreOptions.dart';
 import 'package:snagsnapper/Screens/profile.dart';
-import 'package:snagsnapper/Widgets/ActionButton.dart';
-import 'package:snagsnapper/Widgets/imageHelper.dart';
 import 'package:url_launcher/url_launcher_string.dart';
-
-import 'SignUp_SignIn/sign_in_sign_on.dart';
 
 class MainMenu extends StatefulWidget {
   const MainMenu({super.key});
@@ -25,46 +18,83 @@ class MainMenu extends StatefulWidget {
   _MainMenuState createState() => _MainMenuState();
 }
 
-class _MainMenuState extends State<MainMenu> {
+class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
 
   String message1='';
   String message2='';
+  
+  // Animation controllers
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late AnimationController _pulseController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
     if (kDebugMode) print ('-----  * In Main Menu *  -----');
+    _setupAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await initDynamicLinks();
     });
   }
-
-  /// Initiate Notifications Settings
-  // initNotifications() async {
-  //   if (kDebugMode) print ('Notification initialisation');
-  //   var initializationSettingsAndroid = const AndroidInitializationSettings('@mipmap/ic_launcher');
-  //   var initializationSettingsIOS = IOSInitializationSettings(
-  //       requestSoundPermission: true,
-  //       requestBadgePermission: true,
-  //       requestAlertPermission: true,
-  //       onDidReceiveLocalNotification: onDidReceiveLocalNotification);
-  //   var initializationSettings = InitializationSettings(
-  //       android: initializationSettingsAndroid,
-  //       iOS: initializationSettingsIOS
-  //   );
-  //   // Get Permissions as required
-  //   await flutterLocalNotificationsPlugin
-  //       .resolvePlatformSpecificImplementation<
-  //       IOSFlutterLocalNotificationsPlugin>()
-  //       ?.requestPermissions(
-  //     alert: true,
-  //     badge: true,
-  //     sound: true,
-  //   );
-  //   await flutterLocalNotificationsPlugin.initialize(
-  //       initializationSettings); //,onSelectNotification: onSelectNotification);
-  //   _showNotification(true);
-  // }
+  
+  void _setupAnimations() {
+    // Fade animation
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeIn,
+    ));
+    
+    // Slide animation
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
+    
+    // Pulse animation for My Sites
+    _pulseController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(
+      begin: 0.98,
+      end: 1.02,
+    ).animate(CurvedAnimation(
+      parent: _pulseController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // Start animations
+    _fadeController.forward();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      _slideController.forward();
+    });
+  }
+  
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _slideController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
 
   /// Initialise Dynamic Links first
   initDynamicLinks() async {
@@ -214,72 +244,343 @@ class _MainMenuState extends State<MainMenu> {
   @override
   Widget build(BuildContext context) {
     if (kDebugMode) print ('MAIN-MENU: -----  BUILD SECTION   -----');
-    // if (Provider
-    //     .of<CP>(context, listen: false)
-    //     .getAppUser()!
-    //     .image.isNotEmpty) print ('IS NOT EMPTY');
+    final theme = Theme.of(context);
+    final size = MediaQuery.of(context).size;
+    
     return Scaffold(
-      //backgroundColor: Theme.of(context).colorScheme.primary,
-      body: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.only(left: 10.0, right: 10.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              ImageHelper(
-                  b64Image: Provider
-                      .of<CP>(context, listen: false)
-                      .getAppUser()!
-                      .image,
-                  height: getProportionalHeightForTopImage(context,FRACTION),
-                  text: 'Click to add your \ncompany logo',
-                  callBackFunction :() async {
-                    if (Provider.of<CP>(context, listen: false).getAppUser()!.image.isEmpty) {
-                      String image = await optionsDialogBox(context, 2000) ?? ''; //TODO - FIX THE IMAGE RESOLUTION
-                        if (image.isNotEmpty) setState(() => Provider.of<CP>(context, listen: false).getAppUser()!.image = image );
-                      Provider.of<CP>(context, listen: false).updateProfileImage();
-                    } else return;
-                  }
+      extendBodyBehindAppBar: true,
+      backgroundColor: theme.colorScheme.surface,
+      body: Stack(
+        children: [
+          // Background with modern gradient mesh
+          Container(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(-0.5, -0.5),
+                radius: 1.5,
+                colors: [
+                  theme.colorScheme.primary.withValues(alpha: 0.3),
+                  theme.colorScheme.primary.withValues(alpha: 0.1),
+                  theme.colorScheme.surface,
+                ],
               ),
-              //const SizedBox(height: 50.0,),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: <Widget>[
-                    GestureDetector(
-                        onTap: ()=>Navigator.push(context, MaterialPageRoute(builder: (
-                            context) => const Profile())).then((value) => setState((){})),
-                        child: const MainMenuItems(
-                            Icons.person, 'Profile', 'View your profile')),
-                    GestureDetector(
-                        onTap: () =>
-                            Navigator.push(context, MaterialPageRoute(builder: (
-                                context) => const MoreOptions())),
-                        child: const MainMenuItems(
-                            Icons.settings, 'More Options', 'View settings')),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/mySites');
-                      },
-                      child: const ActButton(busy: false, text: 'MY SITES')
-                    ),
-
-                  ],
+            ),
+          ),
+          
+          // Animated background shapes
+          Positioned(
+            top: -100,
+            right: -100,
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      theme.colorScheme.secondary.withValues(alpha: 0.2),
+                      theme.colorScheme.secondary.withValues(alpha: 0.0),
+                    ],
+                  ),
                 ),
               ),
-              GestureDetector(
-                  onTap: () => Provider.of<CP>(context, listen: false).changeBrightness(Theme.of(context).brightness==Brightness.light? Brightness.dark: Brightness.light),
-                  child: ThemeSelector(Theme.of(context).brightness==Brightness.light? 'dark' : 'light')
-              ),
-            ],
+            ),
           ),
-        ),
+          
+          // Main content
+          SafeArea(
+            child: Column(
+              children: [
+                // Top section with title
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Column(
+                      children: [
+                        Text(
+                          'SnagSnapper',
+                          style: GoogleFonts.poppins(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Project Management Made Simple',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 40),
+                
+                // My Sites - Hero Button
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: AnimatedBuilder(
+                        animation: _pulseAnimation,
+                        builder: (context, child) {
+                          return Transform.scale(
+                            scale: _pulseAnimation.value,
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.pushNamed(context, '/mySites');
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      theme.colorScheme.primary,
+                                      theme.colorScheme.primary.withValues(
+                                        red: theme.colorScheme.primary.r * 0.8,
+                                        green: theme.colorScheme.primary.g * 0.8,
+                                        blue: theme.colorScheme.primary.b * 0.8,
+                                      ),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(30),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                                      blurRadius: 30,
+                                      offset: const Offset(0, 15),
+                                    ),
+                                    BoxShadow(
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                                      blurRadius: 60,
+                                      offset: const Offset(0, 25),
+                                    ),
+                                  ],
+                                ),
+                                child: Stack(
+                                  children: [
+                                    // Decorative elements
+                                    Positioned(
+                                      right: -30,
+                                      top: -30,
+                                      child: Container(
+                                        width: 150,
+                                        height: 150,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.white.withValues(alpha: 0.1),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      left: -20,
+                                      bottom: -20,
+                                      child: Container(
+                                        width: 100,
+                                        height: 100,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.white.withValues(alpha: 0.05),
+                                        ),
+                                      ),
+                                    ),
+                                    // Content
+                                    Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 100,
+                                            height: 100,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.2),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Colors.white.withValues(alpha: 0.3),
+                                                width: 2,
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              Icons.dashboard_rounded,
+                                              color: Colors.white,
+                                              size: 50,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 24),
+                                          Text(
+                                            'MY SITES',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 36,
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.white,
+                                              letterSpacing: 2,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Manage all your projects',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 16,
+                                              color: Colors.white.withValues(alpha: 0.9),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 24),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 32,
+                                              vertical: 16,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(50),
+                                              border: Border.all(
+                                                color: Colors.white.withValues(alpha: 0.3),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  'ENTER',
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.white,
+                                                    letterSpacing: 1.5,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Icon(
+                                                  Icons.arrow_forward_rounded,
+                                                  color: Colors.white,
+                                                  size: 22,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 32),
+                
+                // Bottom options - minimal design
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: Row(
+                      children: [
+                        // Profile button
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: ()=>Navigator.push(context, MaterialPageRoute(builder: (
+                                context) => const Profile())).then((value) => setState((){})),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.person_outline_rounded,
+                                    color: theme.colorScheme.primary,
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Profile',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Settings button
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                Navigator.push(context, MaterialPageRoute(builder: (
+                                    context) => const MoreOptions())),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.settings_outlined,
+                                    color: theme.colorScheme.secondary,
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Settings',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+// Legacy widget kept for compatibility - not used in new design
 class MainMenuItems extends StatelessWidget {
   final IconData icon;
   final String heading;
@@ -290,7 +591,7 @@ class MainMenuItems extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.tertiaryContainer.withOpacity(0.5),
+        color: Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.5),
         border: Border.all(color: Theme.of(context).colorScheme.tertiaryContainer, width: 3.0),
         borderRadius: const BorderRadius.all(Radius.circular(30.0))
       ),
@@ -325,13 +626,12 @@ class MainMenuItems extends StatelessWidget {
               ),
             ],
           ),
-          // Container(
-          //   margin: const EdgeInsets.only(top: 8.0, left: 0.0, right: 0.0),
-          //   color: Theme.of(context).colorScheme.onTertiaryContainer,
-          //   height: 1.0,
-          //   width: double.infinity,),
         ],
       ),
     );
   }
 }
+
+
+
+

@@ -1,0 +1,85 @@
+// Firebase Storage Security Rules for SnagSnapper
+// Centralizes all image storage with proper security
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to validate image file types
+    function isValidImageType() {
+      return request.resource != null &&
+        request.resource.contentType != null &&
+        request.resource.contentType.matches('image/(jpeg|jpg|png)');
+    }
+    
+    // Helper function to validate file size (max 1MB)
+    function isValidFileSize() {
+      return request.resource != null &&
+        request.resource.size <= 1 * 1024 * 1024; // 1MB
+    }
+    
+    // Helper function to check if user is authenticated and email verified
+    function isAuthenticated() {
+      return request.auth != null && 
+        request.auth.token.email_verified == true;
+    }
+    
+    // Users can only access their own images
+    match /{userId}/{allPaths=**} {
+      // Allow read if authenticated and accessing own files
+      allow read: if isAuthenticated() && 
+        request.auth.uid == userId;
+      
+      // Allow write if authenticated, accessing own files, valid image type and size
+      allow write: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        isValidImageType() &&
+        isValidFileSize();
+      
+      // Allow delete if authenticated and accessing own files
+      allow delete: if isAuthenticated() && 
+        request.auth.uid == userId;
+    }
+    
+    // Specific rules for different image types
+    match /{userId}/profile.jpg {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.contentType == 'image/jpeg' &&
+        request.resource.size <= 400 * 1024; // 400KB for profile images
+    }
+    
+    match /{userId}/signature.png {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.contentType == 'image/png' &&
+        request.resource.size <= 200 * 1024; // 200KB for signatures
+    }
+    
+    // Site images
+    match /{userId}/{siteId}/site.jpg {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.contentType == 'image/jpeg' &&
+        request.resource.size <= 400 * 1024; // 400KB for site images
+    }
+    
+    // Snag images (up to 8 per snag)
+    match /{userId}/{siteId}/{snagId}/{snagImage} {
+      allow read: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        snagImage.matches('snag[1-8]\\.jpg');
+      allow write: if isAuthenticated() && 
+        request.auth.uid == userId &&
+        request.resource.contentType == 'image/jpeg' &&
+        request.resource.size <= 250 * 1024 && // 250KB for snag images
+        snagImage.matches('snag[1-8]\\.jpg'); // Only allow snag1.jpg through snag8.jpg
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

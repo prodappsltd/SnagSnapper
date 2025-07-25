@@ -1,4 +1,9 @@
 
+// TODO: DELETE THIS FILE - Replaced by ProfileSetupScreen
+// This old signup flow is no longer used. Users now:
+// 1. Create account via UnifiedAuthScreen
+// 2. Complete profile via ProfileSetupScreen
+
 import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';

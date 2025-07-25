@@ -1,4 +1,9 @@
 
+// TODO: DELETE THIS FILE - Replaced by ProfileSetupScreen
+// This old signup flow is no longer used. Users now:
+// 1. Create account via UnifiedAuthScreen
+// 2. Complete profile via ProfileSetupScreen
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';

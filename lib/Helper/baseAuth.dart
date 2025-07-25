@@ -10,6 +10,6 @@ abstract class BaseAuth {
   Future<Information> sendPasswordResetEmail(String email);
 
   User? currentUser();
-  Future<void> signOut(BuildContext context);
+  Future<void> signOut(BuildContext? context);
   Future<Information> signInWithGoogle();
 }

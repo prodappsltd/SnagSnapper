@@ -27,7 +27,7 @@ import 'package:snagsnapper/Helper/purchasesHelper.dart';
 class CP extends ChangeNotifier {
   bool _isPro = false;
   bool _isProSiteSharing = false;
-  late Offerings _offerings;
+  Offerings? _offerings;
   AppUser? _appUser;
   final Map<String, Site> _allSites = {}; //SiteUID, Site
   /// Map <String SiteID, Site site>
@@ -50,10 +50,13 @@ class CP extends ChangeNotifier {
   bool _internetCheckInProgress = false;
   late Timer _timer;
 
-  Color seedColour = const Color(0xFFFE5000);
-  Brightness brightness = Brightness.dark;
+  Color seedColour = const Color(0xFFFF9800);
+  Brightness brightness = Brightness.light;
   Color _pdfColor = const Color(0xFF607D8B);
   // Color _secondryBackgroundColor = const Color(0xFF607D8B);
+  
+  // Theme type: 'orange' or 'safety'
+  String themeType = 'orange';
 
   CP() {
     _getColors();
@@ -71,6 +74,13 @@ class CP extends ChangeNotifier {
     seedColour = c;
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('seed', _colorToString(c));
+    notifyListeners();
+  }
+  
+  changeThemeType(String type) async {
+    themeType = type;
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('themeType', type);
     notifyListeners();
   }
 
@@ -101,7 +111,9 @@ class CP extends ChangeNotifier {
   _getTheme() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? theme = prefs.getString('theme');
+    String? savedThemeType = prefs.getString('themeType');
     if (theme != null) brightness = theme=='light'? Brightness.light : Brightness.dark;
+    if (savedThemeType != null) themeType = savedThemeType;
   }
   _setTheme(String theme) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -258,7 +270,10 @@ class CP extends ChangeNotifier {
       if (postSnapshot.exists) {
         try {
           if (kDebugMode) print('DATA_USSL: Updating on FIREBASE - shared paths list...');
-          tx.update(postRef, {LIST_OF_SITE_PATHS: listOfSharedPathCopy});
+          tx.update(postRef, {
+            LIST_OF_SITE_PATHS: listOfSharedPathCopy,
+            'LAST_UPDATED': FieldValue.serverTimestamp(),
+          });
           result = true;
         } on PlatformException catch (e) {
           if (kDebugMode) print('DATA_USSL: Error Message: ' + e.details);
@@ -631,7 +646,10 @@ class CP extends ChangeNotifier {
         if (kDebugMode) print('DATA_UPI: Getting existing profile');
         if (postSnapshot.exists) {
           if (kDebugMode) print('DATA_UPI: Existing profile found - Updating image');
-          tx.update(postRef, {IMAGE: _appUser!.image});
+          tx.update(postRef, {
+            IMAGE: _appUser!.image,
+            'LAST_UPDATED': FieldValue.serverTimestamp(),
+          });
           if (kDebugMode) print('DATA_UPI: Notifying listeners');
           notifyListeners();
           result = true;
@@ -692,15 +710,23 @@ class CP extends ChangeNotifier {
     if (kDebugMode) print('DATA-F_LP: 3 - Load Profile...');
     bool result = false;
 
-    DocumentSnapshot<Map<String, dynamic>> snapshot = await FirebaseFirestore.instance.collection('Profile').doc(FirebaseAuth.instance.currentUser!.uid).get();
-    if (snapshot.exists) {
-      setAppUser(AppUser.fromJson(snapshot.data()!));
-      result = true;
-      if (kDebugMode) print('DATA_LP: 6.0 - Profile user SET....');
-    } else {
-      if (kDebugMode) print('DATA_LP: 6.1 - SNAPSHOT DATA WAS NULL');
+    try {
+      DocumentSnapshot<Map<String, dynamic>> snapshot = await FirebaseFirestore.instance.collection('Profile').doc(FirebaseAuth.instance.currentUser!.uid).get();
+      if (snapshot.exists) {
+        setAppUser(AppUser.fromJson(snapshot.data()!));
+        result = true;
+        if (kDebugMode) print('DATA_LP: 6.0 - Profile user SET....');
+      } else {
+        if (kDebugMode) print('DATA_LP: 6.1 - SNAPSHOT DATA WAS NULL');
+      }
+      if (kDebugMode) print('DATA_LP: 7 - Profile loading complete...');
+    } on FirebaseException catch (e) {
+      if (kDebugMode) {
+        print('DATA_LP: Firebase error loading profile - ${e.code}: ${e.message}');
+      }
+      // Re-throw to be handled by calling method
+      rethrow;
     }
-    if (kDebugMode) print('DATA_LP: 7 - Profile loading complete...');
     return result;
   }
 
@@ -771,19 +797,30 @@ class CP extends ChangeNotifier {
     if (firebaseUser.emailVerified) {
       if (kDebugMode) print('MAIN-F_LP: Email is verified -> Load Profile...');
 
-      try {
-        if (kDebugMode) print('Initialising purchases');
-        await PurchasesHelper.configurePurchases();
-        _isProSiteSharing = await PurchasesHelper.isSiteSharingEnabled();
-        _isPro = await PurchasesHelper.isUserPro();
-        _offerings = await PurchasesHelper.getOfferings();
-        // Update CP
-        if (kDebugMode) print("ProUser? :: $_isPro   SiteSharingEnabled? :: $_isProSiteSharing");
-        if (kDebugMode) print('---Initialising purchases END---');
-      } on PlatformException catch (e) {
-        FirebaseCrashlytics.instance.recordError(e, StackTrace.fromString('Error in Initialising Rev Cat Purchases Main.dart : _loadUserProfile Function'));
-        if (kDebugMode) print('### Error $e');
-        return 'RevCat Error';
+      // Skip RevenueCat initialization in debug mode
+      if (kDebugMode) {
+        if (kDebugMode) print('Skipping RevenueCat initialization in debug mode');
+        // Set default values for development
+        _isProSiteSharing = true;  // Enable all features in debug mode
+        _isPro = true;  // Enable pro features in debug mode
+        _offerings = null;  // No offerings in debug mode
+        if (kDebugMode) print("Debug mode - ProUser: $_isPro, SiteSharingEnabled: $_isProSiteSharing");
+      } else {
+        // Production mode - initialize RevenueCat
+        try {
+          if (kDebugMode) print('Initialising purchases');
+          await PurchasesHelper.configurePurchases();
+          _isProSiteSharing = await PurchasesHelper.isSiteSharingEnabled();
+          _isPro = await PurchasesHelper.isUserPro();
+          _offerings = await PurchasesHelper.getOfferings();
+          // Update CP
+          if (kDebugMode) print("ProUser? :: $_isPro   SiteSharingEnabled? :: $_isProSiteSharing");
+          if (kDebugMode) print('---Initialising purchases END---');
+        } on PlatformException catch (e) {
+          FirebaseCrashlytics.instance.recordError(e, StackTrace.fromString('Error in Initialising Rev Cat Purchases Main.dart : _loadUserProfile Function'));
+          if (kDebugMode) print('### Error $e');
+          return 'RevCat Error';
+    }
       }
 
       try {

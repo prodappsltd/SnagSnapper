@@ -1,10 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:snagsnapper/Helper/baseAuth.dart';
 import 'package:snagsnapper/Helper/error.dart';
+import 'package:snagsnapper/services/image_service.dart';
 
 
 class Auth extends BaseAuth {
@@ -21,6 +21,9 @@ class Auth extends BaseAuth {
         email: email,
         password: password,);
     } on FirebaseAuthException catch (e){
+      if (kDebugMode) {
+        print('Auth.createUserWithEmailAndPassword: Error - ${e.code}: ${e.message}');
+      }
       switch (e.code) {
         case ('email-already-in-use'):
           {
@@ -57,14 +60,17 @@ class Auth extends BaseAuth {
     try {
       await _firebaseAuth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
+      if (kDebugMode) {
+        print('Auth.sendPasswordResetEmail: Error - ${e.code}: ${e.message}');
+      }
       switch (e.code) {
-        case ('ERROR_INVALID_EMAIL'):
+        case ('invalid-email'):
           {
             info.message = 'Invalid email address';
             info.error = true;
           }
           break;
-        case ('ERROR_USER_NOT_FOUND'):
+        case ('user-not-found'):
           {
             info.message = 'User not found';
             info.error = true;
@@ -96,15 +102,15 @@ class Auth extends BaseAuth {
           .signInWithEmailAndPassword(email: email.toLowerCase().trim(), password: password.trim())
           .then((UserCredential userCredential) async {
             User? user = userCredential.user;
-            if (user == null) throw PlatformException(code: 'User Credential Error');
+            if (user == null) throw FirebaseAuthException(code: 'user-credential-error', message: 'User credential error');
             if (!user.emailVerified) {
               //_firebaseAuth.signOut();
               info.message = 'Please verify your email before logging in. Check your email for verification link!';
               info.error = true;
             }
       });
-    } on PlatformException catch (e) {
-      if (kDebugMode) print('ErrorCode: ${e.message}');
+    } on FirebaseAuthException catch (e) {
+      if (kDebugMode) print('Auth.signInWithEmailAndPassword: Error - ${e.code}: ${e.message}');
       switch (e.code) {
         case ('invalid-email'):
           {
@@ -139,24 +145,69 @@ class Auth extends BaseAuth {
   ///Could be used later
   @override
   Future<Information> signInWithGoogle() async {
+    if (kDebugMode) {
+      print('Auth.signInWithGoogle: Starting Google sign-in process');
+    }
     try {
-      final GoogleSignInAccount _account = await _googleSignIn.authenticate();
-      final GoogleSignInAuthentication _auth = _account.authentication;
-      final AuthCredential _credential = GoogleAuthProvider.credential(
-          idToken: _auth.idToken);
-      await FirebaseAuth.instance.signInWithCredential(_credential);
+      // Initialize GoogleSignIn with serverClientId for Android
+      // Web client ID from google-services.json (client_type: 3)
+      await _googleSignIn.initialize(
+        serverClientId: '752613191889-9dgdtq2s2et165faj5s5f1vf4o1o0nq3.apps.googleusercontent.com',
+      );
+      final GoogleSignInAccount? account = await _googleSignIn.authenticate();
+      if (account == null) {
+        // User cancelled the sign-in
+        if (kDebugMode) {
+          print('Auth.signInWithGoogle: User cancelled sign-in');
+        }
+        Information info = Information();
+        info.error = true;
+        info.message = 'Sign in cancelled';
+        return info;
+      }
+      if (kDebugMode) {
+        print('Auth.signInWithGoogle: Got account: ${account.email}');
+      }
+      final GoogleSignInAuthentication auth = account.authentication;
+      if (kDebugMode) {
+        print('Auth.signInWithGoogle: Got authentication token');
+      }
+      final AuthCredential credential = GoogleAuthProvider.credential(
+          idToken: auth.idToken);
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (kDebugMode) {
+        print('Auth.signInWithGoogle: Successfully signed in with Firebase');
+      }
       return Information();
     } catch (e) {
+      if (kDebugMode) {
+        print('Auth.signInWithGoogle: Error occurred - $e');
+        print('Auth.signInWithGoogle: Error type - ${e.runtimeType}');
+      }
       Information info = Information();
       info.error = true;
-      info.message = 'Error signing in with google: $e';
+      info.message = 'Error signing in with Google: $e';
       return info;
     }
   }
 
   @override
-  Future<void> signOut(BuildContext context) {
-    return FirebaseAuth.instance.signOut();
+  Future<void> signOut(BuildContext? context) async {
+    try {
+      // Clear all cached images
+      if (kDebugMode) print('Auth.signOut: Clearing image cache');
+      final imageService = ImageService();
+      await imageService.clearAllUserCache();
+      
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+      
+      if (kDebugMode) print('Auth.signOut: Successfully signed out and cleared cache');
+    } catch (e) {
+      if (kDebugMode) print('Auth.signOut: Error during signout: $e');
+      // Still try to sign out even if cache clearing fails
+      await FirebaseAuth.instance.signOut();
+    }
   }
 
   @override
@@ -166,7 +217,11 @@ class Auth extends BaseAuth {
       await _firebaseAuth.currentUser!.sendEmailVerification();
 
     } catch (e){
-      if (kDebugMode) print ('ERROR JAPPENED : $e');
+      if (kDebugMode) print ('Auth.sendEmailVerification: ERROR HAPPENED : $e');
+      Information info = Information();
+      info.error = true;
+      info.message = 'Failed to send verification email';
+      return info;
     }
     return Information();
   }

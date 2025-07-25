@@ -100,7 +100,9 @@ class _ShareScreenState extends State<ShareScreen> {
                             text: 'Please find the report I created.',
                           );
                         } catch (e){
-                          print (e);
+                          if (kDebugMode) {
+                            print('shareScreen: Error in quick share - $e');
+                          }
                         }
                       }
                     },
