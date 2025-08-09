@@ -43,16 +43,21 @@ When starting a new session, review these key files:
    - This file has references to other important files
    - Contains decisions made and pending decisions
    - Synchronization requirements between UI and Firebase
-2. **Planning/IMAGE_SERVICE_PLAN.md** - Centralized image service architecture
+2. **Claude/PRD.md** - Product Requirements Document
+   - Complete product specifications and features
+   - User personas and use cases
+   - Technical architecture documentation
+   - Must be kept in sync with implementation changes
+3. **Claude/IMAGE_SERVICE_PLAN.md** - Centralized image service architecture
    - Complete plan for image handling across the app
    - Implementation phases and specifications
    - Cost analysis and optimization strategies
-3. **Planning/IMAGE_IMPLEMENTATION_GUIDE.md** - Detailed implementation guide for image handling
+4. **Claude/IMAGE_IMPLEMENTATION_GUIDE.md** - Detailed implementation guide for image handling
    - Complete flow documentation with edge cases
    - Offline-first architecture details
    - State management and error handling
    - Code examples and implementation checklist
-4. **Planning/ACHIEVEMENTS.md** - Development achievements and progress
+5. **Claude/ACHIEVEMENTS.md** - Development achievements and progress
    - Consolidated report of completed work
    - Technical decisions and implementations
    - Bug fixes and improvements made
@@ -68,9 +73,13 @@ When starting a new session, review these key files:
 - Always work on the agreed scope and if you find further scope of improvement while working on the agreed scope, you will clarify with me first before any steps to resolve it
 - Always act as a professional software developer incorporating good practices and SOLID programming principles
 - **CRITICAL: Offline-First Design** - The app must be fully functional offline as it will be used in areas with poor/no internet connectivity. All features must work offline with sync when connection is available
+- **BOTTOM LINE: Offline First, Sync in Background** - Every feature must work completely offline. Network operations are background tasks only. Users should NEVER wait for network operations. Local storage provides immediate response, background sync maintains eventual consistency
 - **Memory Efficiency** - Keep memory usage minimal. Avoid storing duplicate data, clean up resources promptly, use efficient data structures
 - **Performance Priority** - Prioritize app responsiveness and speed. Users should never wait for network operations. All network tasks should be non-blocking background operations
 - **CRITICAL: Cost Efficiency** - Minimize Firebase usage to reduce operational costs. Only sync when absolutely necessary. Batch operations where possible. Avoid unnecessary reads/writes. Cache aggressively to prevent repeated downloads
+- **SCOPE LIMITATION** - Only profile-related code is currently in scope for modifications. Other classes will be added to scope as development progresses. The architecture successfully implemented in profile will be extended to other classes when they come into scope
+- **NO BACKWARD COMPATIBILITY NEEDED** - This is a new app with no existing users. No backward compatibility code is needed. Remove any legacy code paths without hesitation
+- **KEEP DOCUMENTATION IN SYNC** - Always update PRD.md when making significant architectural changes or feature implementations so documentation stays current with the actual implementation
 
 ### Testing Guidelines
 

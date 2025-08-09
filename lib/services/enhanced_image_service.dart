@@ -22,9 +22,9 @@ export 'image_service.dart' show ImageType, ImageFormat, ProcessedImage, ImageMe
 enum ImageStatus {
   none,         // No image
   loading,      // Downloading from Firebase
-  cached,       // Available locally, synced
+  stored,       // Available in permanent local storage, synced with cloud
   uploading,    // Uploading to Firebase
-  pendingSync,  // Local only, waiting to sync
+  pendingSync,  // In local storage only, waiting to sync to cloud
   error,        // Failed to load/upload
 }
 
@@ -78,7 +78,9 @@ class ImageState {
   });
 }
 
-/// Enhanced ImageService with unified path handling and offline support
+/// Enhanced ImageService with permanent local storage and offline-first architecture
+/// Uses Application Documents Directory for persistent storage (NOT temporary cache)
+/// Ensures images remain available offline for construction site usage
 class EnhancedImageService {
   // Singleton instance
   static EnhancedImageService? _instance;
@@ -95,8 +97,9 @@ class EnhancedImageService {
   late final http.Client _httpClient;
   late final Connectivity _connectivity;
   
-  // Cache directory
-  Directory? _cacheDir;
+  // Permanent local storage directory (Application Documents Directory)
+  // NOT a temporary cache - images persist until explicitly deleted
+  Directory? _localStorageDir;
   
   // State management
   final Map<String, ImageStatus> _imageStates = {};
@@ -207,21 +210,22 @@ class EnhancedImageService {
     });
   }
   
-  /// Initialize cache directory
-  Future<void> _initCacheDir() async {
-    if (_cacheDir != null) return;
+  /// Initialize permanent local storage directory
+  /// Uses Application Documents Directory for persistent offline storage
+  Future<void> _initLocalStorageDir() async {
+    if (_localStorageDir != null) return;
     
     try {
       final appDir = await getApplicationDocumentsDirectory();
-      _cacheDir = Directory(p.join(appDir.path, 'image_cache'));
+      _localStorageDir = Directory(p.join(appDir.path, 'local_image_storage'));
       
-      if (!await _cacheDir!.exists()) {
-        await _cacheDir!.create(recursive: true);
-        if (kDebugMode) print('EnhancedImageService: Created cache directory');
+      if (!await _localStorageDir!.exists()) {
+        await _localStorageDir!.create(recursive: true);
+        if (kDebugMode) print('EnhancedImageService: Created local storage directory');
       }
     } catch (e) {
-      if (kDebugMode) print('EnhancedImageService: Error initializing cache: $e');
-      _logError(e, 'Failed to initialize image cache directory');
+      if (kDebugMode) print('EnhancedImageService: Error initializing local storage: $e');
+      _logError(e, 'Failed to initialize local image storage directory');
     }
   }
   
@@ -232,25 +236,26 @@ class EnhancedImageService {
     return 'https://firebasestorage.googleapis.com/v0/b/${_storage.bucket}/o/$encodedPath?alt=media';
   }
   
-  /// Get local cache path for relative path
+  /// Get local storage path for relative path
+  /// Returns permanent storage location in Application Documents Directory
   String getLocalPath(String relativePath) {
-    if (_cacheDir == null) {
-      // Return a temporary path that won't be used until cache is initialized
-      return p.join(Directory.systemTemp.path, 'image_cache', relativePath);
+    if (_localStorageDir == null) {
+      // Return a temporary path that won't be used until storage is initialized
+      return p.join(Directory.systemTemp.path, 'local_image_storage', relativePath);
     }
-    return p.join(_cacheDir!.path, relativePath);
+    return p.join(_localStorageDir!.path, relativePath);
   }
   
   /// Resolve path to either local file or Firebase URL
   Future<String> resolvePath(String relativePath) async {
-    await _initCacheDir();
+    await _initLocalStorageDir();
     
-    // Check local cache first
+    // Check permanent local storage first
     final localPath = getLocalPath(relativePath);
     final localFile = File(localPath);
     
     if (await localFile.exists()) {
-      if (kDebugMode) print('EnhancedImageService: Using cached file for $relativePath');
+      if (kDebugMode) print('EnhancedImageService: Using locally stored file for $relativePath');
       return localPath;
     }
     
@@ -287,15 +292,15 @@ class EnhancedImageService {
       // Update state
       setImageState(relativePath, ImageStatus.uploading);
       
-      // Save to local cache first
-      await cacheImage(relativePath, imageData, null);
+      // Save to permanent local storage first
+      await storeImageLocally(relativePath, imageData, null);
       
       // Check if online
       if (await isOnline()) {
         // Try to upload
         try {
           await uploadToStorage(relativePath, imageData);
-          setImageState(relativePath, ImageStatus.cached);
+          setImageState(relativePath, ImageStatus.stored);
           return relativePath;
         } catch (e) {
           if (kDebugMode) print('EnhancedImageService: Upload failed, queuing: $e');
@@ -347,10 +352,10 @@ class EnhancedImageService {
   
   /// Queue image for upload when offline
   Future<void> queueForUpload(String relativePath, Uint8List imageData) async {
-    await _initCacheDir();
+    await _initLocalStorageDir();
     
-    // Save to temporary location
-    final tempPath = p.join(_cacheDir!.path, 'pending', relativePath);
+    // Save to temporary location for pending uploads
+    final tempPath = p.join(_localStorageDir!.path, 'pending', relativePath);
     final tempFile = File(tempPath);
     await tempFile.parent.create(recursive: true);
     await tempFile.writeAsBytes(imageData);
@@ -397,7 +402,7 @@ class EnhancedImageService {
         await uploadToStorage(item.relativePath, imageData);
         
         // Success - update state and clean up
-        setImageState(item.relativePath, ImageStatus.cached);
+        setImageState(item.relativePath, ImageStatus.stored);
         await tempFile.delete();
         
         if (kDebugMode) print('EnhancedImageService: Uploaded queued item ${item.relativePath}');
@@ -467,25 +472,26 @@ class EnhancedImageService {
     await prefs.setStringList(_manualRetryQueueKey, updatedQueue);
   }
   
-  /// Cache image locally
-  Future<void> cacheImage(String relativePath, Uint8List data, dynamic metadata) async {
+  /// Store image in permanent local storage
+  /// Images persist in Application Documents Directory until explicitly deleted
+  Future<void> storeImageLocally(String relativePath, Uint8List data, dynamic metadata) async {
     try {
-      await _initCacheDir();
+      await _initLocalStorageDir();
       
-      final cacheFile = File(getLocalPath(relativePath));
+      final localFile = File(getLocalPath(relativePath));
       
-      // If file already exists, evict it from Flutter's image cache
-      if (await cacheFile.exists()) {
-        final fileImage = FileImage(cacheFile);
+      // If file already exists, evict it from Flutter's memory cache (different from our permanent storage)
+      if (await localFile.exists()) {
+        final fileImage = FileImage(localFile);
         PaintingBinding.instance.imageCache.evict(fileImage);
-        if (kDebugMode) print('EnhancedImageService: Evicted old image from memory cache');
+        if (kDebugMode) print('EnhancedImageService: Evicted old image from Flutter memory cache');
       }
       
-      await cacheFile.parent.create(recursive: true);
-      await cacheFile.writeAsBytes(data);
+      await localFile.parent.create(recursive: true);
+      await localFile.writeAsBytes(data);
       
       // Save metadata
-      final metadataFile = File('${cacheFile.path}.metadata');
+      final metadataFile = File('${localFile.path}.metadata');
       final metadataJson = {
         'etag': metadata is FullMetadata ? metadata.md5Hash : null,
         'lastModified': DateTime.now().toIso8601String(),
@@ -493,45 +499,47 @@ class EnhancedImageService {
       };
       await metadataFile.writeAsString(jsonEncode(metadataJson));
       
-      if (kDebugMode) print('EnhancedImageService: Cached image at: ${cacheFile.path}');
+      if (kDebugMode) print('EnhancedImageService: Stored image locally at: ${localFile.path}');
     } catch (e) {
-      if (kDebugMode) print('EnhancedImageService: Error caching image: $e');
-      // Don't throw - caching is optional
+      if (kDebugMode) print('EnhancedImageService: Error storing image locally: $e');
+      // Don't throw - local storage errors shouldn't break the app
     }
   }
   
-  /// Get cached image
-  Future<Uint8List?> getCachedImage(String relativePath) async {
+  /// Get image from permanent local storage
+  /// Returns null if image not found in local storage
+  Future<Uint8List?> getLocallyStoredImage(String relativePath) async {
     try {
-      await _initCacheDir();
+      await _initLocalStorageDir();
       
-      final cacheFile = File(getLocalPath(relativePath));
-      if (await cacheFile.exists()) {
-        return await cacheFile.readAsBytes();
+      final localFile = File(getLocalPath(relativePath));
+      if (await localFile.exists()) {
+        return await localFile.readAsBytes();
       }
     } catch (e) {
-      if (kDebugMode) print('EnhancedImageService: Error reading cached image: $e');
+      if (kDebugMode) print('EnhancedImageService: Error reading locally stored image: $e');
     }
     return null;
   }
   
-  /// Validate cache using ETag
-  Future<bool> validateCache(String relativePath, String url) async {
+  /// Validate local storage using ETag
+  /// Checks if locally stored image is still current by comparing ETags
+  Future<bool> validateLocalStorage(String relativePath, String url) async {
     // Skip validation if offline
     if (!await isOnline()) {
-      if (kDebugMode) print('EnhancedImageService: Offline - assuming cache valid');
+      if (kDebugMode) print('EnhancedImageService: Offline - assuming local storage valid');
       return true;
     }
     
     try {
-      // Get cached metadata
+      // Get locally stored metadata
       final metadataFile = File('${getLocalPath(relativePath)}.metadata');
       if (!await metadataFile.exists()) return false;
       
-      final cachedMetadata = jsonDecode(await metadataFile.readAsString());
-      final cachedEtag = cachedMetadata['etag'];
+      final storedMetadata = jsonDecode(await metadataFile.readAsString());
+      final storedEtag = storedMetadata['etag'];
       
-      if (cachedEtag == null) return false;
+      if (storedEtag == null) return false;
       
       // Get current metadata from Firebase
       _ensureInitialized();
@@ -539,14 +547,14 @@ class EnhancedImageService {
       final currentMetadata = await ref.getMetadata();
       
       // Compare ETags
-      final isValid = cachedEtag == currentMetadata.md5Hash;
+      final isValid = storedEtag == currentMetadata.md5Hash;
       if (kDebugMode) {
-        print('EnhancedImageService: Cache validation for $relativePath: '
+        print('EnhancedImageService: Local storage validation for $relativePath: '
               '${isValid ? "valid" : "stale"}');
       }
       return isValid;
     } catch (e) {
-      if (kDebugMode) print('EnhancedImageService: Error validating cache: $e');
+      if (kDebugMode) print('EnhancedImageService: Error validating local storage: $e');
       return false;
     }
   }
@@ -555,44 +563,48 @@ class EnhancedImageService {
   Future<Uint8List?> getImageWithBackgroundValidation({
     required String relativePath,
   }) async {
-    // First, return cached image immediately if available
-    final cachedData = await getCachedImage(relativePath);
+    if (kDebugMode) print('EnhancedImageService: getImageWithBackgroundValidation for $relativePath');
     
-    if (cachedData != null) {
+    // First, return locally stored image immediately if available
+    final storedData = await getLocallyStoredImage(relativePath);
+    
+    if (kDebugMode) print('EnhancedImageService: Local storage check for $relativePath: ${storedData != null ? "Found (${storedData.length} bytes)" : "Not found"}');
+    
+    if (storedData != null) {
       // Validate in background
       final url = getFirebaseUrl(relativePath);
-      validateCache(relativePath, url).then((isValid) async {
+      validateLocalStorage(relativePath, url).then((isValid) async {
         if (!isValid && await isOnline()) {
           // Download fresh version in background
           try {
             final response = await _httpClient.get(Uri.parse(url));
             if (response.statusCode == 200) {
-              await cacheImage(relativePath, response.bodyBytes, null);
+              await storeImageLocally(relativePath, response.bodyBytes, null);
               // Notify listeners about the update
-              setImageState(relativePath, ImageStatus.cached);
+              setImageState(relativePath, ImageStatus.stored);
             }
           } catch (e) {
             if (kDebugMode) print('EnhancedImageService: Background refresh failed: $e');
             _logError(e, 'Background image refresh failed for $relativePath');
-            // Don't update state to error - keep showing cached version
+            // Don't update state to error - keep showing locally stored version
           }
         }
       }).catchError((e) {
-        if (kDebugMode) print('EnhancedImageService: Cache validation error: $e');
-        // Continue using cached image on validation error
+        if (kDebugMode) print('EnhancedImageService: Local storage validation error: $e');
+        // Continue using locally stored image on validation error
       });
       
-      return cachedData;
+      return storedData;
     }
     
-    // No cache - download if online
+    // No local storage - download if online
     if (await isOnline()) {
       try {
         final url = getFirebaseUrl(relativePath);
         final response = await _httpClient.get(Uri.parse(url));
         if (response.statusCode == 200) {
           final data = response.bodyBytes;
-          await cacheImage(relativePath, data, null);
+          await storeImageLocally(relativePath, data, null);
           return data;
         }
       } catch (e) {
@@ -642,22 +654,23 @@ class EnhancedImageService {
     return _stateControllers[relativePath]!.stream;
   }
   
-  /// Clean orphaned cache files
-  Future<void> cleanOrphanedCache({
-    required List<String> cacheFiles,
+  /// Clean orphaned files from local storage
+  /// Removes files that exist locally but are no longer referenced in Firestore
+  Future<void> cleanOrphanedLocalStorage({
+    required List<String> localFiles,
     required List<String> firestorePaths,
   }) async {
-    await _initCacheDir();
+    await _initLocalStorageDir();
     
     final pathSet = firestorePaths.toSet();
     
-    for (final cacheFile in cacheFiles) {
-      if (!pathSet.contains(cacheFile)) {
+    for (final localFile in localFiles) {
+      if (!pathSet.contains(localFile)) {
         try {
-          final file = File(getLocalPath(cacheFile));
+          final file = File(getLocalPath(localFile));
           if (await file.exists()) {
             await file.delete();
-            if (kDebugMode) print('EnhancedImageService: Deleted orphaned cache: $cacheFile');
+            if (kDebugMode) print('EnhancedImageService: Deleted orphaned local file: $localFile');
           }
           
           // Also delete metadata
@@ -666,21 +679,22 @@ class EnhancedImageService {
             await metadataFile.delete();
           }
         } catch (e) {
-          if (kDebugMode) print('EnhancedImageService: Error deleting orphaned cache: $e');
+          if (kDebugMode) print('EnhancedImageService: Error deleting orphaned local file: $e');
         }
       }
     }
   }
   
-  /// Clear all user cache
-  Future<void> clearAllUserCache() async {
+  /// Clear all user local storage
+  /// Completely removes all locally stored images for privacy and logout
+  Future<void> clearAllUserLocalStorage() async {
     try {
-      await _initCacheDir();
+      await _initLocalStorageDir();
       
-      if (_cacheDir != null && await _cacheDir!.exists()) {
-        await _cacheDir!.delete(recursive: true);
-        await _cacheDir!.create(recursive: true);
-        if (kDebugMode) print('EnhancedImageService: All user cache cleared');
+      if (_localStorageDir != null && await _localStorageDir!.exists()) {
+        await _localStorageDir!.delete(recursive: true);
+        await _localStorageDir!.create(recursive: true);
+        if (kDebugMode) print('EnhancedImageService: All user local storage cleared');
       }
       
       // Clear upload queues
@@ -695,8 +709,8 @@ class EnhancedImageService {
       }
       _stateControllers.clear();
     } catch (e) {
-      if (kDebugMode) print('EnhancedImageService: Error clearing all user cache: $e');
-      _logError(e, 'Failed to clear all user image cache');
+      if (kDebugMode) print('EnhancedImageService: Error clearing all user local storage: $e');
+      _logError(e, 'Failed to clear all user local image storage');
     }
   }
   
@@ -736,11 +750,12 @@ class EnhancedImageService {
                         errorWidget ?? _buildErrorWidget(context),
                   );
                 }
+                if (kDebugMode) print('EnhancedImageService.smartImage: Showing placeholder for $relativePath');
                 return placeholder ?? _buildLoadingWidget(context);
               },
             );
             
-          case ImageStatus.cached:
+          case ImageStatus.stored:
           case ImageStatus.uploading:
           case ImageStatus.pendingSync:
             return FutureBuilder<String>(

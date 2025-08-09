@@ -10,6 +10,8 @@ import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Screens/moreOptions.dart';
 import 'package:snagsnapper/Screens/profile.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:rate_my_app/rate_my_app.dart';
+import 'dart:io';
 
 class MainMenu extends StatefulWidget {
   const MainMenu({super.key});
@@ -22,6 +24,17 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
 
   String message1='';
   String message2='';
+  
+  // Rate my app feature
+  final RateMyApp _rateMyApp = RateMyApp(
+    preferencesPrefix: 'rateMyApp_snagSnapper',
+    minDays: 4,
+    minLaunches: 10,
+    remindDays: 7,
+    remindLaunches: 8,
+    googlePlayIdentifier: 'uk.co.productiveapps.snagsnapper',
+    appStoreIdentifier: '6748839667',
+  );
   
   // Animation controllers
   late AnimationController _fadeController;
@@ -38,7 +51,44 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
     _setupAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await initDynamicLinks();
+      await _initRateMyApp();
     });
+  }
+  
+  Future<void> _initRateMyApp() async {
+    try {
+      await _rateMyApp.init();
+      if (mounted && _rateMyApp.shouldOpenDialog) {
+        _rateMyApp.showRateDialog(
+          context,
+          title: 'Please rate SnagSnapper',
+          message: 'If this app has helped you, please consider a few minutes rating it as it helps a small business to support the app.',
+          rateButton: 'RATE',
+          noButton: 'NO THANKS',
+          laterButton: 'MAYBE LATER',
+          listener: (button) {
+            switch (button) {
+              case RateMyAppDialogButton.rate:
+                if (kDebugMode) print('User chose to rate the app');
+                break;
+              case RateMyAppDialogButton.later:
+                if (kDebugMode) print('User chose maybe later');
+                break;
+              case RateMyAppDialogButton.no:
+                if (kDebugMode) print('User declined to rate');
+                break;
+            }
+            return true;
+          },
+          ignoreNativeDialog: Platform.isAndroid || Platform.isIOS,
+          onDismissed: () {
+            if (kDebugMode) print('Rate dialog dismissed');
+          },
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error initializing RateMyApp: $e');
+    }
   }
   
   void _setupAnimations() {

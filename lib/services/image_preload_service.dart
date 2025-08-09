@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:snagsnapper/services/image_service.dart';
+import 'package:snagsnapper/services/enhanced_image_service.dart';
 import 'package:snagsnapper/Data/user.dart';
 
 /// Service to preload images on app start for better performance
@@ -11,7 +11,7 @@ class ImagePreloadService {
   factory ImagePreloadService() => _instance;
   ImagePreloadService._internal();
   
-  final ImageService _imageService = ImageService();
+  final EnhancedImageService _imageService = EnhancedImageService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   /// Track preload status
@@ -65,12 +65,16 @@ class ImagePreloadService {
       final preloadTasks = <Future<void>>[];
       
       // Preload profile image
-      if (appUser.image.isNotEmpty && appUser.image.startsWith('http')) {
-        if (kDebugMode) print('ImagePreloadService: Preloading profile image');
+      if (appUser.image.isNotEmpty) {
+        if (kDebugMode) print('ImagePreloadService: Preloading profile image: ${appUser.image}');
         preloadTasks.add(
-          _imageService.getImage(url: appUser.image).then((data) {
-            if (data != null && kDebugMode) {
-              print('ImagePreloadService: Profile image preloaded (${data.length} bytes)');
+          _imageService.getImageWithBackgroundValidation(
+            relativePath: appUser.image
+          ).then((data) {
+            if (data != null) {
+              if (kDebugMode) print('ImagePreloadService: Profile image preloaded (${data.length} bytes)');
+              // Set status to cached after successful preload
+              _imageService.setImageState(appUser.image, ImageStatus.stored);
             }
           }).catchError((e) {
             if (kDebugMode) print('ImagePreloadService: Error preloading profile: $e');
@@ -79,12 +83,16 @@ class ImagePreloadService {
       }
       
       // Preload signature image
-      if (appUser.signature.isNotEmpty && appUser.signature.startsWith('http')) {
-        if (kDebugMode) print('ImagePreloadService: Preloading signature image');
+      if (appUser.signature.isNotEmpty) {
+        if (kDebugMode) print('ImagePreloadService: Preloading signature image: ${appUser.signature}');
         preloadTasks.add(
-          _imageService.getImage(url: appUser.signature).then((data) {
-            if (data != null && kDebugMode) {
-              print('ImagePreloadService: Signature image preloaded (${data.length} bytes)');
+          _imageService.getImageWithBackgroundValidation(
+            relativePath: appUser.signature
+          ).then((data) {
+            if (data != null) {
+              if (kDebugMode) print('ImagePreloadService: Signature image preloaded (${data.length} bytes)');
+              // Set status to cached after successful preload
+              _imageService.setImageState(appUser.signature, ImageStatus.stored);
             }
           }).catchError((e) {
             if (kDebugMode) print('ImagePreloadService: Error preloading signature: $e');
@@ -115,12 +123,16 @@ class ImagePreloadService {
                 final siteData = siteDoc.data()!;
                 final siteImage = siteData['image'] as String?;
                 
-                if (siteImage != null && siteImage.isNotEmpty && siteImage.startsWith('http')) {
-                  if (kDebugMode) print('ImagePreloadService: Preloading site $siteId image');
+                if (siteImage != null && siteImage.isNotEmpty) {
+                  if (kDebugMode) print('ImagePreloadService: Preloading site $siteId image: $siteImage');
                   
-                  await _imageService.getImage(url: siteImage).then((data) {
-                    if (data != null && kDebugMode) {
-                      print('ImagePreloadService: Site $siteId image preloaded (${data.length} bytes)');
+                  await _imageService.getImageWithBackgroundValidation(
+                    relativePath: siteImage
+                  ).then((data) {
+                    if (data != null) {
+                      if (kDebugMode) print('ImagePreloadService: Site $siteId image preloaded (${data.length} bytes)');
+                      // Set status to cached after successful preload
+                      _imageService.setImageState(siteImage, ImageStatus.stored);
                     }
                   }).catchError((e) {
                     if (kDebugMode) print('ImagePreloadService: Error preloading site $siteId: $e');
@@ -169,17 +181,21 @@ class ImagePreloadService {
         
         // Check for snag images (snag1 through snag8)
         for (int i = 1; i <= 8; i++) {
-          final imageUrl = snagData['snag$i'] as String?;
+          final imagePath = snagData['snag$i'] as String?;
           
-          if (imageUrl != null && imageUrl.isNotEmpty && imageUrl.startsWith('http')) {
+          if (imagePath != null && imagePath.isNotEmpty) {
             if (kDebugMode) {
-              print('ImagePreloadService: Preloading snag ${snagDoc.id} image $i');
+              print('ImagePreloadService: Preloading snag ${snagDoc.id} image $i: $imagePath');
             }
             
             preloadTasks.add(
-              _imageService.getImage(url: imageUrl).then((data) {
-                if (data != null && kDebugMode) {
-                  print('ImagePreloadService: Snag ${snagDoc.id} image $i preloaded');
+              _imageService.getImageWithBackgroundValidation(
+                relativePath: imagePath
+              ).then((data) {
+                if (data != null) {
+                  if (kDebugMode) print('ImagePreloadService: Snag ${snagDoc.id} image $i preloaded');
+                  // Set status to cached after successful preload
+                  _imageService.setImageState(imagePath, ImageStatus.stored);
                 }
               }).catchError((e) {
                 if (kDebugMode) {

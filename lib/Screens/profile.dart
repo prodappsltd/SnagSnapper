@@ -1004,19 +1004,19 @@ class _ProfileState extends State<Profile> with TickerProviderStateMixin {
         // Generate the relative path
         final relativePath = '$userId/profile.jpg';
         
-        // CRITICAL: Cache image FIRST for instant display
+        // CRITICAL: Store image in permanent local storage FIRST for instant display
         // This ensures the image appears immediately without any network delay
-        if (kDebugMode) print('Profile: Caching image locally for instant display');
-        await enhancedService.cacheImage(relativePath, processedImage.data, null);
+        if (kDebugMode) print('Profile: Storing image in local storage for instant display');
+        await enhancedService.storeImageLocally(relativePath, processedImage.data, null);
         
-        // CRITICAL: Set state to 'cached' immediately to prevent UI refresh
+        // CRITICAL: Set state to 'stored' immediately to prevent UI refresh
         // DO NOT CHANGE THIS ORDER - setting state to 'uploading' will cause
         // the smartImage widget to rebuild when upload completes, creating a flicker
-        enhancedService.setImageState(relativePath, ImageStatus.cached);
-        if (kDebugMode) print('Profile: Image state set to cached - preventing UI refresh');
+        enhancedService.setImageState(relativePath, ImageStatus.stored);
+        if (kDebugMode) print('Profile: Image state set to stored - preventing UI refresh');
         
         // Update UI immediately with the new path
-        // The image will display instantly from local cache
+        // The image will display instantly from local storage
         setState(() {
           appUser.image = relativePath;
         });
@@ -1128,8 +1128,8 @@ class _ProfileState extends State<Profile> with TickerProviderStateMixin {
         final userId = FirebaseAuth.instance.currentUser!.uid;
         final relativePath = '$userId/signature.png';
         
-        // Save locally first, then upload
-        await enhancedService.cacheImage(
+        // Save to permanent local storage first, then upload
+        await enhancedService.storeImageLocally(
           relativePath,
           processedImage.data,
           null,
@@ -1139,7 +1139,7 @@ class _ProfileState extends State<Profile> with TickerProviderStateMixin {
         if (await enhancedService.isOnline()) {
           try {
             await enhancedService.uploadToStorage(relativePath, processedImage.data);
-            enhancedService.setImageState(relativePath, ImageStatus.cached);
+            enhancedService.setImageState(relativePath, ImageStatus.stored);
           } catch (e) {
             await enhancedService.queueForUpload(relativePath, processedImage.data);
             enhancedService.setImageState(relativePath, ImageStatus.pendingSync);

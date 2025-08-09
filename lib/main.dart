@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:rate_my_app/rate_my_app.dart';
+// Removed: rate_my_app import - moved to MainMenu
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Screens/PdfView.dart';
 import 'package:snagsnapper/Screens/SignUp_SignIn/checkEmail.dart';
@@ -153,50 +153,10 @@ class MySubAppState extends State<MySubApp> {
     }
   }
   
-  // Rate my app feature
-  RateMyApp rateMyApp = RateMyApp(
-    preferencesPrefix: 'rateMyApp_',
-    minDays: 4,
-    minLaunches: 10,
-    remindDays: 7,
-    remindLaunches: 8,
-    googlePlayIdentifier: 'uk.co.productiveapps.snagsnapper',
-    appStoreIdentifier: '6748839667',
-  );
+  // RateMyApp has been moved to MainMenu where MaterialApp context is available
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await rateMyApp.init();
-      if (mounted && rateMyApp.shouldOpenDialog) {
-        rateMyApp.showRateDialog(context,
-            title: 'Please rate SnagSnapper',
-            message: 'If this app has helped you, please consider a few minutes rating it as it helps a small business to support the app.',
-            rateButton: 'RATE',
-            noButton: 'NO THANKS',
-            laterButton: 'MAYBE LATER',
-            listener: (button) {
-              switch (button) {
-                case RateMyAppDialogButton.rate:
-                  // TODO Something
-                  break;
-                case RateMyAppDialogButton.later:
-                  // TODO Something
-                  break;
-                case RateMyAppDialogButton.no:
-                  // TODO Something
-                  break;
-              }
-              return true;
-            },
-            ignoreNativeDialog: Platform.isAndroid || Platform.isIOS,
-            onDismissed: () => {
-                  // TODO Something as Later button is pressed
-                });
-      }
-    });
-  }
+  // RateMyApp initialization has been moved to MainMenu
+  // This ensures MaterialApp context is available when showing the dialog
 
   @override
   Widget build(BuildContext context) {
