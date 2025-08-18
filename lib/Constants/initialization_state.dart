@@ -15,7 +15,7 @@ enum InitializationState {
   /// User profile successfully loaded, navigate to main menu
   profileFound,
   
-  /// User authenticated but profile not found, navigate to signup to complete profile
+  /// User authenticated but profile not found, navigate to profile screen
   profileNotFound,
   
   /// No internet connection detected
@@ -90,7 +90,7 @@ enum InitializationState {
       case InitializationState.profileFound:
         return '/mainMenu';
       case InitializationState.profileNotFound:
-        return '/profileSetup';
+        return '/profile';
       default:
         return null;
     }

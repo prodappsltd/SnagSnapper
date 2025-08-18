@@ -89,6 +89,12 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
   
   /// Handles email/password authentication
   Future<void> _handleEmailPasswordAuth() async {
+    // Prevent double submission
+    if (_isLoading) {
+      if (kDebugMode) print('UnifiedAuthScreen: Already processing, ignoring duplicate submission');
+      return;
+    }
+    
     if (!_formKey.currentState!.validate()) return;
     
     setState(() => _isLoading = true);
@@ -108,10 +114,18 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
       
       if (_isLoginMode) {
         // Login flow
+        if (kDebugMode) {
+          print('Attempting login for: ${_emailController.text}');
+        }
+        
         result = await auth.signInWithEmailAndPassword(
           _emailController.text,
           _passwordController.text,
         );
+        
+        if (kDebugMode) {
+          print('Login result - Error: ${result.error}, Message: ${result.message}');
+        }
         
         if (!result.error) {
           // Success - load user profile before navigating
@@ -119,7 +133,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           
           // Load user profile
           final cp = Provider.of<CP>(context, listen: false);
+          if (kDebugMode) print('UnifiedAuthScreen: Calling loadProfileOfUser...');
           final profileResult = await cp.loadProfileOfUser();
+          if (kDebugMode) print('UnifiedAuthScreen: loadProfileOfUser returned: $profileResult');
           
           if (kDebugMode) {
             print('Profile load result: $profileResult');
@@ -129,6 +145,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           }
           
           if (mounted) {
+            if (kDebugMode) print('UnifiedAuthScreen: Mounted, checking profile result...');
             if (profileResult == 'Profile Found') {
               // Preload images after successful login
               if (kDebugMode) print('Starting image preload...');
@@ -146,9 +163,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
                 (route) => false,
               );
             } else if (profileResult == 'Profile Not Found') {
-              // No profile - navigate to profile setup screen to complete profile
+              // No profile - navigate directly to profile screen
               Navigator.of(context).pushNamedAndRemoveUntil(
-                '/profileSetup',
+                '/profile',
                 (route) => false,
               );
             } else {
@@ -160,11 +177,21 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
             }
           }
         } else {
-          // Show error
+          // Show error - ensure loading state is cleared first
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+          
           if (kDebugMode) {
             print('UnifiedAuthScreen._handleEmailPasswordAuth: Login auth error - ${result.message}');
           }
-          _showErrorMessage(result.message);
+          
+          // Ensure we have a meaningful error message
+          String errorMessage = result.message.isNotEmpty 
+              ? result.message 
+              : 'Login failed. Please check your credentials.';
+          
+          _showErrorMessage(errorMessage);
         }
       } else {
         // Signup flow
@@ -179,9 +206,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           
           if (kDebugMode) print('Signup successful, verification email sent');
           
-          // Navigate to check email screen
+          // Navigate to email verification screen
           if (mounted) {
-            Navigator.of(context).pushNamed('/checkEmail');
+            Navigator.of(context).pushNamed('/emailVerification');
           }
         } else {
           // Show error
@@ -226,6 +253,12 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
   
   /// Handles Google sign-in
   Future<void> _handleGoogleSignIn() async {
+    // Prevent double submission
+    if (_isLoading) {
+      if (kDebugMode) print('UnifiedAuthScreen: Already processing, ignoring duplicate Google sign-in');
+      return;
+    }
+    
     setState(() => _isLoading = true);
     
     // Debug logging
@@ -272,9 +305,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
               (route) => false,
             );
           } else if (profileResult == 'Profile Not Found') {
-            // No profile - navigate to profile setup screen to complete profile
+            // No profile - navigate directly to profile screen
             Navigator.of(context).pushNamedAndRemoveUntil(
-              '/profileSetup',
+              '/profile',
               (route) => false,
             );
           } else {
@@ -313,11 +346,16 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
     final theme = Theme.of(context);
     
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
+      body: GestureDetector(
+        onTap: () {
+          // Dismiss keyboard when tapping outside text fields
+          FocusScope.of(context).unfocus();
+        },
+        child: SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 40),
@@ -368,6 +406,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -480,6 +519,12 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
             controller: _passwordController,
             obscureText: !_isPasswordVisible,
             textInputAction: _isLoginMode ? TextInputAction.done : TextInputAction.next,
+            onFieldSubmitted: (_) {
+              // Only submit if in login mode and not already loading
+              if (_isLoginMode && !_isLoading) {
+                _handleEmailPasswordAuth();
+              }
+            },
             decoration: InputDecoration(
               labelText: 'Password',
               hintText: 'Enter your password',
@@ -507,7 +552,6 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
               }
               return null;
             },
-            onFieldSubmitted: _isLoginMode ? (_) => _handleEmailPasswordAuth() : null,
           ),
           
           // Confirm Password Field (Signup only)

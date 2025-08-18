@@ -1,6 +1,7 @@
 import 'package:another_flushbar/flushbar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,11 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Constants/validation_rules.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/user.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
+import 'package:snagsnapper/Data/models/app_user.dart' as models;
+import 'package:snagsnapper/services/sync_service.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 
 /// Profile setup screen for new users after email verification
 /// Collects required profile information before allowing access to the app
@@ -145,7 +151,7 @@ class ProfileSetupScreenState extends State<ProfileSetupScreen>
     
     // Pre-fill data from Firebase Auth if available
     if (_firebaseUser != null) {
-      _appUser.email = _firebaseUser!.email ?? '';
+      _appUser.email = _firebaseUser!.email?.toLowerCase() ?? '';
       // For Google Sign-In, displayName might be available
       if (_firebaseUser!.displayName != null && _firebaseUser!.displayName!.isNotEmpty) {
         _appUser.name = _firebaseUser!.displayName!;
@@ -161,8 +167,13 @@ class ProfileSetupScreenState extends State<ProfileSetupScreen>
     final theme = Theme.of(context);
     
     return Scaffold(
-      body: Stack(
-        children: [
+      body: GestureDetector(
+        onTap: () {
+          // Dismiss keyboard when tapping outside text fields
+          FocusScope.of(context).unfocus();
+        },
+        child: Stack(
+          children: [
           // Modern gradient background
           Container(
             decoration: BoxDecoration(
@@ -527,102 +538,175 @@ class ProfileSetupScreenState extends State<ProfileSetupScreen>
           ),
         ],
       ),
+      ),
     );
   }
 
-  /// Complete profile creation
+  /// Generate unique device ID for this device
+  Future<String> _generateDeviceId() async {
+    final deviceInfo = DeviceInfoPlugin();
+    String deviceId = '';
+    String deviceName = '';
+    
+    try {
+      if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor ?? 'ios_${DateTime.now().millisecondsSinceEpoch}';
+        deviceName = '${iosInfo.name} (${iosInfo.model})';
+      } else if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id ?? 'android_${DateTime.now().millisecondsSinceEpoch}';
+        deviceName = '${androidInfo.brand} ${androidInfo.model}';
+      } else {
+        deviceId = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
+        deviceName = 'Unknown Device';
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error generating device ID: $e');
+      deviceId = 'fallback_${DateTime.now().millisecondsSinceEpoch}';
+      deviceName = 'Unknown Device';
+    }
+    
+    if (kDebugMode) {
+      print('Generated Device ID: $deviceId');
+      print('Device Name: $deviceName');
+    }
+    
+    return deviceId;
+  }
+  
+  /// Complete profile creation - OFFLINE FIRST
   Future<void> _completeProfile() async {
     // Validate form
     if (!_formKey.currentState!.validate()) {
       return;
     }
     
-    // Check internet connection
-    final hasInternet = await Provider.of<CP>(context, listen: false)
-        .getNetworkStatus();
-    if (!hasInternet) {
-      _showErrorMessage('No internet connection. Please check your connection and try again.');
-      return;
-    }
-    
     setState(() => _isLoading = true);
     
     try {
-      // Check if email is verified
-      if (_firebaseUser?.emailVerified != true) {
-        throw Exception('Email not verified. Please verify your email before creating a profile.');
-      }
-      
-      // Set default values for profile
-      _appUser.dateFormat = 'dd-MM-yyyy';
-      _appUser.listOfALLColleagues = [];
-      _appUser.mapOfSitePaths = {};
-      _appUser.signature = '';
-      _appUser.postcodeOrArea = '';
-      
-      // Create profile in Firestore
+      // Get Firebase user
       final uid = _firebaseUser?.uid;
       if (uid == null) {
         throw Exception('No authenticated user found');
       }
       
-      // Check if profile already exists
+      // STEP 1: Generate device ID for this device (PRD 4.3.1 step 4)
+      final deviceId = await _generateDeviceId();
+      
+      // STEP 2: Set default values for profile
+      _appUser.dateFormat = 'dd-MM-yyyy';
+      _appUser.listOfALLColleagues = [];
+      _appUser.mapOfSitePaths = {};
+      _appUser.signature = '';
+      _appUser.postcodeOrArea = _appUser.postcodeOrArea ?? '';
+      
+      // STEP 3: SAVE TO LOCAL DATABASE FIRST (offline-first)
       if (kDebugMode) {
-        print('Checking if profile exists for UID: $uid');
+        print('OFFLINE-FIRST: Saving profile to LOCAL database...');
       }
       
-      final profileDoc = await FirebaseFirestore.instance
-          .collection('Profile')
-          .doc(uid)
-          .get();
-          
-      if (profileDoc.exists) {
+      final db = await AppDatabase.getInstance();
+      final profileDao = db.profileDao;
+      
+      // Create database model from AppUser
+      final now = DateTime.now();
+      final dbProfile = models.AppUser(
+        id: uid,
+        name: _appUser.name,
+        email: _appUser.email,
+        phone: _appUser.phone,
+        jobTitle: _appUser.jobTitle,
+        companyName: _appUser.companyName,
+        postcodeOrArea: _appUser.postcodeOrArea,
+        dateFormat: _appUser.dateFormat,
+        currentDeviceId: deviceId,
+        lastLoginTime: now,
+        createdAt: now,
+        updatedAt: now,
+        needsProfileSync: true,  // Mark for sync since it's new
+        needsImageSync: false,
+        needsSignatureSync: false,
+      );
+      
+      // Save to local database with duplicate check
+      final profileExists = await profileDao.profileExists(uid);
+      if (profileExists) {
+        // Update existing profile
+        await profileDao.updateProfile(uid, dbProfile);
         if (kDebugMode) {
-          print('Profile already exists! Cannot create duplicate.');
+          print('OFFLINE-FIRST: Updated existing profile in LOCAL database');
         }
-        throw Exception('Profile already exists for this user. Please check Firebase Console and delete the existing profile.');
       } else {
+        // Insert new profile
+        await profileDao.insertProfile(dbProfile);
         if (kDebugMode) {
-          print('No existing profile found. Proceeding with creation.');
+          print('OFFLINE-FIRST: Inserted new profile to LOCAL database');
         }
       }
       
-      // Create the profile data with required fields
-      final profileData = _appUser.toJson();
-      
-      // Add the LAST_UPDATED timestamp field required by Firebase rules
-      profileData['LAST_UPDATED'] = FieldValue.serverTimestamp();
-      
       if (kDebugMode) {
-        print('Profile data being sent to Firebase:');
-        profileData.forEach((key, value) {
-          if (key != 'LAST_UPDATED') {
-            print('  $key: ${value is String && value.length > 50 ? value.substring(0, 50) + '...' : value}');
-          } else {
-            print('  $key: [ServerTimestamp]');
-          }
-        });
-        print('  Auth email: ${_firebaseUser?.email}');
-        print('  Auth UID: ${_firebaseUser?.uid}');
-        print('  Email verified: ${_firebaseUser?.emailVerified}');
+        print('OFFLINE-FIRST: Profile saved to LOCAL database successfully');
+        print('  Device ID: $deviceId');
+        print('  Needs sync: true');
       }
       
-      await FirebaseFirestore.instance
-          .collection('Profile')
-          .doc(uid)
-          .set(profileData);
-      
-      if (kDebugMode) {
-        print('Profile created successfully for user: ${_firebaseUser!.uid}');
-      }
-      
-      // Update provider with new user data
+      // STEP 4: Update provider with new user data
       if (mounted) {
         Provider.of<CP>(context, listen: false).setAppUser(_appUser);
       }
       
-      // Navigate to main menu
+      // STEP 5: Initialize SyncService for automatic background sync
+      try {
+        final syncService = SyncService.instance;
+        
+        // Initialize sync service with user ID
+        if (!syncService.isInitialized) {
+          await syncService.initialize(uid);
+          
+          // Setup auto-sync for when network becomes available
+          syncService.setupAutoSync();
+          
+          if (kDebugMode) {
+            print('SYNC: SyncService initialized for automatic background sync');
+          }
+        }
+        
+        // Check internet and trigger immediate sync if online
+        final hasInternet = await Provider.of<CP>(context, listen: false)
+            .getNetworkStatus();
+        
+        if (hasInternet) {
+          // Trigger sync now (non-blocking)
+          syncService.syncNow().then((_) {
+            if (kDebugMode) print('SYNC: Initial sync triggered successfully');
+          }).catchError((e) {
+            if (kDebugMode) print('SYNC: Initial sync will retry automatically: $e');
+          });
+          
+          // Also do legacy Firebase sync for immediate registration
+          _syncProfileToFirebase(uid, deviceId).then((_) {
+            if (kDebugMode) print('Background sync completed');
+          }).catchError((e) {
+            if (kDebugMode) print('Background sync error (will retry later): $e');
+          });
+        } else {
+          if (kDebugMode) {
+            print('OFFLINE-FIRST: No internet, profile will sync automatically when online');
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('SYNC: Error initializing SyncService: $e');
+          print('SYNC: App will continue offline, sync will be attempted later');
+        }
+      }
+      
+      // STEP 6: Navigate to main menu (user can start using app immediately)
       if (mounted) {
+        if (kDebugMode) {
+          print('OFFLINE-FIRST: Navigating to main menu - app works offline!');
+        }
         Navigator.of(context).pushNamedAndRemoveUntil(
           '/mainMenu',
           (route) => false,
@@ -659,6 +743,51 @@ class ProfileSetupScreenState extends State<ProfileSetupScreen>
     }
   }
 
+  /// Sync profile to Firebase in background (PRD 4.3.1 step 6c)
+  Future<void> _syncProfileToFirebase(String uid, String deviceId) async {
+    try {
+      if (kDebugMode) {
+        print('BACKGROUND SYNC: Starting Firebase sync...');
+      }
+      
+      // Create profile data for Firebase
+      final profileData = _appUser.toJson();
+      profileData['currentDeviceId'] = deviceId;
+      profileData['LAST_UPDATED'] = FieldValue.serverTimestamp();
+      
+      // Save to Firebase
+      await FirebaseFirestore.instance
+          .collection('Profile')
+          .doc(uid)
+          .set(profileData);
+      
+      // Register device in Realtime Database (PRD 4.3.1 step 6c)
+      await FirebaseDatabase.instance
+          .ref('device_sessions/$uid/current_device')
+          .set({
+        'device_id': deviceId,
+        'device_name': Platform.operatingSystem,
+        'last_active': ServerValue.timestamp,
+        'force_logout': false,
+      });
+      
+      // Clear sync flag in local database
+      final db = await AppDatabase.getInstance();
+      await db.profileDao.clearSyncFlags(uid);
+      
+      if (kDebugMode) {
+        print('BACKGROUND SYNC: Profile synced to Firebase successfully');
+        print('BACKGROUND SYNC: Device registered in Realtime Database');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('BACKGROUND SYNC: Error syncing to Firebase: $e');
+        print('BACKGROUND SYNC: Will retry later when online');
+      }
+      // Don't throw - this is background operation
+    }
+  }
+  
   /// Handle sign out
   Future<void> _handleSignOut() async {
     try {

@@ -120,19 +120,37 @@ class Auth extends BaseAuth {
           break;
         case ('user-not-found'):
           {
-            info.message = 'User not found';
+            info.message = 'No account found with this email. Please sign up first.';
             info.error = true;
           }
           break;
         case ('wrong-password'):
           {
-            info.message = 'Wrong password';
+            info.message = 'Incorrect password. Please try again.';
+            info.error = true;
+          }
+          break;
+        case ('invalid-credential'):
+          {
+            info.message = 'Invalid email or password. Please check your credentials.';
+            info.error = true;
+          }
+          break;
+        case ('user-disabled'):
+          {
+            info.message = 'This account has been disabled. Please contact support.';
+            info.error = true;
+          }
+          break;
+        case ('too-many-requests'):
+          {
+            info.message = 'Too many failed attempts. Please try again later.';
             info.error = true;
           }
           break;
         default:
           {
-            info.message = 'Unknown Error: ${e.message}';
+            info.message = e.message ?? 'Login failed. Please try again.';
             info.error = true;
           }
           break;

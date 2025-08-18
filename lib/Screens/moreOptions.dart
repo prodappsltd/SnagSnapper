@@ -1,4 +1,5 @@
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -104,7 +105,9 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final userEmail = Provider.of<CP>(context).getAppUser()?.email ?? 'Not logged in';
+    // Use Firebase Auth directly for user status (more reliable in edge cases)
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    final userEmail = firebaseUser?.email ?? 'Not logged in';
     
     return Scaffold(
       extendBodyBehindAppBar: true,

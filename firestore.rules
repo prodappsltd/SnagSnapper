@@ -1,13 +1,3 @@
-// Firebase Firestore Security Rules for SnagSnapper
-// Last Updated: 2025-07-22
-// Profile: Comprehensive validation and security
-// Sites: Simple access rules (to be enhanced later)
-// Changes: 
-// - Job title is now required, postcode remains optional
-// - Removed SQL injection checks (not relevant for NoSQL)
-// - Kept XSS/script injection protection
-// - Updated IMAGE and SIGNATURE validation to support relative paths (userUID/profile.jpg format)
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -22,237 +12,40 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Helper function to check if user email is verified
+    // Helper function to check if email is verified
     function isEmailVerified() {
-      // For Google Sign-In, email is always verified
-      // Also check the standard email_verified field
-      return isAuthenticated() && 
-             (request.auth.token.email_verified == true || 
-              request.auth.token.firebase.sign_in_provider == 'google.com');
+      return isAuthenticated() && request.auth.token.email_verified == true;
     }
     
-    // Helper function to validate string length
-    function isValidStringLength(field, minLength, maxLength) {
-      return field is string && 
-             field.size() >= minLength && 
-             field.size() <= maxLength;
-    }
-    
-    // Helper function to validate email format
-    function isValidEmail(email) {
-      return email is string && 
-             email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
-    }
-    
-    // Helper function to validate phone format (international format)
-    function isValidPhone(phone) {
-      return phone is string && 
-             phone.matches('^\\+?[0-9]{7,15}$');
-    }
-    
-    // Helper function to check for script injection patterns
-    // Since we're using NoSQL (Firestore), SQL injection is not a concern
-    // We only need to check for XSS/script injection attempts
-    function hasNoScriptInjection(value) {
-      // Check for script tags and javascript execution attempts
-      return !value.matches('.*(<script|javascript:|onclick=|onload=|onerror=|onmouseover=|eval\\(|expression\\().*');
-    }
-    
-    // Helper function to check for XSS patterns
-    function hasNoXSS(value) {
-      return !value.matches('.*<[^>]*(script|iframe|object|embed|form|input|button).*>.*');
-    }
-    
-    // Helper function to validate name (supports international characters)
-    // IMPORTANT: Keep synchronized with profile_setup_screen.dart validation
-    // If changing validation here, update the Flutter UI validation to match
-    // UPDATED: Now allows numbers per user decision (supports "John III", "Mary 2nd", etc.)
-    function isValidName(name) {
-      return name is string &&
-             // Unicode letters (\p{L}), combining marks (\p{M}), numbers, spaces, hyphens, apostrophes
-             name.matches("^[\\p{L}\\p{M}0-9\\s\\-']+$") &&
-             isValidStringLength(name, 2, 100) &&
-             hasNoScriptInjection(name) &&
-             hasNoXSS(name);
-    }
-    
-    // Helper function to validate company name (supports international characters)
-    // IMPORTANT: Keep synchronized with profile_setup_screen.dart validation
-    // If changing validation here, update the Flutter UI validation to match
-    // UPDATED: Added / and + per user decision, allows Unicode numbers
-    function isValidCompanyName(company) {
-      return company is string &&
-             // Unicode letters, numbers (including Unicode), business punctuation
-             company.matches("^[\\p{L}\\p{M}\\p{N}\\s\\-&.,()\\+/]+$") &&
-             isValidStringLength(company, 2, 200) &&
-             hasNoScriptInjection(company) &&
-             hasNoXSS(company);
-    }
-    
-    // Helper function to validate job title (required field)
-    function isValidJobTitle(title) {
-      return title is string &&
-             title != '' &&
-             title.matches("^[\\p{L}\\p{M}\\s\\-/,]+$") &&
-             isValidStringLength(title, 1, 100) &&
-             hasNoScriptInjection(title) &&
-             hasNoXSS(title);
-    }
-    
-    // Helper function to validate postcode/area
-    function isValidPostcode(postcode) {
-      return postcode is string &&
-             (postcode == '' || (
-               postcode.matches("^[a-zA-Z0-9\\s\\-]+$") &&
-               isValidStringLength(postcode, 1, 20)
-             ));
-    }
-    
-    // Helper function to prevent rapid updates (rate limiting)
-    function isNotRapidUpdate() {
-      return request.time > resource.data.LAST_UPDATED + duration.value(5, 's');
-    }
-    
-    // Helper function to validate required profile fields with enhanced security
-    function hasRequiredProfileFields() {
-      return request.resource.data.keys().hasAll(['NAME', 'EMAIL', 'COMPANY_NAME', 'PHONE', 'JOB_TITLE']) &&
-             isValidName(request.resource.data.NAME) &&
-             isValidEmail(request.resource.data.EMAIL) &&
-             isValidCompanyName(request.resource.data.COMPANY_NAME) &&
-             isValidPhone(request.resource.data.PHONE) &&
-             isValidJobTitle(request.resource.data.JOB_TITLE);
-    }
-    
-    // Helper function to validate optional profile fields with enhanced security
-    function hasValidOptionalFields() {
-      return (!('POSTCODE_AREA' in request.resource.data) || 
-              isValidPostcode(request.resource.data.POSTCODE_AREA)) &&
-             (!('DATE_FORMAT' in request.resource.data) || 
-              request.resource.data.DATE_FORMAT in ['dd-MM-yyyy', 'MM-dd-yyyy', 'yyyy-MM-dd']) &&
-             (!('IMAGE' in request.resource.data) || 
-              (request.resource.data.IMAGE is string &&
-               (request.resource.data.IMAGE == '' || 
-                (request.resource.data.IMAGE.matches('^[a-zA-Z0-9\\-]+/profile\\.(jpg|jpeg|png)$') &&
-                 isValidStringLength(request.resource.data.IMAGE, 1, 100))))) &&
-             (!('SIGNATURE' in request.resource.data) || 
-              (request.resource.data.SIGNATURE is string &&
-               (request.resource.data.SIGNATURE == '' || 
-                (request.resource.data.SIGNATURE.matches('^[a-zA-Z0-9\\-]+/signature\\.(png|jpg|jpeg)$') &&
-                 isValidStringLength(request.resource.data.SIGNATURE, 1, 100)))));
-    }
-    
-    // Helper function to ensure no extra fields are added
-    function hasOnlyAllowedProfileFields() {
-      let allowedFields = ['NAME', 'EMAIL', 'COMPANY_NAME', 'PHONE', 'JOB_TITLE', 
-                          'POSTCODE_AREA', 'DATE_FORMAT', 'IMAGE', 'SIGNATURE', 
-                          'LIST_OF_COLLEAGUES', 'LIST_OF_SITE_PATHS', 'LAST_UPDATED'];
-      return request.resource.data.keys().hasOnly(allowedFields);
-    }
-    
-    // Helper function to validate LIST_OF_COLLEAGUES structure
-    function hasValidColleaguesList() {
-      return !('LIST_OF_COLLEAGUES' in request.resource.data) || 
-             (request.resource.data.LIST_OF_COLLEAGUES is list &&
-              request.resource.data.LIST_OF_COLLEAGUES.size() <= 100 &&
-              // Ensure each colleague entry is a valid string
-              request.resource.data.LIST_OF_COLLEAGUES.size() == 0 ||
-              request.resource.data.LIST_OF_COLLEAGUES[0] is string);
-    }
-    
-    // Helper function to validate LIST_OF_SITE_PATHS structure
-    function hasValidSitePaths() {
-      return !('LIST_OF_SITE_PATHS' in request.resource.data) || 
-             (request.resource.data.LIST_OF_SITE_PATHS is map &&
-              request.resource.data.LIST_OF_SITE_PATHS.size() <= 500);
-    }
-    
-    // Helper function to ensure document size is reasonable
-    function hasReasonableSize() {
-      // Firestore documents have a 1MB limit, but we'll be more restrictive
-      // This is a rough check - actual size depends on field names and values
-      return request.resource.data.keys().size() <= 20;
-    }
-    
-    // Helper function to add server timestamp
-    function hasValidTimestamp() {
-      return request.resource.data.LAST_UPDATED == request.time;
-    }
-    
-    // Helper function to validate email matches authenticated user
-    function emailMatchesAuth() {
-      // Check if the email in the document matches the authenticated user's email
-      // For Google Sign-In, the email is available in request.auth.token.email
-      return request.auth.token.email != null && 
-             request.resource.data.EMAIL == request.auth.token.email;
-    }
-    
-    // Profile Collection Rules - Highly Secured
+    // Profile collection rules
     match /Profile/{userId} {
-      // Users can only read their own profile if authenticated and email verified
-      allow read: if isOwner(userId) && 
-                    isEmailVerified();
+      // Users can read their own profile (even if it doesn't exist yet)
+      allow read: if isOwner(userId);
       
-      // Users can create their own profile with comprehensive validation
-      allow create: if isOwner(userId) && 
-                      isEmailVerified() &&
-                      hasRequiredProfileFields() &&
-                      hasValidOptionalFields() &&
-                      hasOnlyAllowedProfileFields() &&
-                      hasValidColleaguesList() &&
-                      hasValidSitePaths() &&
-                      emailMatchesAuth();
+      // Users can create their own profile if email is verified
+      allow create: if isOwner(userId) && isEmailVerified();
       
-      // Users can update their own profile with strict validation
-      allow update: if isOwner(userId) && 
-                      isEmailVerified() &&
-                      hasRequiredProfileFields() &&
-                      hasValidOptionalFields() &&
-                      hasOnlyAllowedProfileFields() &&
-                      hasValidColleaguesList() &&
-                      hasValidSitePaths() &&
-                      hasValidTimestamp() &&
-                      // Email cannot be changed after profile creation
-                      request.resource.data.EMAIL == resource.data.EMAIL &&
-                      // UID in document must match authenticated user
-                      userId == request.auth.uid &&
-                      // Prevent rapid updates (rate limiting)
-                      (resource.data.LAST_UPDATED == null || isNotRapidUpdate()) &&
-                      // Ensure critical fields aren't removed
-                      request.resource.data.keys().hasAll(resource.data.keys());
+      // Users can update their own profile if email is verified
+      allow update: if isOwner(userId) && isEmailVerified();
       
-      // Users cannot delete their profile (for data retention, audit trail, and GDPR compliance)
+      // Users cannot delete profiles (for data integrity)
       allow delete: if false;
       
-      // Sites Subcollection Rules
+      // Sites subcollection
       match /Sites/{siteId} {
-        // TODO: Add proper site field validation once structure is finalized
+        // Owner can read, write their own sites
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isEmailVerified();
         
-        // Users can read their own sites (including archived)
-        allow read: if isOwner(userId) && isEmailVerified();
-        
-        // Users can create new sites (no validation for now)
-        allow create: if isOwner(userId) && 
-                        isEmailVerified();
-        
-        // Users can update their own sites (no validation for now)
-        allow update: if isOwner(userId) && 
-                        isEmailVerified();
-        
-        // Users can delete their own sites
-        allow delete: if isOwner(userId) && 
-                        isEmailVerified();
-        
-      }
-      
-      // Deny access to any other subcollections
-      match /{document=**} {
-        allow read, write: if false;
+        // Snags subcollection
+        match /Snags/{snagId} {
+          allow read: if isOwner(userId);
+          allow write: if isOwner(userId) && isEmailVerified();
+        }
       }
     }
     
-    // Deny all other access by default
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Storage rules for profile images would go in storage.rules
+    // These are just the Firestore rules
   }
 }

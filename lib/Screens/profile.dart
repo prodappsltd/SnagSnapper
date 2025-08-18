@@ -1,3 +1,7 @@
+// TODO: DELETE THIS FILE - Original Firebase profile implementation
+// Replaced by offline-first version in screens/profile/profile_screen_ui_matched.dart
+// This file contains the old Firebase-coupled implementation and should be removed
+
 import 'package:another_flushbar/flushbar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';

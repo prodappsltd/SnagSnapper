@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "device_sessions": {
+      "$userId": {
+        ".read": "$userId === auth.uid",
+        ".write": "$userId === auth.uid",
+        
+        "current_device": {
+          ".validate": "newData.hasChildren(['device_id', 'device_name', 'last_active', 'force_logout'])"
+        }
+      }
+    },
+    
+    ".read": false,
+    ".write": false
+  }
+}

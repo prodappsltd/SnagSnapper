@@ -8,9 +8,16 @@ import 'package:rflutter_alert/rflutter_alert.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Screens/moreOptions.dart';
-import 'package:snagsnapper/Screens/profile.dart';
+// import 'package:snagsnapper/Screens/profile.dart'; // TODO: DELETE - Old profile replaced
+// import 'package:snagsnapper/Screens/profile_cleaned.dart'; // TODO: DELETE - Temporary for comparison
+import 'package:snagsnapper/screens/profile/profile_screen_ui_matched.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:rate_my_app/rate_my_app.dart';
+import 'package:snagsnapper/services/sync_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:async';
 import 'dart:io';
 
 class MainMenu extends StatefulWidget {
@@ -20,7 +27,7 @@ class MainMenu extends StatefulWidget {
   _MainMenuState createState() => _MainMenuState();
 }
 
-class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
+class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, WidgetsBindingObserver {
 
   String message1='';
   String message2='';
@@ -36,6 +43,14 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
     appStoreIdentifier: '6748839667',
   );
   
+  // Sync service and connectivity
+  late SyncService _syncService;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool _hasPendingSync = false;
+  bool _isSyncInitialized = false;
+  bool _profileNeedsSync = false;
+  StreamSubscription? _profileSyncSubscription;
+  
   // Animation controllers
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -48,10 +63,15 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     if (kDebugMode) print ('-----  * In Main Menu *  -----');
+    WidgetsBinding.instance.addObserver(this);
     _setupAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await initDynamicLinks();
       await _initRateMyApp();
+      await _initializeSyncService();
+      _setupConnectivityListener();
+      _checkForPendingSync();
+      _setupProfileSyncListener();
     });
   }
   
@@ -138,11 +158,138 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
     });
   }
   
+  /// Initialize sync service for background syncing
+  Future<void> _initializeSyncService() async {
+    try {
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) {
+        if (kDebugMode) print('MainMenu: No user logged in, skipping sync initialization');
+        return;
+      }
+      
+      _syncService = SyncService.instance;
+      
+      // Initialize if not already done
+      if (!_syncService.isInitialized) {
+        await _syncService.initialize(userId);
+      }
+      
+      // Setup auto-sync for connectivity changes
+      _syncService.setupAutoSync();
+      
+      _isSyncInitialized = true;
+      
+      if (kDebugMode) print('MainMenu: SyncService initialized for background sync');
+    } catch (e) {
+      if (kDebugMode) print('MainMenu: Error initializing sync service: $e');
+    }
+  }
+  
+  /// Setup listener for connectivity changes
+  void _setupConnectivityListener() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((result) async {
+      if (kDebugMode) print('MainMenu: Connectivity changed: $result');
+      
+      // When network becomes available, check for pending syncs
+      if (!result.contains(ConnectivityResult.none)) {
+        await _checkForPendingSync();
+      }
+    });
+  }
+  
+  /// Setup listener for profile sync status changes
+  void _setupProfileSyncListener() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+    
+    final database = AppDatabase.instance;
+    
+    // Listen to profile sync status changes
+    _profileSyncSubscription = database.profileDao.watchProfile(userId).listen((profile) {
+      if (profile != null && mounted) {
+        final needsSync = profile.needsProfileSync || 
+                         profile.needsImageSync || 
+                         profile.needsSignatureSync;
+        
+        setState(() {
+          _profileNeedsSync = needsSync;
+        });
+        
+        if (kDebugMode) print('MainMenu: Profile sync status changed - needsSync: $needsSync');
+      }
+    });
+  }
+  
+  /// Check for pending sync items in background
+  Future<void> _checkForPendingSync() async {
+    if (!_isSyncInitialized) return;
+    
+    try {
+      final database = AppDatabase.instance;
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      
+      if (userId == null) return;
+      
+      // Check if profile needs sync
+      final profile = await database.profileDao.getProfile(userId);
+      if (profile != null) {
+        final needsSync = profile.needsProfileSync || 
+                         profile.needsImageSync || 
+                         profile.needsSignatureSync;
+        
+        if (needsSync && mounted) {
+          setState(() {
+            _hasPendingSync = true;
+            _profileNeedsSync = true;
+          });
+          
+          if (kDebugMode) print('MainMenu: Found pending sync items, triggering background sync...');
+          
+          // Trigger sync in background (non-blocking)
+          _syncService.syncNow().then((result) {
+            if (result.success && mounted) {
+              setState(() {
+                _hasPendingSync = false;
+              });
+              if (kDebugMode) print('MainMenu: Background sync completed successfully');
+            }
+          }).catchError((e) {
+            if (kDebugMode) print('MainMenu: Background sync error: $e');
+          });
+        } else if (mounted) {
+          setState(() {
+            _profileNeedsSync = false;
+          });
+        }
+      }
+      
+      // TODO: In future, also check for pending Sites and Snags sync
+      
+    } catch (e) {
+      if (kDebugMode) print('MainMenu: Error checking for pending sync: $e');
+    }
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // When app comes to foreground, check for pending syncs
+    if (state == AppLifecycleState.resumed) {
+      if (kDebugMode) print('MainMenu: App resumed, checking for pending syncs...');
+      _checkForPendingSync();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _connectivitySubscription?.cancel();
+    _profileSyncSubscription?.cancel();
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
+    if (kDebugMode) print('MainMenu: Disposed with sync cleanup');
     super.dispose();
   }
 
@@ -546,36 +693,77 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin {
                         // Profile button
                         Expanded(
                           child: GestureDetector(
-                            onTap: ()=>Navigator.push(context, MaterialPageRoute(builder: (
-                                context) => const Profile())).then((value) => setState((){})),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 20),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.person_outline_rounded,
-                                    color: theme.colorScheme.primary,
-                                    size: 32,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Profile',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: theme.colorScheme.onSurface,
+                            onTap: () {
+                              // Navigate to profile screen with offline-first implementation
+                              Navigator.pushNamed(context, '/profile');
+                            },
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                // Button container
+                                Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 20),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                                      width: 1,
                                     ),
                                   ),
-                                ],
-                              ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.person_outline_rounded,
+                                          color: theme.colorScheme.primary,
+                                          size: 32,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Profile',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                            color: theme.colorScheme.onSurface,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                // Sync indicator badge
+                                if (_profileNeedsSync)
+                                  Positioned(
+                                    top: -3,
+                                    right: -3,
+                                    child: Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.error,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: theme.colorScheme.surface,
+                                          width: 2,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: theme.colorScheme.error.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.sync,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),

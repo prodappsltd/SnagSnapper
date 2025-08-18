@@ -56,6 +56,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '752613191889',
     projectId: 'snagsnapperpro',
     storageBucket: 'snagsnapperpro.firebasestorage.app',
+    databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -64,6 +65,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '752613191889',
     projectId: 'snagsnapperpro',
     storageBucket: 'snagsnapperpro.firebasestorage.app',
+    databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
     androidClientId: '752613191889-n5bklm4cl92irclnmscac0fc4cf9l274.apps.googleusercontent.com',
     iosClientId: '752613191889-9ir7991g9edtl69hviacf2k4rag9heou.apps.googleusercontent.com',
     iosBundleId: 'uk.co.productiveapps.snagsnapper',
@@ -75,6 +77,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '752613191889',
     projectId: 'snagsnapperpro',
     storageBucket: 'snagsnapperpro.firebasestorage.app',
+    databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
     androidClientId: '752613191889-qeguuktpan1hskvg46orkhd1561mfjnj.apps.googleusercontent.com',
     iosClientId: '752613191889-9ir7991g9edtl69hviacf2k4rag9heou.apps.googleusercontent.com',
     iosBundleId: 'uk.co.productiveapps.snagsnapper',

@@ -45,6 +45,7 @@ dependencies:
   firebase_analytics: ^11.5.2
   firebase_crashlytics: ^4.3.9
   firebase_storage: ^12.4.9
+  firebase_database: ^11.0.0  # For device management
   # For security - D/
   firebase_app_check: ^0.3.2+9
   firebase_core_platform_interface: ^6.0.0
@@ -62,7 +63,7 @@ dependencies:
 
   json_annotation: ^4.9.0
   # For image processing and compression
-  image: ^4.3.0
+  image: ^4.5.4
   # To create PDF files
   pdf: ^3.11.3
   # To be able to mail PDF files. NEEDED?
@@ -99,6 +100,14 @@ dependencies:
   # To keep screen awake
   wakelock_plus: ^1.3.2
   package_info_plus: ^8.3.0
+  
+  # Database dependencies for offline-first architecture
+  drift: ^2.14.0
+  sqlite3_flutter_libs: ^0.5.0
+  path: ^1.8.0
+  rxdart: ^0.28.0  # For reactive streams
+  device_info_plus: ^11.5.0  # For device identification
+  workmanager: ^0.5.2  # For background sync
 
 
 dev_dependencies:
@@ -108,7 +117,11 @@ dev_dependencies:
     sdk: flutter
   build_runner: ^2.6.0
   json_serializable: ^6.10.0
-  mockito: ^5.4.4
+  fake_cloud_firestore: ^3.0.3
+  firebase_storage_mocks: ^0.7.0
+  mockito: ^5.5.0
+  drift_dev: ^2.14.0
+  sqlite3: ^2.1.0  # For testing
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

@@ -13,18 +13,21 @@ import 'package:provider/provider.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Screens/PdfView.dart';
 import 'package:snagsnapper/Screens/SignUp_SignIn/checkEmail.dart';
+import 'package:snagsnapper/Screens/SignUp_SignIn/email_verification_screen.dart';
 import 'package:snagsnapper/Screens/SignUp_SignIn/forgotPassword.dart';
 // import 'package:snagsnapper/Screens/SignUp_SignIn/signUp.dart'; // TODO: DELETE - Replaced by ProfileSetupScreen
 import 'package:snagsnapper/Screens/Sites/mySites.dart';
 import 'package:snagsnapper/Screens/moreOptions.dart';
 import 'package:snagsnapper/Screens/pdfReportFormat.dart';
-import 'package:snagsnapper/Screens/profile.dart';
+// import 'package:snagsnapper/Screens/profile_cleaned.dart'; // TODO: DELETE - Was used for UI reference, now matched in profile_screen_ui_matched.dart
+// import 'package:snagsnapper/Screens/profile.dart' as original_profile; // TODO: DELETE - Original Firebase implementation, replaced by offline-first
+import 'package:snagsnapper/screens/profile/profile_screen_ui_matched.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Screens/shareScreen.dart';
 import 'package:snagsnapper/Subscriptions/upSellSiteSharing.dart';
 import 'package:snagsnapper/Subscriptions/upsellScreen.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'Screens/SignUp_SignIn/unified_auth_screen.dart';
-import 'Screens/SignUp_SignIn/profile_setup_screen.dart';
 import 'Screens/mainMenu.dart';
 // import 'package:snagsnapper/Screens/SignUp_SignIn/signIn.dart'; // TODO: DELETE - Replaced by UnifiedAuthScreen
 import 'package:snagsnapper/Screens/splash_screen.dart';
@@ -34,6 +37,9 @@ import 'package:snagsnapper/Constants/custom_color_schemes.dart';
 
 import 'firebase_options.dart';
 
+// Global navigator key for showing dialogs from anywhere
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 /// App/Program Entry point
 Future<void> main() async {
   await runZonedGuarded(() async {
@@ -42,19 +48,24 @@ Future<void> main() async {
     // Initialize Firebase with proper error handling
     try {
       // Check if Firebase is already initialized to prevent duplicate app error
-      if (Firebase.apps.isEmpty) {
+      try {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
         if (kDebugMode) print('Firebase initialized successfully');
-        
-        // Initialize Firebase App Check immediately after core initialization for better security
-        // For iOS physical devices, we need to use deviceCheck in debug mode
-        final isIOSDevice = Platform.isIOS && !Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');
-        
+      } on FirebaseException catch (e) {
+        if (e.code == 'duplicate-app') {
+          if (kDebugMode) print('Firebase already initialized - using existing instance');
+        } else {
+          rethrow;
+        }
+      }
+      
+      // Initialize Firebase App Check immediately after core initialization for better security
+      try {
         await FirebaseAppCheck.instance.activate(
           androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-          appleProvider: kDebugMode && !isIOSDevice 
+          appleProvider: kDebugMode 
               ? AppleProvider.debug 
               : AppleProvider.appAttestWithDeviceCheckFallback,
         );
@@ -62,18 +73,21 @@ Future<void> main() async {
         if (kDebugMode) {
           print('Firebase App Check activated');
           print('Platform: ${Platform.operatingSystem}');
-          print('Is iOS Device: $isIOSDevice');
           
-          // Only try to get token for Android or iOS Simulator in debug mode
-          if (Platform.isAndroid || (Platform.isIOS && !isIOSDevice)) {
-            try {
-              final token = await FirebaseAppCheck.instance.getToken(true);
-              print('App Check token obtained: ${token != null}');
-            } catch (e) {
-              print('Debug token fetch error (expected on iOS device): $e');
+          // Always try to get token in debug mode to ensure it's printed
+          try {
+            final token = await FirebaseAppCheck.instance.getToken(true);
+            print('App Check token obtained: ${token != null}');
+            if (token != null) {
+              print('Debug token should appear in console above or below this message');
             }
+          } catch (e) {
+            print('Debug token fetch error: $e');
           }
         }
+      } catch (e) {
+        if (kDebugMode) print('App Check activation error (non-blocking): $e');
+        // App Check errors don't block app startup
       }
       
       // Set up crash reporting handlers after successful Firebase initialization
@@ -162,6 +176,7 @@ class MySubAppState extends State<MySubApp> {
   Widget build(BuildContext context) {
     if (kDebugMode) print('MySubApp Rebuild');
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: kDebugMode,
       title: 'SnagSnapper',
       theme: ThemeData(
@@ -188,11 +203,23 @@ class MySubAppState extends State<MySubApp> {
         '/mainMenu': (BuildContext context) => const MainMenu(),
         '/moreOptions': (BuildContext context) => const MoreOptions(),
         '/login': (BuildContext context) => const UnifiedAuthScreen(),
-        '/profile': (BuildContext context) => const Profile(),
-        '/profileSetup': (BuildContext context) => const ProfileSetupScreen(),
+        // '/profile': (BuildContext context) => const Profile(), // Old profile - replaced
+        '/profile': (BuildContext context) {
+          // Use the database singleton instance
+          final database = AppDatabase.instance;
+          final userId = FirebaseAuth.instance.currentUser?.uid ?? 'default_user';
+          return ProfileScreen(
+            database: database,
+            userId: userId,
+          );
+        },
+        // TODO: DELETE - These routes were for temporary comparison
+        // '/profile_old': (BuildContext context) => const Profile(), // Cleaned UI version
+        // '/profile_original': (BuildContext context) => const original_profile.Profile(), // Original Firebase version
         '/mySites': (BuildContext context) => const MySites(),
         '/forgotPassword': (BuildContext context) => const ForgotPasswordScreen(),
         '/checkEmail': (BuildContext context) => const CheckEmailScreen(),
+        '/emailVerification': (BuildContext context) => const EmailVerificationScreen(),
         // '/signIn': (BuildContext context) => const SignInScreen(), // TODO: DELETE - Replaced by UnifiedAuthScreen
         // '/signUp': (BuildContext context) => const SignUpScreen(), // TODO: DELETE - Replaced by ProfileSetupScreen
         '/reportFormat': (BuildContext context) => const PDFReportFormat(),
@@ -313,20 +340,15 @@ class HomePageState extends State<HomePage> {
       }
       
       // Skip App Check token verification on iOS physical devices in debug mode
-      final isIOSDevice = Platform.isIOS && !Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');
-      final shouldVerifyToken = !kDebugMode || (kDebugMode && !isIOSDevice);
-      
-      if (shouldVerifyToken) {
-        try {
-          final token = await FirebaseAppCheck.instance.getToken();
-          if (kDebugMode) print('App Check token verified: ${token != null}');
-          if (!kDebugMode) FirebaseCrashlytics.instance.log('App Check token verified');
-        } catch (e) {
-          if (kDebugMode) print('App Check token error: $e');
-          // App Check errors don't block startup - continue
-        }
-      } else {
-        if (kDebugMode) print('Skipping App Check token verification on iOS device in debug mode');
+      // Always verify token now that we're using debug provider
+      try {
+        final token = await FirebaseAppCheck.instance.getToken();
+        if (kDebugMode) print('App Check token verified: ${token != null}');
+        if (!kDebugMode) FirebaseCrashlytics.instance.log('App Check token verified');
+      } catch (e) {
+        if (kDebugMode) print('App Check token error (non-blocking): $e');
+        // App Check errors don't block startup - continue
+        // This is expected in development if App Check is not fully configured
       }
       
       if (!kDebugMode) {
@@ -366,6 +388,31 @@ class HomePageState extends State<HomePage> {
         // Production breadcrumb
         FirebaseCrashlytics.instance.log('User not authenticated');
       }
+      return InitializationState.goToLogin;
+    }
+    
+    // Check if email is verified
+    if (!FirebaseAuth.instance.currentUser!.emailVerified) {
+      if (kDebugMode) {
+        print('Email not verified - signing out and navigating to login');
+      }
+      await FirebaseAuth.instance.signOut();
+      return InitializationState.goToLogin;
+    }
+    
+    // Check if this is a fresh install with existing auth
+    // This handles the iOS keychain persistence issue
+    final database = AppDatabase.instance;
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+    final hasLocalProfile = await database.profileDao.getProfile(userId) != null;
+    
+    if (!hasLocalProfile) {
+      if (kDebugMode) {
+        print('Auth exists but no local data - likely fresh install with keychain auth');
+        print('Signing out to ensure clean state...');
+      }
+      // Sign out to force proper login flow
+      await FirebaseAuth.instance.signOut();
       return InitializationState.goToLogin;
     }
     

@@ -1,66 +1,48 @@
 /// Validation Rules Constants class for SnagSnapper app.
 /// Contains all validation patterns and rules that must match Firebase Security Rules.
 class ValidationRules {
-  /// SESSION CONTEXT FILE - Read this for quick understanding
+  /// VALIDATION RULES CONFIGURATION
   /// 
-  /// IMPORTANT: These validations MUST match Firebase Security Rules in firestore.rules
+  /// IMPORTANT: These validations are used across the app for Profile data
+  /// 
+  /// SYNCHRONIZATION REQUIRED:
   /// When updating validations here, also update:
-  /// 1. /firestore.rules (in project root)
-  /// 2. Any UI validators in profile_setup_screen.dart
+  /// 1. /firestore.rules - Firebase Security Rules (if using Firebase validation)
+  /// 2. Profile screen UI validators
+  /// 3. Local database constraints
   /// 
-  /// Keep all validation logic synchronized across the app!
+  /// For complete requirements, see: /Claude/PRD.md Section 4.5
   ///
   /// ============================================================================
-  /// Last Updated: 2025-07-20
+  /// Last Updated: 2025-01-10
   /// 
-  /// RELATED FILES TO REVIEW:
-  /// 1. /firestore.rules - Contains matching Firebase security rules (in project root)
-  /// 2. /lib/Screens/SignUp_SignIn/profile_setup_screen.dart - UI implementation
-  /// 3. /lib/Data/user.dart - User data model
-  /// 4. /Planning/PROJECT_RULES.md - General project guidelines
+  /// VALIDATION SPECIFICATIONS:
+  /// - Name: 2-50 characters, letters/numbers/spaces/hyphens/apostrophes
+  /// - Company: 2-100 characters, business punctuation allowed
+  /// - Phone: 7-15 digits, optional country code
+  /// - Job Title: 2-50 characters, letters/spaces/hyphens
+  /// - Email: Standard RFC format
+  /// - Postcode: Optional, alphanumeric with spaces/hyphens
   /// 
-  /// DECISIONS MADE:
-  /// - International language support: YES (Unicode patterns with \p{L} and \p{M})
-  /// - Phone format: International flexible format (+country code optional)
-  /// - Special characters in names: Limited to space, hyphen, apostrophe
-  /// - Company names: Allow business punctuation (&.,())
-  /// - Email validation: Standard RFC format
-  /// - Profile images: Must be from Firebase Storage only
-  /// 
-  /// VALIDATION DECISIONS - CONFIRMED BY USER:
-  /// 1. Names: ALLOW numbers (supports "John III", "Mary 2nd", etc.)
-  /// 2. Phone: KEEP flexible international format (no country-specific validation)
-  /// 3. Company names: ADD / and + only (final set: letters, numbers, &.,()/ +)
-  /// 4. Profile images: 5MB maximum file size (enforced via dimension limits: 2000x2000px for profiles)
-  /// 5. Unicode numbers: ALLOW in company names (supports ١٢٣, 一二三, १२३, etc.)
-  /// 
-  /// SECURITY MEASURES IMPLEMENTED:
-  /// - SQL injection protection (checking for SQL keywords)
-  /// - XSS protection (blocking HTML/script tags)
+  /// SECURITY MEASURES:
   /// - Length validations on all fields
+  /// - Pattern matching for valid characters
   /// - Type checking for all inputs
-  /// - Rate limiting (5 second cooldown between updates)
-  /// - Email immutability after profile creation
-  /// 
-  /// IMPLEMENTATION NOTES:
-  /// - Firebase rules use Unicode regex (\p{L}, \p{M}) - test thoroughly
-  /// - If business names need additional characters, add to company pattern only
-  /// - All changes must be synchronized between UI and Firebase rules
-  /// - Rate limiting prevents updates more frequent than 5 seconds
+  /// - No HTML/script injection allowed
   /// ============================================================================
   // Prevent instantiation
   ValidationRules._();
   
   // Name validation
   static const int nameMinLength = 2;
-  static const int nameMaxLength = 100;
+  static const int nameMaxLength = 50;
   // Matches Unicode letters, combining marks, numbers, spaces, hyphens, apostrophes
   // UPDATED: Now allows numbers per user decision (supports "John III", "Mary 2nd", etc.)
   static final RegExp namePattern = RegExp(r"^[\p{L}\p{M}0-9\s\-']+$", unicode: true);
   
   // Company name validation  
   static const int companyMinLength = 2;
-  static const int companyMaxLength = 200;
+  static const int companyMaxLength = 100;
   // Matches Unicode letters, numbers (including Unicode), business punctuation
   // UPDATED: Added / and + per user decision, allows Unicode numbers (١٢٣, 一二三, etc.)
   static final RegExp companyPattern = RegExp(r"^[\p{L}\p{M}\p{N}\s\-&.,()\+/]+$", unicode: true);
@@ -72,8 +54,8 @@ class ValidationRules {
   static final RegExp phonePattern = RegExp(r'^\+?[0-9]{7,15}$');
   
   // Job title validation
-  static const int jobTitleMinLength = 0;
-  static const int jobTitleMaxLength = 100;
+  static const int jobTitleMinLength = 2;
+  static const int jobTitleMaxLength = 50;
   // Matches Unicode letters, spaces, hyphens, slashes, commas
   static final RegExp jobTitlePattern = RegExp(r"^[\p{L}\p{M}\s\-/,]+$", unicode: true);
   

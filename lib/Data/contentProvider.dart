@@ -5,7 +5,13 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
+import 'package:snagsnapper/Data/models/unified_app_user.dart';
+import 'package:snagsnapper/Data/models/app_user.dart' as models;
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_database/firebase_database.dart' hide Transaction;
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,8 +27,10 @@ import 'package:snagsnapper/Data/colleague.dart';
 import 'package:snagsnapper/Data/site.dart';
 import 'package:snagsnapper/Data/snag.dart';
 import 'package:snagsnapper/Data/user.dart';
+import 'package:snagsnapper/services/sync_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:snagsnapper/Helper/purchasesHelper.dart';
+import 'package:snagsnapper/main.dart' show navigatorKey;
 
 class CP extends ChangeNotifier {
   bool _isPro = false;
@@ -316,9 +324,22 @@ class CP extends ChangeNotifier {
           if (_appUser!.phone != _phone && _phone.isNotEmpty) _appUser!.phone = _phone;
           if (_appUser!.email != _email && _email.isNotEmpty) _appUser!.email = _email;
           if (_appUser!.dateFormat != _dateFormat && _dateFormat.isNotEmpty) _appUser!.dateFormat = _dateFormat;
+          
+          // Clear sync flags after successful Firebase update
+          // These flags are local-only and not synced to Firebase
+          _appUser!.needsProfileSync = false;
+          _appUser!.needsSignatureSync = false;
+          _appUser!.lastSyncTime = DateTime.now();
+          
           result = true;
         } on PlatformException catch (e) {
           if (kDebugMode) print('DATA_UP: Error Updating Profile: ${e.message!}');
+          
+          // On error, set sync flags to retry later
+          _appUser!.needsProfileSync = true;
+          if (_signature.isNotEmpty) {
+            _appUser!.needsSignatureSync = true;
+          }
         }
       }
     });
@@ -650,6 +671,11 @@ class CP extends ChangeNotifier {
             IMAGE: _appUser!.image,
             'LAST_UPDATED': FieldValue.serverTimestamp(),
           });
+          
+          // Clear image sync flag after successful Firebase update
+          _appUser!.needsImageSync = false;
+          _appUser!.lastSyncTime = DateTime.now();
+          
           if (kDebugMode) print('DATA_UPI: Notifying listeners');
           notifyListeners();
           result = true;
@@ -657,6 +683,9 @@ class CP extends ChangeNotifier {
       });
     } on PlatformException catch (e) {
       if (kDebugMode) print('DATA_UPI: Error updating profile image - Details: ' + e.details);
+      
+      // On error, set sync flag to retry later
+      _appUser!.needsImageSync = true;
     }
     //--FIREBASE UPDATE FINISH--
     if (kDebugMode) print('DATA-L_UPI: END Profile Image Update? $result');
@@ -703,30 +732,209 @@ class CP extends ChangeNotifier {
 
   /// Firebase user is NOT null before coming here
   /// Firebase user email is verified before coming here
-  /// This function loads the profile of the app user
+  /// This function loads the profile following OFFLINE-FIRST architecture with DEVICE MANAGEMENT
+  /// 1. Generate device ID (PRD 4.3.1 step 4)
+  /// 2. Check local database FIRST (PRD 4.3.1 step 5)
+  /// 3. If not found locally, check Firebase (PRD 4.3.1 step 6)
+  /// 4. Handle device management and conflicts
+  /// 5. Set up device session listener
   Future<bool> loadAppUserProfile() async {
-    //if (kDebugMode) print('Throwing Error');
-    //throw PlatformException(code: 'Test Error');
-    if (kDebugMode) print('DATA-F_LP: 3 - Load Profile...');
+    if (kDebugMode) print('DATA-F_LP: 3 - Load Profile (OFFLINE-FIRST with DEVICE MANAGEMENT)...');
     bool result = false;
-
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+    
     try {
-      DocumentSnapshot<Map<String, dynamic>> snapshot = await FirebaseFirestore.instance.collection('Profile').doc(FirebaseAuth.instance.currentUser!.uid).get();
-      if (snapshot.exists) {
-        setAppUser(AppUser.fromJson(snapshot.data()!));
+      // STEP 1: Generate device ID for this device (PRD 4.3.1 step 4)
+      final currentDeviceId = await _generateDeviceId();
+      if (kDebugMode) print('DATA_LP: 3.1 - Current device ID: $currentDeviceId');
+      
+      // STEP 2: Check LOCAL database FIRST (PRD 4.3.1 step 5)
+      if (kDebugMode) print('DATA_LP: 3.2 - Checking LOCAL database FIRST...');
+      
+      final db = await AppDatabase.getInstance();
+      final profileDao = db.profileDao;
+      
+      // Try to load from local database
+      final localProfile = await profileDao.getProfile(userId);
+      
+      if (localProfile != null) {
+        // FOUND IN LOCAL DATABASE - Check device ID
+        if (kDebugMode) print('DATA_LP: 3.2 - Profile FOUND in LOCAL database');
+        
+        // DEVICE CHECK: Compare stored device ID with current device (PRD 4.3.2)
+        if (localProfile.currentDeviceId != null && localProfile.currentDeviceId != currentDeviceId) {
+          if (kDebugMode) {
+            print('DATA_LP: 3.3 - DEVICE MISMATCH DETECTED!');
+            print('  Stored device: ${localProfile.currentDeviceId}');
+            print('  Current device: $currentDeviceId');
+          }
+          
+          // Device was switched while offline - need to verify with Firebase
+          if (await getNetworkStatus()) {
+            // Online - check Firebase for current device
+            final firebaseProfile = await FirebaseFirestore.instance
+                .collection('Profile')
+                .doc(userId)
+                .get();
+                
+            if (firebaseProfile.exists) {
+              final firebaseDeviceId = firebaseProfile.data()?['currentDeviceId'];
+              
+              if (firebaseDeviceId != currentDeviceId) {
+                // Different device is active - clear local data (PRD 4.3.2 PATH 2)
+                if (kDebugMode) print('DATA_LP: 3.4 - Another device is active, clearing local data');
+                
+                // Show notification to user
+                await _showDeviceSwitchedNotification();
+                
+                // Clear all local data
+                await profileDao.deleteProfile(userId);
+                await _clearLocalImages(userId);
+                
+                // Sign out and return false
+                await FirebaseAuth.instance.signOut();
+                resetVariables();
+                return false;
+              }
+            }
+          }
+        }
+        
+        // Device matches or no device ID stored - update device info
+        await profileDao.updateDeviceInfo(userId, currentDeviceId);
+        
+        // Convert from new AppUser format to old format for compatibility
+        final unifiedUser = UnifiedAppUser.fromDatabase(localProfile.toDatabase());
+        final oldFormatUser = AppUser.fromJson(unifiedUser.toJson());
+        setAppUser(oldFormatUser);
         result = true;
-        if (kDebugMode) print('DATA_LP: 6.0 - Profile user SET....');
+        
+        // Check sync flags (background operation, don't block)
+        if (localProfile.needsProfileSync || localProfile.needsImageSync || localProfile.needsSignatureSync) {
+          if (kDebugMode) print('DATA_LP: 3.5 - Profile needs sync, will sync in background');
+          
+          // Initialize and trigger SyncService for background sync
+          _triggerBackgroundSync(userId);
+        }
+        
+        if (kDebugMode) print('DATA_LP: 3.6 - Using LOCAL profile, app works offline!');
       } else {
-        if (kDebugMode) print('DATA_LP: 6.1 - SNAPSHOT DATA WAS NULL');
+        // STEP 3: Not in local database, try Firebase (new user or reinstall)
+        if (kDebugMode) print('DATA_LP: 3.7 - No local profile, checking Firebase...');
+        
+        try {
+          final snapshot = await FirebaseFirestore.instance
+              .collection('Profile')
+              .doc(userId)
+              .get();
+              
+          if (snapshot.exists) {
+            final data = snapshot.data()!;
+            final firebaseDeviceId = data['currentDeviceId'] as String?;
+            
+            // Check device ID scenarios (PRD 4.3.1 step 6)
+            if (firebaseDeviceId != null && firebaseDeviceId.isNotEmpty) {
+              // Profile has device_id - check if same or different
+              if (firebaseDeviceId == currentDeviceId) {
+                // SAME device (reinstall scenario) - PRD 4.3.1 step 6a
+                if (kDebugMode) print('DATA_LP: 3.8 - Same device reinstall, downloading profile');
+              } else {
+                // DIFFERENT device - PRD 4.3.1 step 6a (device switch)
+                if (kDebugMode) print('DATA_LP: 3.9 - Different device detected, following switch flow');
+                
+                // Show device switch warning dialog
+                final shouldContinue = await _showDeviceSwitchWarning(firebaseDeviceId);
+                
+                if (!shouldContinue) {
+                  // User cancelled - sign out and return
+                  await FirebaseAuth.instance.signOut();
+                  resetVariables();
+                  return false;
+                }
+                
+                // User confirmed - set force_logout for old device
+                await _forceLogoutOldDevice(userId, firebaseDeviceId);
+                
+                // Update device_id in Firebase profile
+                await FirebaseFirestore.instance
+                    .collection('Profile')
+                    .doc(userId)
+                    .update({'currentDeviceId': currentDeviceId});
+              }
+            } else {
+              // Profile WITHOUT device_id (legacy/first login) - PRD 4.3.1 step 6b
+              if (kDebugMode) print('DATA_LP: 3.10 - Legacy profile, adding device ID');
+              
+              // Update Firebase with device_id
+              await FirebaseFirestore.instance
+                  .collection('Profile')
+                  .doc(userId)
+                  .update({'currentDeviceId': currentDeviceId});
+            }
+            
+            // Download profile to local database
+            if (kDebugMode) print('DATA_LP: 3.11 - Downloading profile to local database');
+            
+            // Create old format user from Firebase
+            final firebaseUser = AppUser.fromJson(data);
+            setAppUser(firebaseUser);
+            
+            // Convert to UnifiedAppUser for database storage
+            final unifiedUser = UnifiedAppUser.fromOldAppUser(firebaseUser, userId);
+            
+            // Add current device ID
+            final dbData = unifiedUser.toDatabase();
+            dbData['currentDeviceId'] = currentDeviceId;
+            dbData['lastLoginTime'] = DateTime.now().millisecondsSinceEpoch;
+            
+            // Convert to database format
+            final dbUser = models.AppUser.fromDatabase(dbData);
+            
+            // Save to local database for offline use
+            await profileDao.insertProfile(dbUser);
+            
+            // Clear sync flags since we just downloaded from Firebase
+            await profileDao.clearSyncFlags(userId);
+            
+            // Register device in Realtime Database (PRD 4.3.1 step 6c)
+            await _registerDeviceSession(userId, currentDeviceId);
+            
+            result = true;
+            if (kDebugMode) print('DATA_LP: 3.12 - Firebase profile saved locally for offline use');
+          } else {
+            if (kDebugMode) print('DATA_LP: 3.13 - No profile exists (new user)');
+            
+            // New user - create profile with device ID
+            // This will be handled by ProfileSetupScreen
+            // Just register the device session
+            if (kDebugMode) print('DATA_LP: 3.13a - About to register device session...');
+            await _registerDeviceSession(userId, currentDeviceId);
+            if (kDebugMode) print('DATA_LP: 3.13b - Device session registered');
+          }
+        } catch (firebaseError) {
+          // Firebase error - but app should still work offline
+          if (kDebugMode) {
+            print('DATA_LP: 3.14 - Firebase error, but app works offline: $firebaseError');
+          }
+          // Don't rethrow - allow offline operation
+        }
       }
-      if (kDebugMode) print('DATA_LP: 7 - Profile loading complete...');
-    } on FirebaseException catch (e) {
+      
+      // STEP 4: Set up device session listener (PRD 4.3.1 step 7)
+      if (result && await getNetworkStatus()) {
+        await _setupDeviceSessionListener(userId, currentDeviceId);
+      }
+      
+      if (kDebugMode) print('DATA_LP: 4 - Profile loading complete. Found: $result');
+    } catch (e) {
       if (kDebugMode) {
-        print('DATA_LP: Firebase error loading profile - ${e.code}: ${e.message}');
+        print('DATA_LP: Critical error in profile loading: $e');
+        print('DATA_LP: Error type: ${e.runtimeType}');
       }
-      // Re-throw to be handled by calling method
-      rethrow;
+      // Don't rethrow - try to continue with limited functionality
     }
+    
+    if (kDebugMode) print('DATA_LP: 5 - Returning result: $result');
     return result;
   }
 
@@ -826,11 +1034,14 @@ class CP extends ChangeNotifier {
       try {
         if (kDebugMode) print('---Loading user profile---');
         bool profileResult = await loadAppUserProfile();
+        if (kDebugMode) print('MAIN-L_LP: loadAppUserProfile returned: $profileResult');
         if (kDebugMode) print('MAIN-L_LP: END Loading Profile');
         // 1 - Load Owned Sites
         try {
           if (profileResult) {
+            if (kDebugMode) print('MAIN_LP: Loading owned sites...');
             await loadOwnedSites();
+            if (kDebugMode) print('MAIN_LP: Owned sites loaded');
           }
         } on Exception catch (e) {
           FirebaseCrashlytics.instance.recordError(e, StackTrace.fromString('Error in loading Owned Sites : Main.dart : Load Owned Sites'));
@@ -840,14 +1051,20 @@ class CP extends ChangeNotifier {
         // Load Shared Sites
         try {
           if (profileResult) {
+            if (kDebugMode) print('MAIN_LP: Loading shared sites...');
             await loadOnlySharedSites();
+            if (kDebugMode) print('MAIN_LP: Shared sites loaded');
           }
         } on Exception catch (e) {
           FirebaseCrashlytics.instance.recordError(e, StackTrace.fromString('Error in loading Shared Sites : Main.dart : Load Shared Sites'));
           if (kDebugMode) print('MAIN_LP: Error loading Shared Sites - Details: $e');
           return 'Firebase Error Shared Sites';
         }
-        if (profileResult) return 'Profile Found';
+        if (profileResult) {
+          if (kDebugMode) print('MAIN_LP: Returning "Profile Found"');
+          return 'Profile Found';
+        }
+        if (kDebugMode) print('MAIN_LP: Returning "Profile Not Found"');
         return 'Profile Not Found';
       } on Exception catch (e) {
         if (kDebugMode) log('MAIN_LP: Error loading profile - Details: $e');
@@ -858,5 +1075,434 @@ class CP extends ChangeNotifier {
       if (kDebugMode) print('MAIN-F_LP: Email not verified...');
       return 'Email Not Verified'; // Goto Login Page
     }
+  }
+
+  /// Generate unique device ID for this device (PRD 4.3.1 step 4)
+  Future<String> _generateDeviceId() async {
+    final deviceInfo = DeviceInfoPlugin();
+    String deviceId = '';
+    
+    try {
+      if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor ?? 'ios_${DateTime.now().millisecondsSinceEpoch}';
+      } else if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id ?? 'android_${DateTime.now().millisecondsSinceEpoch}';
+      } else {
+        deviceId = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error generating device ID: $e');
+      deviceId = 'fallback_${DateTime.now().millisecondsSinceEpoch}';
+    }
+    
+    return deviceId;
+  }
+
+  /// Register device session in Realtime Database (PRD 4.3.1 step 6c)
+  Future<void> _registerDeviceSession(String userId, String deviceId) async {
+    if (kDebugMode) print('_registerDeviceSession: Starting for user: $userId, device: $deviceId');
+    
+    try {
+      String deviceName = 'Unknown Device';
+      
+      if (kDebugMode) print('_registerDeviceSession: Getting device info...');
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceName = '${iosInfo.name} (${iosInfo.model})';
+        if (kDebugMode) print('_registerDeviceSession: iOS device name: $deviceName');
+      } else if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceName = '${androidInfo.brand} ${androidInfo.model}';
+        if (kDebugMode) print('_registerDeviceSession: Android device name: $deviceName');
+      }
+      
+      if (kDebugMode) print('_registerDeviceSession: Writing to Realtime Database...');
+      
+      // Explicitly set the database URL for Europe region
+      final database = FirebaseDatabase.instanceFor(
+        app: Firebase.app(),
+        databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
+      );
+      
+      if (kDebugMode) print('_registerDeviceSession: Using database URL: https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app');
+      
+      // Create reference with the correct database instance
+      final ref = database.ref('device_sessions/$userId/current_device');
+      if (kDebugMode) print('_registerDeviceSession: Reference created: ${ref.path}');
+      
+      // Try to write with timeout to prevent hanging
+      await ref.set({
+        'device_id': deviceId,
+        'device_name': deviceName,
+        'last_active': ServerValue.timestamp,
+        'force_logout': false,
+      }).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          if (kDebugMode) print('_registerDeviceSession: TIMEOUT after 10 seconds');
+          throw TimeoutException('Realtime Database write timeout');
+        }
+      );
+      
+      if (kDebugMode) print('_registerDeviceSession: SUCCESS - Device registered in Realtime Database: $deviceId');
+    } catch (e) {
+      if (kDebugMode) print('_registerDeviceSession: ERROR - $e');
+      if (kDebugMode) print('_registerDeviceSession: Error type: ${e.runtimeType}');
+      // Don't throw - this is a non-critical operation
+    }
+    if (kDebugMode) print('_registerDeviceSession: Completed');
+  }
+
+  /// Set up listener for force logout (PRD 4.3.2 PATH 1)
+  Future<void> _setupDeviceSessionListener(String userId, String currentDeviceId) async {
+    try {
+      // Use the correct database instance for Europe region
+      final database = FirebaseDatabase.instanceFor(
+        app: Firebase.app(),
+        databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
+      );
+      
+      final sessionRef = database
+          .ref('device_sessions/$userId/current_device');
+      
+      // Listen for force_logout changes
+      sessionRef.child('force_logout').onValue.listen((event) async {
+        final forceLogout = event.snapshot.value as bool? ?? false;
+        
+        if (forceLogout) {
+          if (kDebugMode) print('FORCE LOGOUT detected! Another device has taken over.');
+          
+          // Clear all local data
+          await _handleForceLogout(userId);
+        }
+      });
+      
+      // Update last_active periodically (on app resume)
+      await sessionRef.update({
+        'last_active': ServerValue.timestamp,
+      });
+      
+      if (kDebugMode) print('Device session listener set up');
+    } catch (e) {
+      if (kDebugMode) print('Error setting up device session listener: $e');
+      // Don't throw - app should work without listener
+    }
+  }
+
+  /// Force logout old device (PRD 4.3.2)
+  Future<void> _forceLogoutOldDevice(String userId, String oldDeviceId) async {
+    try {
+      // Use the correct database instance for Europe region
+      final database = FirebaseDatabase.instanceFor(
+        app: Firebase.app(),
+        databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
+      );
+      
+      // Set force_logout flag for old device
+      await database
+          .ref('device_sessions/$userId/current_device')
+          .update({'force_logout': true});
+      
+      if (kDebugMode) print('Force logout sent to old device: $oldDeviceId');
+    } catch (e) {
+      if (kDebugMode) print('Error forcing logout on old device: $e');
+      // Don't throw - continue with device switch
+    }
+  }
+
+  /// Handle force logout - clear all local data (PRD 4.3.2)
+  Future<void> _handleForceLogout(String userId) async {
+    try {
+      if (kDebugMode) print('Handling force logout - clearing all local data');
+      
+      // Clear local database
+      final db = await AppDatabase.getInstance();
+      await db.profileDao.deleteProfile(userId);
+      
+      // Clear local images
+      await _clearLocalImages(userId);
+      
+      // Clear SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+      
+      // Reset provider variables
+      resetVariables();
+      
+      // Navigate to login (handled by app state management)
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Error handling force logout: $e');
+    }
+  }
+
+  /// Clear local images for user
+  Future<void> _clearLocalImages(String userId) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final userDir = Directory('${appDir.path}/SnagSnapper/$userId');
+      
+      if (await userDir.exists()) {
+        await userDir.delete(recursive: true);
+        if (kDebugMode) print('Local images cleared for user: $userId');
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error clearing local images: $e');
+    }
+  }
+
+  /// Show device switched notification
+  Future<void> _showDeviceSwitchedNotification() async {
+    // This would typically show a UI notification
+    // Implementation depends on UI framework being used
+    if (kDebugMode) {
+      print('NOTIFICATION: Your account is now active on another device');
+    }
+  }
+
+  /// Show device switch warning dialog per PRD 4.3.2
+  Future<bool> _showDeviceSwitchWarning(String previousDeviceId) async {
+    // Get the navigator context
+    final BuildContext? context = navigatorKey.currentContext;
+    if (context == null) {
+      print('ERROR: No context available for dialog');
+      return false;
+    }
+    
+    final DateTime lastActive = DateTime.now(); // In production, get from Firebase
+    final String deviceName = previousDeviceId.length > 8 
+        ? '${previousDeviceId.substring(0, 8)}...' 
+        : previousDeviceId;
+    
+    // Show warning dialog as specified in PRD section 4.3.2
+    final bool? userChoice = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // User must make a choice
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange,
+            size: 48,
+          ),
+          title: const Text(
+            'Active Session Detected',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'You are already logged in on another device.',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.phone_android, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Device: $deviceName',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Last active: ${_formatTimestamp(lastActive)}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Continuing will:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                const Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Expanded(
+                            child: Text('Log out the other device'),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Expanded(
+                            child: Text('DELETE all local data on that device'),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Expanded(
+                            child: Text('Any pending updates from that device will be lost'),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Expanded(
+                            child: Text('Transfer your account to this device'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.red,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'This action cannot be undone.',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Continue on This Device'),
+            ),
+          ],
+        );
+      },
+    );
+    
+    // Log the decision in debug mode
+    if (kDebugMode) {
+      print('Device switch warning shown. User choice: ${userChoice ?? false}');
+    }
+    
+    return userChoice ?? false;
+  }
+  
+  /// Format timestamp for display
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes} minutes ago';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+    }
+  }
+  
+  /// Trigger background sync for profile
+  void _triggerBackgroundSync(String userId) {
+    // Run sync in background without blocking UI
+    Future.microtask(() async {
+      try {
+        if (kDebugMode) print('SYNC: Initializing SyncService for background sync');
+        
+        final syncService = SyncService.instance;
+        
+        // Initialize if not already done
+        if (!syncService.isInitialized) {
+          await syncService.initialize(userId);
+        }
+        
+        // Check network status before syncing
+        if (await getNetworkStatus()) {
+          if (kDebugMode) print('SYNC: Network available, triggering profile sync');
+          
+          // Trigger sync (non-blocking)
+          syncService.syncProfile(userId).then((success) {
+            if (kDebugMode) {
+              print('SYNC: Profile sync ${success ? "completed successfully" : "failed"}');
+            }
+          }).catchError((error) {
+            if (kDebugMode) print('SYNC: Profile sync error: $error');
+          });
+        } else {
+          if (kDebugMode) print('SYNC: No network, sync will trigger when online');
+        }
+      } catch (e) {
+        if (kDebugMode) print('SYNC: Error triggering background sync: $e');
+        // Don't throw - this is background operation
+      }
+    });
   }
 }
