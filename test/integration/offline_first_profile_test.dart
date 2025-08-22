@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
-import 'package:snagsnapper/Data/user.dart';
+import 'package:snagsnapper/Data/models/app_user.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -48,13 +48,18 @@ void main() {
       // This is the test that would have caught the architecture violation
       
       // ARRANGE: Create a profile in local database
-      final testProfile = AppUser()
-        ..name = 'Local User'
-        ..email = 'local@test.com'
-        ..jobTitle = 'Developer'
-        ..companyName = 'Test Co'
-        ..phone = '1234567890'
-        ..dateFormat = 'dd-MM-yyyy';
+      final now = DateTime.now();
+      final testProfile = AppUser(
+        id: 'test-user-id',
+        name: 'Local User',
+        email: 'local@test.com',
+        jobTitle: 'Developer',
+        companyName: 'Test Co',
+        phone: '1234567890',
+        dateFormat: 'dd-MM-yyyy',
+        createdAt: now,
+        updatedAt: now,
+      );
       
       // Save to local database
       await database.profileDao.insertProfile(testProfile);
@@ -93,13 +98,18 @@ void main() {
     
     test('Works completely offline when profile exists locally', () async {
       // ARRANGE: Save profile to local database
-      final testProfile = AppUser()
-        ..name = 'Offline User'
-        ..email = 'offline@test.com'
-        ..jobTitle = 'Manager'
-        ..companyName = 'Offline Co'
-        ..phone = '9876543210'
-        ..dateFormat = 'MM/dd/yyyy';
+      final now = DateTime.now();
+      final testProfile = AppUser(
+        id: 'test-user-id',
+        name: 'Offline User',
+        email: 'offline@test.com',
+        jobTitle: 'Manager',
+        companyName: 'Offline Co',
+        phone: '9876543210',
+        dateFormat: 'MM/dd/yyyy',
+        createdAt: now,
+        updatedAt: now,
+      );
       
       await database.profileDao.insertProfile(testProfile);
       
@@ -117,14 +127,19 @@ void main() {
     
     test('Sync flags are checked but do not block profile loading', () async {
       // ARRANGE: Create profile with sync flags set
-      final testProfile = AppUser()
-        ..name = 'Needs Sync'
-        ..email = 'sync@test.com'
-        ..jobTitle = 'Tester'
-        ..companyName = 'Sync Co'
-        ..phone = '5555555555'
-        ..needsProfileSync = true
-        ..needsImageSync = true;
+      final now = DateTime.now();
+      final testProfile = AppUser(
+        id: 'test-user-id',
+        name: 'Needs Sync',
+        email: 'sync@test.com',
+        jobTitle: 'Tester',
+        companyName: 'Sync Co',
+        phone: '5555555555',
+        needsProfileSync: true,
+        needsImageSync: true,
+        createdAt: now,
+        updatedAt: now,
+      );
       
       await database.profileDao.insertProfile(testProfile);
       
@@ -173,9 +188,17 @@ void main() {
     
     test('App continues to work when Firebase is unreachable', () async {
       // ARRANGE: Add profile to local database
-      final testProfile = AppUser()
-        ..name = 'Resilient User'
-        ..email = 'resilient@test.com'
+      final now = DateTime.now();
+      final testProfile = AppUser(
+        id: 'test-user-id',
+        name: 'Resilient User',
+        email: 'resilient@test.com',
+        jobTitle: 'Default',
+        companyName: 'Default Co',
+        phone: '1234567890',
+        createdAt: now,
+        updatedAt: now,
+      )
         ..jobTitle = 'Survivor'
         ..companyName = 'Offline First Inc'
         ..phone = '1111111111';

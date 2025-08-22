@@ -5,7 +5,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/app_user.dart';
-import 'package:snagsnapper/screens/profile/profile_screen.dart';
+import 'package:snagsnapper/screens/profile/profile_screen_ui_matched.dart';
 import 'package:snagsnapper/services/image_storage_service.dart';
 
 // Mock PathProvider for testing

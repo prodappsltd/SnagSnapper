@@ -5,7 +5,7 @@ This document details the implementation plan for profile image functionality in
 
 ## Current State Analysis
 
-### ✅ Available Components
+### ✅ Available Components (IMPLEMENTED)
 1. **ImageStorageService** (`/lib/services/image_storage_service.dart`)
    - Handles local storage with proper directory structure
    - Saves to: `/AppDocuments/SnagSnapper/{userId}/Profile/`
@@ -23,10 +23,11 @@ This document details the implementation plan for profile image functionality in
    - Handles camera/gallery selection
    - Integrates compression service
 
-### ❌ Missing Integration
-- OLD `profile.dart` has working image functionality (to be migrated)
-- NEW `profile_screen_ui_matched.dart` has placeholders (needs implementation)
-- Migration needed: Copy methods from old, delete old file, rename new to profile.dart
+### ✅ Integration Complete
+- ✅ Migration complete: profile_screen_ui_matched.dart is now the primary profile screen
+- ✅ Image functionality fully integrated with upload, display, and delete
+- ✅ Sync handling with race condition prevention
+- ✅ Auto-sync triggers for immediate synchronization
 
 ## Implementation Architecture
 
@@ -54,7 +55,7 @@ User Action → Local Storage → Database → Display
 14. **Logo optional** for profile
 15. **Firebase paths stored** for sync status (not URLs)
 16. **Fixed naming** (profile.jpg - no timestamps for auto-overwrite)
-17. **Deletion flag persists** until sync completes (TO BE IMPLEMENTED)
+17. **Deletion flag persists** until sync completes (✅ IMPLEMENTED)
 
 ### Detailed Flow Diagram
 ```
@@ -109,7 +110,7 @@ class AppUser {
 }
 ```
 
-**NOTE**: The `imageMarkedForDeletion` field needs to be added to the AppUser model.
+**NOTE**: The `imageMarkedForDeletion` field has been ✅ IMPLEMENTED in the AppUser model.
 
 ### Online vs Offline Behavior
 
@@ -274,7 +275,7 @@ Future<void> syncProfileImage(String userId) async {
 2. **Fixed Naming Strategy**:
    - Local: `profile.jpg` (overwrites automatically)
    - Firebase: `profile.jpg` (overwrites automatically)
-3. **Flag Persistence**: imageMarkedForDeletion survives until sync (TO BE ADDED)
+3. **Flag Persistence**: imageMarkedForDeletion survives until sync (✅ IMPLEMENTED)
 4. **Idempotent Operations**: Safe to retry, no data corruption
 5. **Acceptable Redundancy**: May re-upload unchanged images (rare)
 6. **No Cleanup Needed**: Fixed names mean automatic overwrite
@@ -339,10 +340,10 @@ When app transitions from offline to online:
 
 ### 3. Add imageMarkedForDeletion Field & Rename Firebase URLs
 **File**: `/lib/Data/models/app_user.dart`
-- Add `final bool imageMarkedForDeletion;` field
-- Add `final bool signatureMarkedForDeletion;` field
-- Rename `imageFirebaseUrl` to `imageFirebasePath`
-- Rename `signatureFirebaseUrl` to `signatureFirebasePath`
+- ✅ Added `final bool imageMarkedForDeletion;` field
+- ✅ Added `final bool signatureMarkedForDeletion;` field
+- ✅ Renamed `imageFirebaseUrl` to `imageFirebasePath`
+- ✅ Renamed `signatureFirebaseUrl` to `signatureFirebasePath`
 - Update constructor, copyWith, toMap, and fromMap methods
 - Update database column names: `image_firebase_url` → `image_firebase_path`
 - Default value: false for deletion flags
@@ -804,31 +805,31 @@ import 'package:snagsnapper/services/image_compression_service.dart';
 ## Testing Checklist
 
 ### Functional Tests
-- [ ] Camera capture works
-- [ ] Gallery selection works
-- [ ] Image displays correctly
-- [ ] Image deletion works
-- [ ] Sync flag set on change
-- [ ] Offline functionality works
-- [ ] imageMarkedForDeletion flag set on deletion
-- [ ] imageMarkedForDeletion persists through offline add
-- [ ] Delete-then-add offline scenario works correctly
-- [ ] Firebase Storage cleanup happens on sync
-- [ ] Old local files accumulate (known issue)
+- [x] Camera capture works
+- [x] Gallery selection works
+- [x] Image displays correctly
+- [x] Image deletion works
+- [x] Sync flag set on change
+- [x] Offline functionality works
+- [x] imageMarkedForDeletion flag set on deletion
+- [x] imageMarkedForDeletion persists through offline add
+- [x] Delete-then-add offline scenario works correctly (race condition fixed)
+- [x] Firebase Storage cleanup happens on sync
+- [x] Auto-sync triggers after image operations
 
 ### Validation Tests
-- [ ] Image < 600KB marked as optimal
-- [ ] Image 600KB-1MB marked as acceptable
-- [ ] Image > 1MB rejected
-- [ ] Dimensions fixed at 1024x1024
-- [ ] JPEG conversion works
+- [x] Image < 600KB marked as optimal
+- [x] Image 600KB-1MB marked as acceptable
+- [x] Image > 1MB rejected
+- [x] Dimensions fixed at 1024x1024
+- [x] JPEG conversion works
 
 ### User Experience
-- [ ] Loading indicators show
-- [ ] Error messages clear
-- [ ] Success messages appropriate
-- [ ] Dialog animations smooth
-- [ ] Image loads fast
+- [x] Loading indicators show
+- [x] Error messages clear
+- [x] Success messages appropriate
+- [x] Dialog animations smooth
+- [x] Image loads fast
 
 ## PRD Compliance Checklist
 
@@ -940,12 +941,29 @@ dependencies:
 
 ## Success Criteria
 
-1. Users can add/change/remove profile images
-2. Images display from local storage
-3. Two-tier validation works correctly
-4. Sync flags set appropriately
-5. Works completely offline
-6. PRD requirements met 100%
+1. Users can add/change/remove profile images ✅
+2. Images display from local storage ✅
+3. Two-tier validation works correctly ✅
+4. Sync flags set appropriately ✅
+5. Works completely offline ✅
+6. PRD requirements met 100% ✅
+
+## Recent Bug Fixes (2025-01-20)
+
+### 1. Race Condition Bug
+**Issue**: When deleting an image and quickly adding another, the new image would disappear.
+**Root Cause**: Sync handler would start deletion process, user adds new image during sync, sync completes and overwrites database with null.
+**Fix**: Added state re-checking in ProfileSyncHandler before database updates to detect and handle concurrent changes.
+
+### 2. Persistent Sync Icon
+**Issue**: Sync status indicator would remain visible indefinitely after rapid image replacements.
+**Root Cause**: When race condition was prevented, recursive sync wasn't properly clearing the needsImageSync flag.
+**Fix**: Modified sync handler to recursively call itself when detecting new content during deletion, ensuring upload happens in same sync cycle.
+
+### 3. Missing Auto-Sync Trigger
+**Issue**: After successful deletion, adding a new image wouldn't trigger automatic sync.
+**Root Cause**: No automatic sync trigger was fired after image operations in ProfileScreen.
+**Fix**: Added explicit `_syncService.syncNow()` calls with 500ms delay after database updates in ProfileScreen.
 
 ## Note on Signature Implementation
 

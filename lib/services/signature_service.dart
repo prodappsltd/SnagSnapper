@@ -32,10 +32,7 @@ class SignatureService {
   /// Add a point to the current stroke
   void addPoint(Offset point) {
     if (_currentStroke != null) {
-      debugPrint('SignatureService: Adding point $point to current stroke');
       _currentStroke!.add(point);
-    } else {
-      debugPrint('SignatureService: Cannot add point - no current stroke');
     }
   }
 
@@ -43,8 +40,6 @@ class SignatureService {
   void addPointWithBounds(Offset point, Size canvasSize) {
     if (isPointInBounds(point, canvasSize)) {
       addPoint(point);
-    } else {
-      debugPrint('SignatureService: Point $point is out of bounds for canvas $canvasSize');
     }
   }
 
@@ -251,16 +246,39 @@ class SignatureService {
     }
   }
 
-  /// Calculate canvas size based on screen width
-  Size calculateCanvasSize(double screenWidth) {
+  /// Calculate canvas size based on screen dimensions
+  /// Maintains 16:9 aspect ratio as per PRD (640x360px)
+  Size calculateCanvasSize(double screenWidth, [double? screenHeight]) {
+    const double aspectRatio = 16 / 9; // 16:9 aspect ratio
     const double defaultWidth = 640;
-    const double height = 360;
+    const double defaultHeight = 360;
     
-    // Use screen width if less than default, otherwise use default
-    final width = screenWidth < defaultWidth ? screenWidth : defaultWidth;
+    // Calculate available width (leave some margin)
+    final availableWidth = screenWidth - 32; // 16px margin on each side
     
-    debugPrint('SignatureService: Canvas size calculated as ${width}x$height');
-    return Size(width, height);
+    double canvasWidth;
+    double canvasHeight;
+    
+    if (availableWidth >= defaultWidth) {
+      // Use default size if screen is wide enough
+      canvasWidth = defaultWidth;
+      canvasHeight = defaultHeight;
+    } else {
+      // Scale down proportionally to fit screen
+      canvasWidth = availableWidth;
+      canvasHeight = canvasWidth / aspectRatio;
+    }
+    
+    // If height is provided, ensure canvas fits vertically too
+    if (screenHeight != null) {
+      final availableHeight = screenHeight - 200; // Leave space for header and buttons
+      if (canvasHeight > availableHeight) {
+        canvasHeight = availableHeight;
+        canvasWidth = canvasHeight * aspectRatio;
+      }
+    }
+    
+    return Size(canvasWidth, canvasHeight);
   }
 
   /// Generate signature file path

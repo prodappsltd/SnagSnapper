@@ -59,6 +59,198 @@ No Logo → Tap → Camera/Gallery → Auto-crop → Compress → Save → Displ
 
 ---
 
+## Decision #010 🔴 CRITICAL
+**Date**: 2025-08-21
+**Module**: Profile - Non-Blocking Sync Architecture
+**Decision Needed**: How should we remove the blocking sync behavior when saving profile changes?
+
+### Current Problem:
+When user saves profile (text fields, image, or signature), the app:
+1. Saves to local database (quick)
+2. Calls `syncNow()` and WAITS for it to complete
+3. Shows blocking "Syncing..." dialog during this wait
+4. Only then shows success message and navigates
+
+This violates offline-first principle where local operations should be instant.
+
+### Proposed Solution Architecture:
+
+**Option 1: Fire-and-Forget with Status Bar** (RECOMMENDED)
+```
+User saves → Save to DB → Show "Saved" → Navigate immediately
+                ↓
+          Background sync → Update status bar only
+```
+- Save to local DB with sync flags set
+- Show immediate success message
+- Navigate immediately  
+- Trigger background sync (non-blocking)
+- Update sync status indicator in real-time
+- No blocking dialogs ever
+
+**Option 2: Optimistic UI with Rollback**
+- Save and navigate immediately
+- If sync fails later, show notification
+- Allow manual retry from notification
+- More complex error handling
+
+**Option 3: Queue-Based with Progress Tracking**
+- Save to DB and sync queue
+- Navigate immediately
+- Show sync progress in persistent notification
+- Process queue in background service
+
+### Implementation Details for Option 1:
+
+1. **Profile Save Flow**:
+```dart
+// Current (BLOCKING):
+success = await database.save(user);
+if (success) {
+  showDialog("Syncing...");  // BLOCKS UI
+  await syncService.syncNow();  // WAITS
+  hideDialog();
+  showSnackBar("Saved and synced");
+  navigate();
+}
+
+// Proposed (NON-BLOCKING):
+success = await database.save(user);
+if (success) {
+  showSnackBar("Profile saved");
+  navigate();  // IMMEDIATE
+  
+  // Fire and forget
+  syncService.syncInBackground().catchError((e) {
+    // Log error, update status indicator
+  });
+}
+```
+
+2. **Sync Status Indicator Updates**:
+- Already implemented and working
+- Shows orange when pending
+- Shows green when synced
+- Shows red on error
+- User can tap to retry
+
+3. **Background Sync Method**:
+```dart
+Future<void> syncInBackground() async {
+  // Don't await, just fire
+  unawaited(syncNow().catchError((e) {
+    // Update status to error
+    updateStatus(SyncStatus.error);
+  }));
+}
+```
+
+### Decision Points Needed:
+
+**Q1: Should we show ANY indication that sync is happening?**
+- A) No indication at all (pure fire-and-forget)
+- B) Update status bar only (recommended)
+- C) Show non-blocking toast briefly
+- D) Show progress in notification tray
+
+**Q2: How to handle sync failures?**
+- A) Silent failure (just update status indicator)
+- B) Show error toast after failure
+- C) Show persistent notification
+- D) Combination of A + manual sync button appears
+
+**Q3: Should image/signature uploads block?**
+- A) No, same as text fields (fire-and-forget)
+- B) Yes, show non-blocking progress indicator
+- C) Show progress but allow navigation
+- D) Queue for background upload
+
+**Q4: What about first-time profile creation?**
+- A) Same behavior (save locally, sync later)
+- B) Wait for first sync to establish cloud backup
+- C) Show one-time setup progress
+- D) Educate user about offline-first in onboarding
+
+**Your Decision**: ✅ APPROVED - Implement Fire-and-Forget with Custom Modifications
+
+### Final Approved Architecture:
+
+**Profile Screen Changes:**
+1. ✅ Remove SyncStatusIndicator from app bar
+2. ✅ Remove manual sync button
+3. ✅ Remove ALL sync calls (`syncNow()`)
+4. ✅ Remove ALL profile reloads after sync
+5. ✅ Save to DB with flags → Show "Profile saved" → Navigate immediately
+
+**Sync Architecture:**
+```
+Profile Save → DB Update → Navigate → Main Screen → Background Sync
+Sites Save → DB Update → Navigate → MySites Screen → Background Sync  
+Snags Save → DB Update → Navigate → SiteDetail Screen → Background Sync
+```
+
+**Approved Decisions:**
+
+**Q1: Sync Indication**
+- ✅ NO sync indication on profile screen at all
+- ✅ Remove SyncStatusIndicator widget from profile
+- ✅ Sync happens silently from main screen
+
+**Q2: First-Time Profile**
+- ✅ Same behavior as existing profiles
+- ✅ Save locally, navigate immediately
+- ✅ Risk of no cloud backup if never online - ACCEPTED
+
+**Q3: Image/Signature Uploads**
+- ✅ Mix of B+C: Cancel previous upload + show progress
+- ✅ Background upload with progress indicator
+- ✅ Cancel previous if user changes image again
+
+**Q4: Error Handling**
+- ✅ Option C: Toast only for permanent failures
+- ✅ Temporary failures retry silently
+- ✅ Show specific error messages
+
+**Edge Case Resolutions:**
+
+**E1: Force Logout**
+- ✅ Cancel sync immediately on force_logout detection
+- ✅ Priority: Security over data preservation
+
+**E2: Profile Reload**
+- ✅ NEVER reload profile after sync
+- ✅ SyncStatusIndicator reads from DB independently
+- ✅ Profile screen loads data once on mount only
+
+**E3: Image Operations**
+- ✅ Already handled by `busy` flag
+- ✅ No additional changes needed
+
+**E4: Validation Mismatch**
+- ✅ Added to PRD: Local MUST match Firebase validation
+- ✅ Critical requirement for smooth operations
+
+**E5: Debouncing**
+- ✅ Keep 300ms debounce as-is
+- ✅ Each screen syncs its own module (no conflicts)
+
+**Rationale**: 
+- True offline-first architecture
+- Instant UI response
+- Clean separation of concerns
+- Each screen responsible for its module's sync
+
+**Impact**: 
+- Immediate navigation after save
+- Better user experience
+- No blocking dialogs ever
+- Simpler code without reload logic
+
+**Risk**: Users might not notice sync failures
+**Mitigation**: Error toasts for permanent failures, retry mechanism for temporary issues
+
+---
+
 ## Decision #007 🟢 FUTURE ENHANCEMENT
 **Date**: 2025-01-12
 **Module**: Profile - Authentication Security

@@ -89,6 +89,14 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
             _animationController.stop();
           }
         });
+        
+        // If sync completed, reload user data to update pending changes
+        if (status == SyncStatus.synced) {
+          if (kDebugMode) {
+            print('🔍 SyncStatusIndicator: Sync completed, reloading user data');
+          }
+          _loadUserData();
+        }
       }
     });
     
@@ -129,6 +137,13 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
     try {
       final user = await widget.database.profileDao.getProfile(widget.userId);
       if (user != null && mounted) {
+        if (kDebugMode) {
+          print('🔍 SyncStatusIndicator: Loading user data');
+          print('  needsProfileSync: ${user.needsProfileSync}');
+          print('  needsImageSync: ${user.needsImageSync}');
+          print('  needsSignatureSync: ${user.needsSignatureSync}');
+        }
+        
         setState(() {
           _currentUser = user;
           _lastSyncTime = user.lastSyncTime;
@@ -138,6 +153,10 @@ class _SyncStatusIndicatorState extends State<SyncStatusIndicator>
           if (user.needsSignatureSync) _pendingChanges.add('Signature');
           _isSyncing = widget.syncService.isSyncing;
         });
+        
+        if (kDebugMode) {
+          print('  Pending changes: $_pendingChanges (count: ${_pendingChanges.length})');
+        }
         
         // Update animation based on sync status
         if (_isSyncing) {

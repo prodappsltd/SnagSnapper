@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -24,40 +26,70 @@ class DeviceManager {
   final FirebaseDatabase database;
   final FirebaseAuth auth;
   final DeviceInfoPlugin deviceInfo;
-  final SharedPreferences prefs;
+  late final SharedPreferences prefs;
   
   final _forceLogoutController = StreamController<bool>.broadcast();
   Function? _forceLogoutCallback;
   StreamSubscription<DatabaseEvent>? _forceLogoutSubscription;
+  bool _initialized = false;
 
   DeviceManager({
     FirebaseDatabase? database,
     FirebaseAuth? auth,
     DeviceInfoPlugin? deviceInfo,
-    SharedPreferences? prefs,
-  })  : database = database ?? FirebaseDatabase.instance,
+  })  : database = database ?? FirebaseDatabase.instanceFor(
+          app: Firebase.app(),
+          databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
+        ),
         auth = auth ?? FirebaseAuth.instance,
-        deviceInfo = deviceInfo ?? DeviceInfoPlugin(),
-        prefs = prefs ?? SharedPreferences.getInstance() as SharedPreferences;
+        deviceInfo = deviceInfo ?? DeviceInfoPlugin();
+
+  Future<void> _ensureInitialized() async {
+    if (!_initialized) {
+      prefs = await SharedPreferences.getInstance();
+      _initialized = true;
+      if (kDebugMode) {
+        print('🔍 DeviceManager: SharedPreferences initialized');
+      }
+    }
+  }
 
   Stream<bool> get forceLogoutStream => _forceLogoutController.stream;
 
   Future<bool> validateDevice(String userId) async {
     try {
+      // No need to call _ensureInitialized() here since getDeviceId() will do it
       final deviceId = await getDeviceId();
+      
+      if (kDebugMode) {
+        print('DeviceManager.validateDevice: Checking device for user $userId');
+        print('DeviceManager.validateDevice: Current device ID: $deviceId');
+      }
       
       final snapshot = await database
           .ref('device_sessions/$userId/current_device')
           .get();
 
       if (!snapshot.exists) {
+        if (kDebugMode) {
+          print('DeviceManager.validateDevice: No device session found in Realtime DB - allowing');
+        }
         // No device registered yet
         return true;
       }
 
       final data = snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) {
+        if (kDebugMode) {
+          print('DeviceManager.validateDevice: Device session data is null - allowing');
+        }
         return true;
+      }
+
+      if (kDebugMode) {
+        print('DeviceManager.validateDevice: Found device session data: $data');
+        print('DeviceManager.validateDevice: Registered device ID: ${data['device_id']}');
+        print('DeviceManager.validateDevice: Device match: ${data['device_id'] == deviceId}');
       }
 
       // Check if it's the same device
@@ -66,49 +98,143 @@ class DeviceManager {
         final lastActive = data['last_active'] as int?;
         if (lastActive != null) {
           final lastActiveTime = DateTime.fromMillisecondsSinceEpoch(lastActive);
-          if (DateTime.now().difference(lastActiveTime).inDays > 30) {
+          final daysDiff = DateTime.now().difference(lastActiveTime).inDays;
+          if (kDebugMode) {
+            print('DeviceManager.validateDevice: Session age: $daysDiff days');
+          }
+          if (daysDiff > 30) {
+            if (kDebugMode) {
+              print('DeviceManager.validateDevice: Session expired (${daysDiff} days) - rejecting');
+            }
             return false; // Session expired
           }
+        }
+        if (kDebugMode) {
+          print('DeviceManager.validateDevice: Device validation successful');
         }
         return true;
       }
 
+      if (kDebugMode) {
+        print('DeviceManager.validateDevice: Different device detected - rejecting');
+      }
       return false; // Different device
     } catch (e) {
+      if (kDebugMode) {
+        print('DeviceManager.validateDevice: Error during validation: $e - allowing offline operation');
+      }
       // Allow local operation when offline
       return true;
     }
   }
 
   Future<String> getDeviceId() async {
-    String? deviceId = prefs.getString('device_id');
-    
-    if (deviceId == null) {
-      // Generate new device ID
-      deviceId = await _generateDeviceId();
-      await prefs.setString('device_id', deviceId);
-      await storeDeviceInfo();
+    try {
+      if (kDebugMode) {
+        print('🔍 DeviceManager: Starting getDeviceId()');
+      }
+      
+      await _ensureInitialized();
+      
+      String? deviceId = prefs.getString('device_id');
+      
+      if (kDebugMode) {
+        print('🔍 DeviceManager: Retrieved from prefs: $deviceId');
+      }
+      
+      if (deviceId == null) {
+        if (kDebugMode) {
+          print('🔍 DeviceManager: No device ID found, generating new one');
+        }
+        
+        // Generate new device ID
+        deviceId = await _generateDeviceId();
+        
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Generated device ID: $deviceId');
+        }
+        
+        await prefs.setString('device_id', deviceId);
+        
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Stored device ID in prefs');
+        }
+        
+        await storeDeviceInfo();
+        
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Stored device info');
+        }
+      }
+      
+      if (kDebugMode) {
+        print('🔍 DeviceManager: Returning device ID: $deviceId');
+      }
+      
+      return deviceId;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('🔍 DeviceManager: ERROR in getDeviceId():');
+        print('  Error: $e');
+        print('  Error type: ${e.runtimeType}');
+        print('  Stack trace: $stackTrace');
+      }
+      rethrow;
     }
-    
-    return deviceId;
   }
 
   Future<String> _generateDeviceId() async {
-    String baseId;
-    
-    if (Platform.isAndroid) {
-      final androidInfo = await deviceInfo.androidInfo;
-      baseId = androidInfo.id ?? '';
-    } else if (Platform.isIOS) {
-      final iosInfo = await deviceInfo.iosInfo;
-      baseId = iosInfo.identifierForVendor ?? '';
-    } else {
-      baseId = '';
+    try {
+      if (kDebugMode) {
+        print('🔍 DeviceManager: Starting _generateDeviceId()');
+      }
+      
+      String baseId;
+      
+      if (Platform.isAndroid) {
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Getting Android device info');
+        }
+        final androidInfo = await deviceInfo.androidInfo;
+        baseId = androidInfo.id ?? '';
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Android base ID: $baseId');
+        }
+      } else if (Platform.isIOS) {
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Getting iOS device info');
+        }
+        final iosInfo = await deviceInfo.iosInfo;
+        baseId = iosInfo.identifierForVendor ?? '';
+        if (kDebugMode) {
+          print('🔍 DeviceManager: iOS base ID: $baseId');
+        }
+      } else {
+        baseId = '';
+        if (kDebugMode) {
+          print('🔍 DeviceManager: Unknown platform, using empty base ID');
+        }
+      }
+      
+      // Use just the base device ID without UUID
+      // This ensures consistency across app reinstalls on the same device
+      // The base ID (like BP2A.250705.008 on Android) remains constant for the device
+      final deviceId = baseId;
+      
+      if (kDebugMode) {
+        print('🔍 DeviceManager: Using base device ID (no UUID): $deviceId');
+      }
+      
+      return deviceId;
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('🔍 DeviceManager: ERROR in _generateDeviceId():');
+        print('  Error: $e');
+        print('  Error type: ${e.runtimeType}');
+        print('  Stack trace: $stackTrace');
+      }
+      rethrow;
     }
-    
-    // Add UUID for uniqueness
-    final uuid = const Uuid();
-    return '${baseId}_${uuid.v4()}';
   }
 
   Future<void> storeDeviceInfo() async {

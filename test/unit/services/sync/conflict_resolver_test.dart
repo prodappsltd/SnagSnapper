@@ -241,8 +241,8 @@ void main() {
           'name': 'Remote User',
           'email': 'remote@example.com',
           'companyName': 'Remote Corp',
-          'imageFirebaseUrl': 'https://storage.url/image.jpg',
-          'signatureFirebaseUrl': 'https://storage.url/sig.png',
+          'imageFirebasePath': 'users/testuser/profile.jpg',
+          'signatureFirebasePath': 'users/testuser/signature.jpg',
           'version': 2,
           'updatedAt': Timestamp.now(),
         };
@@ -251,9 +251,9 @@ void main() {
 
         // Should keep local paths and add Firebase URLs
         expect(result.resolvedUser.imageLocalPath, equals('local_image.jpg'));
-        expect(result.resolvedUser.imageFirebaseUrl, equals('https://storage.url/image.jpg'));
+        expect(result.resolvedUser.imageFirebasePath, equals('users/testuser/profile.jpg'));
         expect(result.resolvedUser.signatureLocalPath, equals('local_sig.png'));
-        expect(result.resolvedUser.signatureFirebaseUrl, equals('https://storage.url/sig.png'));
+        expect(result.resolvedUser.signatureFirebasePath, equals('users/testuser/signature.jpg'));
       });
     });
 

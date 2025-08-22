@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
+import 'package:image/image.dart' as img;
 import 'package:snagsnapper/services/image_storage_service.dart';
 import 'package:snagsnapper/Data/database/daos/profile_dao.dart';
 import 'package:path_provider/path_provider.dart';
@@ -134,16 +135,27 @@ class _SignaturePadState extends State<SignaturePad> {
         throw Exception('Failed to capture signature');
       }
 
+      // First capture as PNG (Flutter limitation)
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) {
         throw Exception('Failed to convert signature to image');
       }
 
-      // Save to temporary file
+      // Convert PNG to JPEG with 95% quality (per PRD)
+      final pngBytes = byteData.buffer.asUint8List();
+      final img.Image? decodedImage = img.decodeImage(pngBytes);
+      if (decodedImage == null) {
+        throw Exception('Failed to decode image for JPEG conversion');
+      }
+      
+      // Encode as JPEG with 95% quality
+      final jpegBytes = img.encodeJpg(decodedImage, quality: 95);
+
+      // Save to temporary file as JPEG
       final tempDir = await getTemporaryDirectory();
-      final tempFile = File(p.join(tempDir.path, 'signature_temp_${DateTime.now().millisecondsSinceEpoch}.png'));
-      await tempFile.writeAsBytes(byteData.buffer.asUint8List());
+      final tempFile = File(p.join(tempDir.path, 'signature_temp_${DateTime.now().millisecondsSinceEpoch}.jpg'));
+      await tempFile.writeAsBytes(jpegBytes);
 
       // Delete old signature if exists
       if (widget.currentSignaturePath != null) {

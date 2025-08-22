@@ -9,7 +9,7 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Helper/auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:snagsnapper/services/image_preload_service.dart';
+// import 'package:snagsnapper/services/image_preload_service.dart'; // REMOVED - Service is commented out
 
 class MoreOptions extends StatefulWidget {
   const MoreOptions({super.key});
@@ -577,8 +577,8 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
               Navigator.pop(context);
               Auth auth = Auth();
               Provider.of<CP>(context, listen: false).resetVariables();
-              // Reset preload status
-              ImagePreloadService().resetPreloadStatus();
+              // Reset preload status - DISABLED: Service is deprecated
+              // ImagePreloadService().resetPreloadStatus();
               await auth.signOut(context);
               Navigator.pushNamedAndRemoveUntil(
                 context,

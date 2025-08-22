@@ -6,9 +6,11 @@
 import 'dart:async' as _i3;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:shared_preferences/src/shared_preferences_legacy.dart' as _i5;
-import 'package:workmanager/src/options.dart' as _i4;
-import 'package:workmanager/src/workmanager.dart' as _i2;
+import 'package:mockito/src/dummies.dart' as _i5;
+import 'package:shared_preferences/src/shared_preferences_legacy.dart' as _i6;
+import 'package:workmanager/src/workmanager_impl.dart' as _i2;
+import 'package:workmanager_platform_interface/workmanager_platform_interface.dart'
+    as _i4;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -33,13 +35,6 @@ class MockWorkmanager extends _i1.Mock implements _i2.Workmanager {
   }
 
   @override
-  void executeTask(_i2.BackgroundTaskHandler? backgroundTask) =>
-      super.noSuchMethod(
-        Invocation.method(#executeTask, [backgroundTask]),
-        returnValueForMissingStub: null,
-      );
-
-  @override
   _i3.Future<void> initialize(
     Function? callbackDispatcher, {
     bool? isInDebugMode = false,
@@ -56,31 +51,38 @@ class MockWorkmanager extends _i1.Mock implements _i2.Workmanager {
           as _i3.Future<void>);
 
   @override
+  void executeTask(_i2.BackgroundTaskHandler? backgroundTaskHandler) =>
+      super.noSuchMethod(
+        Invocation.method(#executeTask, [backgroundTaskHandler]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i3.Future<void> registerOneOffTask(
     String? uniqueName,
     String? taskName, {
-    String? tag,
-    _i4.ExistingWorkPolicy? existingWorkPolicy,
-    Duration? initialDelay = Duration.zero,
-    _i4.Constraints? constraints,
-    _i4.BackoffPolicy? backoffPolicy,
-    Duration? backoffPolicyDelay = Duration.zero,
-    _i4.OutOfQuotaPolicy? outOfQuotaPolicy,
     Map<String, dynamic>? inputData,
+    Duration? initialDelay,
+    _i4.Constraints? constraints,
+    _i4.ExistingWorkPolicy? existingWorkPolicy,
+    _i4.BackoffPolicy? backoffPolicy,
+    Duration? backoffPolicyDelay,
+    String? tag,
+    _i4.OutOfQuotaPolicy? outOfQuotaPolicy,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
               #registerOneOffTask,
               [uniqueName, taskName],
               {
-                #tag: tag,
-                #existingWorkPolicy: existingWorkPolicy,
+                #inputData: inputData,
                 #initialDelay: initialDelay,
                 #constraints: constraints,
+                #existingWorkPolicy: existingWorkPolicy,
                 #backoffPolicy: backoffPolicy,
                 #backoffPolicyDelay: backoffPolicyDelay,
+                #tag: tag,
                 #outOfQuotaPolicy: outOfQuotaPolicy,
-                #inputData: inputData,
               },
             ),
             returnValue: _i3.Future<void>.value(),
@@ -93,14 +95,14 @@ class MockWorkmanager extends _i1.Mock implements _i2.Workmanager {
     String? uniqueName,
     String? taskName, {
     Duration? frequency,
-    String? tag,
-    _i4.ExistingWorkPolicy? existingWorkPolicy,
-    Duration? initialDelay = Duration.zero,
-    _i4.Constraints? constraints,
-    _i4.BackoffPolicy? backoffPolicy,
-    Duration? backoffPolicyDelay = Duration.zero,
-    _i4.OutOfQuotaPolicy? outOfQuotaPolicy,
+    Duration? flexInterval,
     Map<String, dynamic>? inputData,
+    Duration? initialDelay,
+    _i4.Constraints? constraints,
+    _i4.ExistingPeriodicWorkPolicy? existingWorkPolicy,
+    _i4.BackoffPolicy? backoffPolicy,
+    Duration? backoffPolicyDelay,
+    String? tag,
   }) =>
       (super.noSuchMethod(
             Invocation.method(
@@ -108,14 +110,45 @@ class MockWorkmanager extends _i1.Mock implements _i2.Workmanager {
               [uniqueName, taskName],
               {
                 #frequency: frequency,
-                #tag: tag,
-                #existingWorkPolicy: existingWorkPolicy,
+                #flexInterval: flexInterval,
+                #inputData: inputData,
                 #initialDelay: initialDelay,
                 #constraints: constraints,
+                #existingWorkPolicy: existingWorkPolicy,
                 #backoffPolicy: backoffPolicy,
                 #backoffPolicyDelay: backoffPolicyDelay,
-                #outOfQuotaPolicy: outOfQuotaPolicy,
+                #tag: tag,
+              },
+            ),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  _i3.Future<bool> isScheduledByUniqueName(String? uniqueName) =>
+      (super.noSuchMethod(
+            Invocation.method(#isScheduledByUniqueName, [uniqueName]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<void> registerProcessingTask(
+    String? uniqueName,
+    String? taskName, {
+    Duration? initialDelay,
+    Map<String, dynamic>? inputData,
+    _i4.Constraints? constraints,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #registerProcessingTask,
+              [uniqueName, taskName],
+              {
+                #initialDelay: initialDelay,
                 #inputData: inputData,
+                #constraints: constraints,
               },
             ),
             returnValue: _i3.Future<void>.value(),
@@ -149,12 +182,25 @@ class MockWorkmanager extends _i1.Mock implements _i2.Workmanager {
             returnValueForMissingStub: _i3.Future<void>.value(),
           )
           as _i3.Future<void>);
+
+  @override
+  _i3.Future<String> printScheduledTasks() =>
+      (super.noSuchMethod(
+            Invocation.method(#printScheduledTasks, []),
+            returnValue: _i3.Future<String>.value(
+              _i5.dummyValue<String>(
+                this,
+                Invocation.method(#printScheduledTasks, []),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
 }
 
 /// A class which mocks [SharedPreferences].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockSharedPreferences extends _i1.Mock implements _i5.SharedPreferences {
+class MockSharedPreferences extends _i1.Mock implements _i6.SharedPreferences {
   MockSharedPreferences() {
     _i1.throwOnMissingStub(this);
   }

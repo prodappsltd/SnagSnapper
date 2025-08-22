@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snagsnapper/Screens/SignUp_SignIn/profile_setup_screen_cleaned.dart';
+import 'package:snagsnapper/Screens/SignUp_SignIn/profile_setup_screen.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/database/daos/profile_dao.dart';
 import 'package:snagsnapper/Data/models/app_user.dart';

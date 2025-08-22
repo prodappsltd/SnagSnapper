@@ -9,7 +9,7 @@ import 'package:firebase_database/firebase_database.dart' hide Transaction;
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/app_user.dart' as models;
-import 'package:snagsnapper/Data/user.dart';
+import 'package:snagsnapper/Data/models/app_user.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';

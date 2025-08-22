@@ -262,10 +262,10 @@ class ConflictResolver {
       companyName: remoteData['companyName']?.toString() ?? localUser.companyName,
       phone: remoteData['phone']?.toString(),
       jobTitle: remoteData['jobTitle']?.toString(),
-      postcodeOrArea: remoteData['postcodeOrArea']?.toString(),
+      postcodeOrArea: () => remoteData['postcodeOrArea']?.toString(),
       dateFormat: remoteData['dateFormat']?.toString() ?? localUser.dateFormat,
-      imageFirebaseUrl: remoteData['imageFirebaseUrl']?.toString(),
-      signatureFirebaseUrl: remoteData['signatureFirebaseUrl']?.toString(),
+      imageFirebasePath: () => remoteData['imageFirebasePath']?.toString(),
+      signatureFirebasePath: () => remoteData['signatureFirebasePath']?.toString(),
       firebaseVersion: _getRemoteVersion(remoteData) ?? localUser.firebaseVersion,
     );
   }
@@ -290,9 +290,9 @@ class ConflictResolver {
       jobTitle: (jobTitleUpdatedAt != null && jobTitleUpdatedAt.isAfter(localUpdateTime))
           ? remoteData['jobTitle']?.toString() ?? localUser.jobTitle
           : localUser.jobTitle,
-      postcodeOrArea: remoteData['postcodeOrArea']?.toString() ?? localUser.postcodeOrArea,
-      imageFirebaseUrl: remoteData['imageFirebaseUrl']?.toString() ?? localUser.imageFirebaseUrl,
-      signatureFirebaseUrl: remoteData['signatureFirebaseUrl']?.toString() ?? localUser.signatureFirebaseUrl,
+      postcodeOrArea: () => remoteData['postcodeOrArea']?.toString() ?? localUser.postcodeOrArea,
+      imageFirebasePath: () => remoteData['imageFirebasePath']?.toString() ?? localUser.imageFirebasePath,
+      signatureFirebasePath: () => remoteData['signatureFirebasePath']?.toString() ?? localUser.signatureFirebasePath,
     );
   }
 
@@ -315,7 +315,7 @@ class ConflictResolver {
       phone: !invalidFields.contains('phone_length')
           ? remoteData['phone']?.toString() ?? localUser.phone
           : localUser.phone,
-      postcodeOrArea: !invalidFields.contains('postcodeOrArea_length')
+      postcodeOrArea: () => !invalidFields.contains('postcodeOrArea_length')
           ? remoteData['postcodeOrArea']?.toString() ?? localUser.postcodeOrArea
           : localUser.postcodeOrArea,
     );

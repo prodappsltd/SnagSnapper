@@ -73,7 +73,7 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
       );
 
       if (pickedFile != null) {
-        // Show compression progress
+        // Show step 1: Resizing
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -88,10 +88,37 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
                     ),
                   ),
                   SizedBox(width: 16),
-                  Text('Processing image...'),
+                  Text('Resizing...'),
                 ],
               ),
-              duration: Duration(seconds: 2),
+              duration: Duration(seconds: 10),
+            ),
+          );
+        }
+        
+        // Small delay to show the resizing message
+        await Future.delayed(const Duration(milliseconds: 300));
+        
+        // Show step 2: Compressing
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Text('Compressing...'),
+                ],
+              ),
+              duration: Duration(seconds: 10),
             ),
           );
         }
@@ -101,6 +128,30 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
           await widget.imageStorageService.deleteProfileImage(widget.userId);
         }
 
+        // Show step 3: Saving
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Text('Saving...'),
+                ],
+              ),
+              duration: Duration(seconds: 10),
+            ),
+          );
+        }
+        
         // Save new image (compression happens in isolate)
         final file = File(pickedFile.path);
         final relativePath = await widget.imageStorageService.saveProfileImage(file, widget.userId);
@@ -111,7 +162,7 @@ class _ProfileImagePickerState extends State<ProfileImagePicker> {
           _isLoading = false;
         });
 
-        // Clear processing message
+        // Clear processing message (silent save per PRD)
         if (mounted) {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
         }

@@ -113,12 +113,18 @@ class MockSignatureService extends _i1.Mock implements _i3.SignatureService {
           as _i4.Future<_i5.Uint8List?>);
 
   @override
-  _i2.Size calculateCanvasSize(double? screenWidth) =>
+  _i2.Size calculateCanvasSize(double? screenWidth, [double? screenHeight]) =>
       (super.noSuchMethod(
-            Invocation.method(#calculateCanvasSize, [screenWidth]),
+            Invocation.method(#calculateCanvasSize, [
+              screenWidth,
+              screenHeight,
+            ]),
             returnValue: _FakeSize_0(
               this,
-              Invocation.method(#calculateCanvasSize, [screenWidth]),
+              Invocation.method(#calculateCanvasSize, [
+                screenWidth,
+                screenHeight,
+              ]),
             ),
           )
           as _i2.Size);

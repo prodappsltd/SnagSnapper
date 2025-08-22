@@ -10,14 +10,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/app_user.dart';
-import 'package:snagsnapper/Data/models/sync_status.dart';
+import 'package:snagsnapper/Data/colleague.dart';
 import 'package:snagsnapper/Constants/validation_rules.dart';
 import 'package:snagsnapper/services/image_storage_service.dart';
 import 'package:snagsnapper/services/image_compression_service.dart';
-import 'package:snagsnapper/services/sync_service.dart';
 import 'signature_capture_screen.dart';
 import 'package:snagsnapper/services/signature_service.dart';
-import 'components/sync_status_indicator.dart';
+import 'package:snagsnapper/Widgets/reusable_image_picker.dart';
+import 'components/colleagues_section.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:snagsnapper/services/sync/device_manager.dart';
 
 /// Profile Screen with offline-first database integration
 /// UI matches the original profile_cleaned.dart design
@@ -56,19 +60,12 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   bool dateBritish = true;
   String? _profileImagePath;
   String? _signaturePath;
+  List<Colleague> _colleagues = []; // List of colleagues
+  int _imageVersion = 0; // Counter to force image widget rebuilds
+  int _signatureVersion = 0; // Counter to force signature widget rebuilds
   bool _isLoading = true;
   bool busy = false;
   bool _isDirty = false;
-  String? _errorMessage;
-
-  // Sync related state
-  late SyncService _syncService;
-  StreamSubscription<SyncStatus>? _statusSubscription;
-  StreamSubscription<double>? _progressSubscription;
-  StreamSubscription<SyncError>? _errorSubscription;
-  SyncStatus _currentSyncStatus = SyncStatus.idle;
-  double _syncProgress = 0.0;
-  bool _showProgressOverlay = false;
 
   // Animation controllers
   late AnimationController _fadeController;
@@ -94,75 +91,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     _initializeControllers();
     _setupAnimations();
     _setupFocusListeners();
-    _initializeSyncService();
     _loadProfile();
   }
 
-  Future<void> _initializeSyncService() async {
-    _syncService = SyncService.instance;
-    
-    // Initialize sync service if not already done
-    if (!_syncService.isInitialized) {
-      await _syncService.initialize(widget.userId);
-    }
-    
-    // Set up stream subscriptions
-    _statusSubscription = _syncService.statusStream.listen(_onSyncStatusChange);
-    _progressSubscription = _syncService.progressStream.listen(_onProgressUpdate);
-    _errorSubscription = _syncService.errorStream.listen(_onSyncError);
-    
-    // Set up auto-sync
-    _syncService.setupAutoSync();
-  }
-
-  void _onSyncStatusChange(SyncStatus status) {
-    if (mounted) {
-      setState(() {
-        _currentSyncStatus = status;
-        _showProgressOverlay = status == SyncStatus.syncing;
-      });
-    }
-  }
-
-  void _onProgressUpdate(double progress) {
-    if (mounted) {
-      setState(() {
-        _syncProgress = progress;
-      });
-    }
-  }
-
-  void _onSyncError(SyncError error) {
-    if (mounted) {
-      _showErrorDialog(error);
-    }
-  }
-
-  Future<void> _showErrorDialog(SyncError error) async {
-    if (!mounted) return;
-    
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sync Error'),
-        content: Text(error.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-          if (error.isRecoverable)
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _triggerManualSync();
-              },
-              child: const Text('Retry'),
-            ),
-        ],
-      ),
-    );
-  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -174,13 +105,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
   Future<void> _checkAndSyncIfNeeded() async {
     if (_currentUser != null) {
-      final hasChanges = _currentUser!.needsProfileSync || 
-                        _currentUser!.needsImageSync || 
-                        _currentUser!.needsSignatureSync;
-      
-      if (hasChanges && !widget.isOffline) {
-        await _syncService.onAppForeground();
-      }
+      // No longer trigger sync from profile screen
+      // MainMenu handles all sync operations
     }
   }
 
@@ -254,35 +180,53 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   }
 
   Future<void> _loadProfile() async {
+    if (kDebugMode) {
+      print('🔍 ProfileScreen: Loading profile for user ${widget.userId}');
+    }
+    
     try {
       setState(() {
         _isLoading = true;
-        _errorMessage = null;
       });
 
       // First try to load from local database
       var user = await widget.database.profileDao.getProfile(widget.userId);
       
-      // If no local profile exists and we're online, try to download from Firebase
-      if (user == null && !widget.isOffline) {
+      if (kDebugMode) {
+        print('🔍 ProfileScreen: Local profile found: ${user != null}');
+      }
+      
+      // If no local profile exists, don't try to sync - just show the empty form
+      // This is for NEW users who need to create their profile
+      if (user == null) {
         if (kDebugMode) {
-          print('No local profile found, attempting to download from Firebase...');
+          print('🔍 ProfileScreen: No local profile exists - showing empty form for new user');
         }
-        
-        // Trigger sync to download profile from Firebase
-        final syncResult = await _syncService.syncProfile(widget.userId);
-        if (syncResult) {
-          // Try loading from local database again after sync
-          user = await widget.database.profileDao.getProfile(widget.userId);
-        }
+        // Don't try to sync - let the user create their profile first
       }
       
       if (mounted) {
         setState(() {
           _currentUser = user;
+          // CRITICAL: Create a NEW list copy to avoid modifying the original
+          // Without this copy, adding to _colleagues would modify _currentUser.listOfALLColleagues
+          // causing _hasColleaguesChanged() to always return false (Bug #018)
+          _colleagues = user?.listOfALLColleagues != null 
+              ? List<Colleague>.from(user!.listOfALLColleagues!)
+              : [];
           _isLoading = false;
           
+          if (kDebugMode) {
+            print('ProfileScreen._loadProfile: Loaded ${_colleagues.length} colleagues from database');
+            for (var colleague in _colleagues) {
+              print('  - ${colleague.name} (${colleague.email})');
+            }
+          }
+          
           if (user != null) {
+            if (kDebugMode) {
+              print('🔍 ProfileScreen: Populating form with existing profile data');
+            }
             _nameController.text = user.name;
             _emailController.text = user.email;
             _phoneController.text = user.phone ?? '';
@@ -294,9 +238,15 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             _signaturePath = user.signatureLocalPath;
           } else {
             // For new users, populate email from Firebase Auth
+            if (kDebugMode) {
+              print('🔍 ProfileScreen: NEW USER - No profile exists, showing setup form');
+            }
             final currentUser = FirebaseAuth.instance.currentUser;
             if (currentUser != null) {
               _emailController.text = currentUser.email ?? '';
+              if (kDebugMode) {
+                print('🔍 ProfileScreen: Pre-filled email: ${currentUser.email}');
+              }
             }
           }
         });
@@ -305,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Error loading profile: ${e.toString()}';
+          // Error handled by debug print above
         });
       }
       if (kDebugMode) {
@@ -326,9 +276,110 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
            (_currentUser!.postcodeOrArea ?? '') != _postcodeController.text.trim() ||
            _currentUser!.dateFormat != (dateBritish ? 'dd-MM-yyyy' : 'MM-dd-yyyy');
   }
+  
+  bool _hasColleaguesChanged() {
+    if (_currentUser == null) return _colleagues.isNotEmpty;
+    
+    final currentColleagues = _currentUser!.listOfALLColleagues ?? [];
+    
+    if (kDebugMode) {
+      print('🔍 ProfileScreen._hasColleaguesChanged:');
+      print('  - Current colleagues from DB: ${currentColleagues.length}');
+      print('  - Updated colleagues in memory: ${_colleagues.length}');
+    }
+    
+    // Check if length is different
+    if (currentColleagues.length != _colleagues.length) {
+      if (kDebugMode) {
+        print('  - Result: true (length different)');
+      }
+      return true;
+    }
+    
+    // Check if any colleague is different
+    for (int i = 0; i < _colleagues.length; i++) {
+      if (i >= currentColleagues.length) return true;
+      
+      final current = currentColleagues[i];
+      final updated = _colleagues[i];
+      
+      if (current.name != updated.name ||
+          current.email != updated.email ||
+          current.phone != updated.phone ||
+          current.uniqueID != updated.uniqueID) {
+        return true;
+      }
+    }
+    
+    if (kDebugMode) {
+      print('  - Result: false (no changes)');
+    }
+    return false;
+  }
+
+  /// Generate unique device ID for this device (PRD 4.3.1 step 4)
+  /// Uses DeviceManager to ensure consistency across the app
+  Future<String> _generateDeviceId() async {
+    final deviceManager = DeviceManager();
+    return await deviceManager.getDeviceId();
+  }
+
+  /// Register device session in Realtime Database (PRD 4.3.1 step 6c)
+  Future<void> _registerDeviceSession(String userId, String deviceId) async {
+    try {
+      String deviceName = 'Unknown Device';
+      
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceName = '${iosInfo.name} (${iosInfo.model})';
+      } else if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceName = '${androidInfo.brand} ${androidInfo.model}';
+      }
+      
+      // Use the correct database URL for Europe region
+      final database = FirebaseDatabase.instanceFor(
+        app: Firebase.app(),
+        databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
+      );
+      
+      final ref = database.ref('device_sessions/$userId/current_device');
+      
+      await ref.set({
+        'device_id': deviceId,
+        'device_name': deviceName,
+        'last_active': ServerValue.timestamp,
+        'force_logout': false,
+      });
+      
+      if (kDebugMode) {
+        print('🔍 ProfileScreen: Device session registered: $deviceId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('🔍 ProfileScreen: Error registering device session: $e');
+      }
+      // Non-critical error, don't block profile creation
+    }
+  }
 
   Future<void> _saveProfile() async {
+    if (kDebugMode) {
+      print('🔍 ProfileScreen: Save profile requested');
+      print('🔍 ProfileScreen: Form values:');
+      print('  - Name: ${_nameController.text}');
+      print('  - Email: ${_emailController.text}');
+      print('  - Phone: ${_phoneController.text}');
+      print('  - Job Title: ${_jobTitleController.text}');
+      print('  - Company: ${_companyNameController.text}');
+      print('  - Postcode: ${_postcodeController.text}');
+    }
+    
     if (!_formKey.currentState!.validate()) {
+      if (kDebugMode) {
+        print('🔍 ProfileScreen: Form validation failed');
+      }
       return;
     }
 
@@ -336,28 +387,41 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     final textFieldsChanged = _hasTextFieldChanges();
     final imageChanged = _currentUser?.imageLocalPath != _profileImagePath;
     final signatureChanged = _currentUser?.signatureLocalPath != _signaturePath;
+    final colleaguesChanged = _hasColleaguesChanged();
     
-    if (!textFieldsChanged && !imageChanged && !signatureChanged) {
-      // Nothing changed, don't save
+    final isNewProfile = _currentUser == null;
+    if (kDebugMode) {
+      print('🔍 ProfileScreen: Is new profile: $isNewProfile');
+      print('🔍 ProfileScreen: Text changed: $textFieldsChanged');
+      print('🔍 ProfileScreen: Image changed: $imageChanged');
+      print('🔍 ProfileScreen: Signature changed: $signatureChanged');
+      print('🔍 ProfileScreen: Colleagues changed: $colleaguesChanged');
+    }
+    
+    if (!isNewProfile && !textFieldsChanged && !imageChanged && !signatureChanged && !colleaguesChanged) {
+      // Nothing changed - just navigate back
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No changes to save'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        Navigator.of(context).pop();
       }
       return;
     }
 
     setState(() {
       busy = true;
-      _errorMessage = null;
     });
 
     try {
       final now = DateTime.now();
+      
+      // Generate device ID for new profiles (PRD 4.3.1 step 4)
+      String? deviceId = _currentUser?.currentDeviceId;
+      if (deviceId == null) {
+        deviceId = await _generateDeviceId();
+        if (kDebugMode) {
+          print('🔍 ProfileScreen: Generated device ID for new profile: $deviceId');
+        }
+      }
+      
       final user = AppUser(
         id: widget.userId,
         name: _nameController.text.trim(),
@@ -368,8 +432,13 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         postcodeOrArea: _postcodeController.text.trim().isEmpty ? null : _postcodeController.text.trim(),
         dateFormat: dateBritish ? 'dd-MM-yyyy' : 'MM-dd-yyyy',
         imageLocalPath: _profileImagePath,
+        imageFirebasePath: _profileImagePath != null ? 'users/${widget.userId}/profile.jpg' : _currentUser?.imageFirebasePath,
         signatureLocalPath: _signaturePath,
-        needsProfileSync: textFieldsChanged || (_currentUser?.needsProfileSync ?? false), // Only if text changed
+        signatureFirebasePath: _signaturePath != null ? 'users/${widget.userId}/signature.jpg' : _currentUser?.signatureFirebasePath,
+        listOfALLColleagues: _colleagues.isNotEmpty ? _colleagues : null, // Save colleagues list
+        currentDeviceId: deviceId,  // PRD requirement: Set device_id
+        lastLoginTime: now,
+        needsProfileSync: textFieldsChanged || colleaguesChanged || (_currentUser?.needsProfileSync ?? false), // If text or colleagues changed
         needsImageSync: imageChanged || (_currentUser?.needsImageSync ?? false), // Only if image changed
         needsSignatureSync: signatureChanged || (_currentUser?.needsSignatureSync ?? false), // Only if signature changed
         createdAt: _currentUser?.createdAt ?? now,
@@ -379,11 +448,26 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       );
 
       bool success;
-      bool isNewProfile = _currentUser == null;
-      if (isNewProfile) {
+      final isNewProfileSave = _currentUser == null;
+      if (isNewProfileSave) {
+        if (kDebugMode) {
+          print('🔍 ProfileScreen: Creating NEW profile in database');
+        }
         success = await widget.database.profileDao.insertProfile(user);
+        
+        // Register device session for new profiles (PRD 4.3.1 step 6c)
+        if (success) {
+          await _registerDeviceSession(widget.userId, deviceId);
+        }
       } else {
+        if (kDebugMode) {
+          print('🔍 ProfileScreen: Updating existing profile in database');
+        }
         success = await widget.database.profileDao.updateProfile(widget.userId, user);
+      }
+      
+      if (kDebugMode) {
+        print('🔍 ProfileScreen: Save ${success ? "successful" : "failed"}');
       }
 
       if (success && mounted) {
@@ -393,29 +477,15 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           _isDirty = false;
         });
         
-        // Trigger auto-sync if online
-        if (!widget.isOffline) {
-          _syncService.syncNow().then((result) {
-            if (result.success && mounted) {
-              // Reload profile to get updated sync flags
-              _loadProfile();
-            }
-          });
-        }
-        
-        // Show success message
+        // Show simple success message
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.isOffline 
-                ? 'Saved locally - will sync when online'
-                : 'Profile saved successfully'
-            ),
+          const SnackBar(
+            content: Text('Profile saved'),
             backgroundColor: Colors.green,
           ),
         );
         
-        // Navigate after successful save
+        // Navigate immediately after successful save
         if (mounted) {
           // Small delay to let the user see the success message
           Future.delayed(const Duration(milliseconds: 500), () {
@@ -434,11 +504,18 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           });
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('🔍 ProfileScreen: SAVE ERROR CAUGHT:');
+        print('  Error: $e');
+        print('  Error type: ${e.runtimeType}');
+        print('  Stack trace: $stackTrace');
+      }
+      
       if (mounted) {
         setState(() {
           busy = false;
-          _errorMessage = 'Failed to save profile: ${e.toString()}';
+          // Error shown in snackbar above
         });
       }
       
@@ -454,140 +531,18 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
   }
 
-  Future<void> _triggerManualSync() async {
-    if (_currentSyncStatus == SyncStatus.syncing || widget.isOffline) {
-      return;
-    }
-    
-    final result = await _syncService.syncNow();
-    
-    if (mounted) {
-      if (result.success) {
-        // Reload profile to get updated data
-        await _loadProfile();
-        
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sync completed successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sync failed: ${result.message}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
-  void _showImageSelectionDialog() {
-    // Show bottom sheet with options
-    showModalBottomSheet(
+  void _showImageSelectionDialog({bool showRemoveOption = true}) {
+    // Use the reusable image picker widget
+    // Only show remove option if we have an image AND showRemoveOption is true
+    final hasImage = _profileImagePath != null && _profileImagePath!.isNotEmpty;
+    ReusableImagePicker.show(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // Camera option
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.camera_alt,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              title: Text(
-                'Take Photo',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                'Use camera to capture logo',
-                style: GoogleFonts.inter(fontSize: 12),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            // Gallery option
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.photo_library,
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
-              ),
-              title: Text(
-                'Choose from Gallery',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                'Select existing image',
-                style: GoogleFonts.inter(fontSize: 12),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-            // Remove option if image exists
-            if (_profileImagePath != null && _profileImagePath!.isNotEmpty)
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.delete, color: Colors.red),
-                ),
-                title: Text(
-                  'Remove Logo',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w500,
-                    color: Colors.red,
-                  ),
-                ),
-                subtitle: Text(
-                  'Delete current image',
-                  style: GoogleFonts.inter(fontSize: 12),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showImageDeletionDialog();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+      onImageSelected: _pickImage,
+      onImageRemoved: hasImage && showRemoveOption ? _showImageDeletionDialog : null,
+      removeItemName: 'Logo',
+      removeItemDescription: 'Delete company logo from profile',
+      hasExistingImage: hasImage && showRemoveOption,
     );
   }
 
@@ -596,7 +551,29 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     final picker = ImagePicker();
     
     try {
-      setState(() => busy = true);
+      setState(() {
+        busy = true;
+      });
+      
+      // Clear image cache to prevent showing old cached images
+      if (_profileImagePath != null) {
+        final oldImageFile = await _getImageFile(_profileImagePath!);
+        if (oldImageFile.existsSync()) {
+          // Evict the old image from memory cache
+          final imageProvider = FileImage(oldImageFile);
+          await imageProvider.evict();
+          if (kDebugMode) {
+            print('ProfileScreen: Evicted old image from cache');
+          }
+        }
+      }
+      
+      // Clear the entire image cache to be thorough
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      if (kDebugMode) {
+        print('ProfileScreen: Cleared image cache completely');
+      }
       
       // Pick image with high quality for processing
       final XFile? image = await picker.pickImage(
@@ -654,12 +631,86 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       // Clean up temp file
       await tempFile.delete();
       
-      // Update state
+      if (kDebugMode) {
+        print('ProfileScreen: New image saved to: $localPath');
+        // Verify the file exists
+        final newFile = await _getImageFile(localPath);
+        print('ProfileScreen: New file exists: ${newFile.existsSync()}');
+        print('ProfileScreen: New file size: ${newFile.existsSync() ? newFile.lengthSync() : 0} bytes');
+      }
+      
+      // Clear cache before updating state to ensure fresh image display
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      
+      // Update state with incremented version to force rebuild
       setState(() {
         _profileImagePath = localPath;
+        _imageVersion++; // Increment version to force widget rebuild
         _isDirty = true;
         busy = false;
       });
+      
+      if (kDebugMode) {
+        print('ProfileScreen: Image version incremented to: $_imageVersion');
+        print('ProfileScreen: New image path set to: $localPath');
+      }
+      
+      // IMPORTANT: Only update database immediately for EXISTING profiles
+      // For NEW profiles, wait for Save button to create the profile first
+      if (_currentUser != null) {
+        // DEBUG: Log current state before update
+        if (kDebugMode) {
+          print('🔍 ProfileScreen._pickImage: BEFORE update:');
+          print('  - Current imageMarkedForDeletion: ${_currentUser!.imageMarkedForDeletion}');
+          print('  - Current imageLocalPath: ${_currentUser!.imageLocalPath}');
+          print('  - Current imageFirebasePath: ${_currentUser!.imageFirebasePath}');
+          print('  - New localPath being set: $localPath');
+        }
+        
+        // CRITICAL FIX: When adding a new image, we must CLEAR the deletion flag
+        // Otherwise, the sync handler will delete the new image thinking it's part of a deletion
+        // ROBUST: Set Firebase path immediately so Firestore always has complete data
+        final updatedUser = _currentUser!.copyWith(
+          imageLocalPath: () => localPath,
+          imageFirebasePath: () => 'users/${widget.userId}/profile.jpg',  // Set path immediately!
+          needsImageSync: true,
+          needsProfileSync: true,  // Ensure profile syncs with the new path
+          imageMarkedForDeletion: false,  // CRITICAL: Clear deletion flag when adding new image
+        );
+        
+        // DEBUG: Log what we're about to save
+        if (kDebugMode) {
+          print('🔍 ProfileScreen._pickImage: AFTER update (about to save):');
+          print('  - New imageMarkedForDeletion: ${updatedUser.imageMarkedForDeletion}');
+          print('  - New imageLocalPath: ${updatedUser.imageLocalPath}');
+          print('  - New needsImageSync: ${updatedUser.needsImageSync}');
+        }
+        
+        await widget.database.profileDao.updateProfile(widget.userId, updatedUser);
+        
+        if (kDebugMode) {
+          print('ProfileScreen: EXISTING profile - Updated database with new image path immediately');
+          print('  ✅ Cleared imageMarkedForDeletion flag to prevent accidental deletion');
+        }
+        
+        // Update current user reference and reload profile image path
+        _currentUser = updatedUser;
+        
+        // Force UI to use the updated path from the database
+        if (mounted) {
+          setState(() {
+            _profileImagePath = updatedUser.imageLocalPath;
+          });
+        }
+        
+        // Sync will be handled by MainMenu when user navigates back
+      } else {
+        // New profile - just update UI state, database will be created on Save
+        if (kDebugMode) {
+          print('ProfileScreen: NEW profile - Image path stored in memory, will save to database on Save button');
+        }
+      }
       
       // Clear previous snackbar and show result
       if (!mounted) return;
@@ -692,9 +743,16 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         ),
       );
       
-      // Mark for sync if profile exists
+      // Mark for sync if profile exists and clear deletion flag
       if (_currentUser != null) {
-        await widget.database.profileDao.setNeedsImageSync(widget.userId);
+        final updatedUser = _currentUser!.copyWith(
+          imageLocalPath: () => localPath,
+          needsImageSync: true,
+          imageMarkedForDeletion: false, // Clear deletion flag when adding new image
+        );
+        await widget.database.profileDao.updateProfile(widget.userId, updatedUser);
+        
+        // Sync will be handled by MainMenu when user navigates back
       }
       
     } catch (e) {
@@ -737,6 +795,16 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
   /// Show confirmation dialog before deleting image
   void _showImageDeletionDialog() {
+    // Use the reusable image picker widget for remove-only option
+    ReusableImagePicker.showRemoveOnly(
+      context: context,
+      onImageRemoved: _confirmImageDeletion,
+      removeItemName: 'Logo',
+      removeItemDescription: 'Delete company logo from profile',
+    );
+  }
+  
+  void _confirmImageDeletion() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -745,7 +813,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         content: Text(
-          'This will permanently delete your company logo from the profile.',
+          'This will permanently delete your company logo.',
           style: GoogleFonts.inter(),
         ),
         actions: [
@@ -784,6 +852,11 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         try {
           final file = await _getImageFile(_profileImagePath!);
           if (await file.exists()) {
+            // Clear from cache before deleting
+            final imageProvider = FileImage(file);
+            await imageProvider.evict();
+            imageCache.clear();
+            
             await file.delete();
             
             if (kDebugMode) {
@@ -798,18 +871,45 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         }
       }
       
-      // Update state
+      // Update state with incremented version
       setState(() {
         _profileImagePath = null;
+        _imageVersion++; // Increment to ensure UI updates
         _isDirty = true;
       });
       
-      // Mark for sync to remove from Firebase
+      // IMPORTANT: Only update database immediately for EXISTING profiles
+      // For NEW profiles, just clear the UI state
       if (_currentUser != null) {
-        await widget.database.profileDao.setNeedsImageSync(widget.userId);
+        // Existing profile - update database immediately to prevent sync race condition
+        // Keep Firebase path but mark for deletion
+        final updatedUser = _currentUser!.copyWith(
+          imageLocalPath: () => null,
+          imageMarkedForDeletion: true,
+          needsImageSync: true,
+          needsProfileSync: true,  // Ensure Firestore gets updated with null imagePath
+          // Note: imageFirebasePath is kept for reference during deletion
+        );
+        await widget.database.profileDao.updateProfile(widget.userId, updatedUser);
         
         if (kDebugMode) {
-          print('ProfileScreen: Marked image for deletion sync');
+          print('ProfileScreen: EXISTING profile - Marked image for deletion in database immediately');
+        }
+        
+        // Update current user reference
+        _currentUser = updatedUser;
+        
+        // Trigger sync if online and needed
+        if (!widget.isOffline && updatedUser.needsImageSync) {
+          if (kDebugMode) {
+            print('ProfileScreen: Image deletion saved to database');
+          }
+          // Sync will be handled by MainMenu when user navigates back
+        }
+      } else {
+        // New profile - just clear UI state, no database entry exists yet
+        if (kDebugMode) {
+          print('ProfileScreen: NEW profile - Image cleared from memory only');
         }
       }
       
@@ -850,22 +950,38 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   /// Handles both absolute and relative paths for cross-platform compatibility
   Future<File> _getImageFile(String path) async {
     try {
+      File imageFile;
+      
       if (path.startsWith('/')) {
         // Absolute path - use directly
-        return File(path);
+        imageFile = File(path);
       } else {
         // Relative path - construct full path
         final appDir = await getApplicationDocumentsDirectory();
         final fullPath = '${appDir.path}/$path';
+        imageFile = File(fullPath);
         
         if (kDebugMode) {
           print('ProfileScreen: Converting relative path to absolute');
           print('  Relative: $path');
           print('  Absolute: $fullPath');
         }
-        
-        return File(fullPath);
       }
+      
+      // Log file details for debugging
+      if (kDebugMode) {
+        final exists = imageFile.existsSync();
+        print('ProfileScreen._getImageFile: File check');
+        print('  Path: ${imageFile.path}');
+        print('  Exists: $exists');
+        if (exists) {
+          final stats = imageFile.statSync();
+          print('  Size: ${imageFile.lengthSync()} bytes');
+          print('  Modified: ${stats.modified}');
+        }
+      }
+      
+      return imageFile;
     } catch (e) {
       if (kDebugMode) {
         print('ProfileScreen: Error getting image file: $e');
@@ -875,13 +991,28 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   }
 
   Future<File?> _getSignatureFile() async {
-    if (_signaturePath == null) return null;
+    if (_signaturePath == null || _signaturePath!.isEmpty) return null;
     
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File(path.join(directory.path, _signaturePath!));
+      File file;
+      if (_signaturePath!.startsWith('/')) {
+        // Absolute path
+        file = File(_signaturePath!);
+      } else {
+        // Relative path - convert to absolute
+        final directory = await getApplicationDocumentsDirectory();
+        file = File(path.join(directory.path, _signaturePath!));
+      }
+      
       if (await file.exists()) {
+        if (kDebugMode) {
+          print('ProfileScreen: Signature file found at: ${file.path}');
+        }
         return file;
+      } else {
+        if (kDebugMode) {
+          print('ProfileScreen: Signature file not found at: ${file.path}');
+        }
       }
     } catch (e) {
       debugPrint('ProfileScreen: Error getting signature file: $e');
@@ -892,6 +1023,30 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   void _handleSignatureTap() async {
     debugPrint('ProfileScreen: Opening signature capture');
     
+    // CRITICAL: Clear signature cache BEFORE capturing new signature to prevent showing old cached signatures
+    if (_signaturePath != null) {
+      try {
+        final oldSignatureFile = await _getSignatureFile();
+        if (oldSignatureFile != null && oldSignatureFile.existsSync()) {
+          // Evict the old signature from memory cache
+          final imageProvider = FileImage(oldSignatureFile);
+          await imageProvider.evict();
+          if (kDebugMode) {
+            print('ProfileScreen: Evicted old signature from cache');
+          }
+        }
+      } catch (e) {
+        debugPrint('ProfileScreen: Error evicting old signature from cache: $e');
+      }
+    }
+    
+    // Clear the entire image cache to be thorough (matching image implementation)
+    imageCache.clear();
+    imageCache.clearLiveImages();
+    if (kDebugMode) {
+      print('ProfileScreen: Cleared image cache completely before signature capture');
+    }
+    
     // Show full-screen signature capture
     final signaturePath = await SignatureCaptureScreen.show(
       context,
@@ -900,15 +1055,79 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     
     if (signaturePath != null) {
       debugPrint('ProfileScreen: Signature saved at $signaturePath');
+      
+      // Increment version FIRST to force immediate UI update
       setState(() {
+        _signatureVersion++; // Increment version to force widget rebuild
         _signaturePath = signaturePath;
         _isDirty = true;
       });
       
-      // Mark for sync
-      await widget.database.profileDao.setNeedsSignatureSync(widget.userId);
+      if (kDebugMode) {
+        print('ProfileScreen: Signature version incremented to: $_signatureVersion');
+      }
+      
+      // Mark for sync and clear deletion flag if it was set
+      // ROBUST: Set Firebase path immediately so Firestore always has complete data
+      if (_currentUser != null) {
+        final updatedUser = _currentUser!.copyWith(
+          signatureLocalPath: () => signaturePath,
+          signatureFirebasePath: () => 'users/${widget.userId}/signature.jpg',  // Set path immediately!
+          needsSignatureSync: true,
+          needsProfileSync: true,  // Ensure profile syncs with the new path
+          signatureMarkedForDeletion: false, // Clear deletion flag when adding new signature
+        );
+        await widget.database.profileDao.updateProfile(widget.userId, updatedUser);
+        
+        // Update current user reference
+        _currentUser = updatedUser;
+        
+        // Force UI to use the updated path from the database (matching image implementation)
+        if (mounted) {
+          setState(() {
+            _signaturePath = updatedUser.signatureLocalPath;
+          });
+        }
+        
+        // Sync will be handled by MainMenu when user navigates back
+        // Signature sync flag is already set in database
+      } else {
+        // For new profiles, just set the sync flag
+        await widget.database.profileDao.setNeedsSignatureSync(widget.userId);
+      }
     } else {
       debugPrint('ProfileScreen: Signature capture cancelled');
+    }
+  }
+  
+  void _handleAddColleague(Colleague colleague) async {
+    setState(() {
+      _colleagues.add(colleague);
+      _isDirty = true;
+    });
+    
+    if (kDebugMode) {
+      print('ProfileScreen: Added colleague: ${colleague.name} (${colleague.email})');
+    }
+    
+    // For now, just keep the colleagues in memory until Save is pressed
+    // The immediate save was causing issues, so we'll rely on the Save button
+    if (kDebugMode) {
+      print('ProfileScreen: Colleague added to list (will save when Save button is pressed)');
+    }
+  }
+  
+  void _handleRemoveColleague(int index) {
+    if (index >= 0 && index < _colleagues.length) {
+      final removed = _colleagues[index];
+      setState(() {
+        _colleagues.removeAt(index);
+        _isDirty = true;
+      });
+      
+      if (kDebugMode) {
+        print('ProfileScreen: Removed colleague: ${removed.name} (${removed.email})');
+      }
     }
   }
   
@@ -942,22 +1161,63 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       final signatureService = SignatureService();
       await signatureService.deleteSignature(widget.userId);
       
+      // Clear signature from image cache if it was displayed
+      if (_signaturePath != null) {
+        try {
+          final sigFile = await _getSignatureFile();
+          if (sigFile != null) {
+            final imageProvider = FileImage(sigFile);
+            await imageProvider.evict();
+            imageCache.clear(); // Force clear all cache
+            if (kDebugMode) {
+              print('ProfileScreen: Cleared signature from image cache');
+            }
+          }
+        } catch (e) {
+          debugPrint('ProfileScreen: Error clearing signature cache: $e');
+        }
+      }
+      
       setState(() {
         _signaturePath = null;
+        _signatureVersion++; // Increment to ensure UI updates
         _isDirty = true;
       });
       
-      // Mark for sync (deletion)
-      await widget.database.profileDao.setNeedsSignatureSync(widget.userId);
+      if (kDebugMode) {
+        print('ProfileScreen: Signature cleared, version: $_signatureVersion');
+      }
+      
+      // Mark for deletion and sync
+      if (_currentUser != null) {
+        final updatedUser = _currentUser!.copyWith(
+          signatureLocalPath: () => null,
+          signatureMarkedForDeletion: true,  // Set deletion flag for sync
+          needsSignatureSync: true,
+          needsProfileSync: true,  // Ensure Firestore gets updated
+          // Note: signatureFirebasePath is kept for reference during deletion
+        );
+        await widget.database.profileDao.updateProfile(widget.userId, updatedUser);
+        
+        // Sync will be handled by MainMenu when user navigates back
+        // Signature sync flag is already set in database
+      } else {
+        // For new profiles (shouldn't happen), just set the sync flag
+        await widget.database.profileDao.setNeedsSignatureSync(widget.userId);
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Signature removed'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _statusSubscription?.cancel();
-    _progressSubscription?.cancel();
-    _errorSubscription?.cancel();
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -1087,27 +1347,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           : null,
         automaticallyImplyLeading: false,
         actions: [
-          // Sync status indicator
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: SyncStatusIndicator(
-              userId: widget.userId,
-              database: widget.database,
-              syncService: _syncService,
-            ),
-          ),
-          // Manual sync button when there are pending changes
-          if (_currentUser != null && 
-              (_currentUser!.needsProfileSync || 
-               _currentUser!.needsImageSync || 
-               _currentUser!.needsSignatureSync) &&
-              !widget.isOffline &&
-              _currentSyncStatus != SyncStatus.syncing)
-            IconButton(
-              icon: const Icon(Icons.sync),
-              onPressed: _triggerManualSync,
-              tooltip: 'Sync now',
-            ),
           if (!busy)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -1222,55 +1461,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
               ),
             ),
           ),
-          
-          // Sync Progress Overlay
-          if (_showProgressOverlay)
-            Container(
-              color: Colors.black54,
-              child: Center(
-                child: Card(
-                  elevation: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    constraints: const BoxConstraints(
-                      minWidth: 200,
-                      maxWidth: 300,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Syncing...',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${(_syncProgress * 100).toStringAsFixed(0)}%',
-                          style: GoogleFonts.inter(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        LinearProgressIndicator(
-                          value: _syncProgress,
-                          backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            theme.colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -1280,58 +1470,60 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
   Widget _buildCompanyLogoSection() {
     final theme = Theme.of(context);
     
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 400),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Decorative border
-          Container(
-            width: double.infinity,
-            height: 200,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.primary.withValues(alpha: 0.2),
-                  theme.colorScheme.secondary.withValues(alpha: 0.2),
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Decorative border - using full width but increased height
+            Container(
+              width: double.infinity,
+              height: 320,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.colorScheme.primary.withValues(alpha: 0.2),
+                    theme.colorScheme.secondary.withValues(alpha: 0.2),
+                  ],
+                ),
+              ),
+            ),
+            // Inner white container - square format
+            Container(
+              width: 308,
+              height: 308,
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: theme.colorScheme.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.shadow.withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
               ),
             ),
-          ),
-          // Inner white container
-          Container(
-            width: double.infinity,
-            height: 188,
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              color: theme.colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+            // Image container - Large square format for company logo
+            Container(
+              width: 300,
+              height: 300,
+              margin: const EdgeInsets.symmetric(horizontal: 14),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _profileImagePath == null || _profileImagePath!.isEmpty
+                    ? _buildEmptyImageState()
+                    : _buildImageDisplay(),
+              ),
             ),
-          ),
-          // Image container - Using ProfileImagePicker adapted for rectangular shape
-          Container(
-            width: double.infinity,
-            height: 180,
-            margin: const EdgeInsets.symmetric(horizontal: 14),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: _profileImagePath == null || _profileImagePath!.isEmpty
-                  ? _buildEmptyImageState()
-                  : _buildImageDisplay(),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1496,6 +1688,16 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
 
             // Signature Section
             _buildSignatureSection(),
+            
+            const SizedBox(height: 20),
+            
+            // Colleagues Section
+            ColleaguesSection(
+              colleagues: _colleagues,
+              onAddColleague: _handleAddColleague,
+              onRemoveColleague: _handleRemoveColleague,
+              isEditable: !busy,
+            ),
           ],
         ),
       ),
@@ -1582,7 +1784,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     final theme = Theme.of(context);
     
     return GestureDetector(
-      onTap: busy ? null : () => _showImageSelectionDialog(),
+      onTap: busy ? null : () => _showImageSelectionDialog(showRemoveOption: false),
       child: Container(
         width: double.infinity,
         height: double.infinity,
@@ -1644,7 +1846,9 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     }
     
     // Build image display with FutureBuilder for async file loading
+    // Use image version as key to force rebuild when image changes
     return FutureBuilder<File>(
+      key: ValueKey('image_display_$_imageVersion'),
       future: _getImageFile(_profileImagePath!),
       builder: (context, snapshot) {
         // Show loading indicator while fetching file
@@ -1663,62 +1867,46 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           
           if (kDebugMode) {
             print('ProfileScreen: Displaying image from: ${imageFile.path}');
+            print('  File size: ${imageFile.lengthSync()} bytes');
+            print('  Image version: $_imageVersion');
           }
           
           // Display the actual image with proper error handling
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // Image with rounded corners
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.file(
-                  imageFile,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    // Log error and show placeholder if image fails to load
-                    if (kDebugMode) {
-                      print('ProfileScreen: Error loading image: $error');
-                      print('  Stack trace: $stackTrace');
+          // CRITICAL: Use a unique key that includes file modification time to force reload
+          final fileKey = '${imageFile.path}_${imageFile.lastModifiedSync().millisecondsSinceEpoch}_v$_imageVersion';
+          
+          return GestureDetector(
+            onTap: busy ? null : _showImageDeletionDialog,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.file(
+                imageFile,
+                key: ValueKey(fileKey),
+                fit: BoxFit.cover,
+                cacheWidth: null,
+                cacheHeight: null,
+                gaplessPlayback: false, // Don't show old image while loading new one
+                errorBuilder: (context, error, stackTrace) {
+                  // Log error and show placeholder if image fails to load
+                  if (kDebugMode) {
+                    print('ProfileScreen: Error loading image: $error');
+                    print('  Stack trace: $stackTrace');
+                  }
+                  
+                  // Clear invalid path and show empty state
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _profileImagePath = null;
+                        _isDirty = true;
+                      });
                     }
-                    
-                    // Clear invalid path and show empty state
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() {
-                          _profileImagePath = null;
-                          _isDirty = true;
-                        });
-                      }
-                    });
-                    
-                    return _buildEmptyImageState();
-                  },
-                ),
+                  });
+                  
+                  return _buildEmptyImageState();
+                },
               ),
-              
-              // Delete button overlay (only visible when not busy)
-              if (!busy)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      onPressed: _showImageDeletionDialog,
-                      tooltip: 'Remove company logo',
-                    ),
-                  ),
-                ),
-            ],
+            ),
           );
         }
         
@@ -1810,20 +1998,75 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                             ),
                           )
                         : FutureBuilder<File?>(
+                            // Use signature version as key to force rebuild when signature changes
+                            key: ValueKey('signature_display_$_signatureVersion'),
                             future: _getSignatureFile(),
                             builder: (context, snapshot) {
+                              // Show loading indicator while fetching file
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                );
+                              }
+                              
+                              // Check if file exists and is valid
                               if (snapshot.hasData && snapshot.data != null) {
+                                final signatureFile = snapshot.data!;
+                                
+                                if (kDebugMode) {
+                                  print('ProfileScreen: Displaying signature from: ${signatureFile.path}');
+                                  print('  File size: ${signatureFile.lengthSync()} bytes');
+                                  print('  Signature version: $_signatureVersion');
+                                }
+                                
+                                // CRITICAL: Use a unique key that includes file modification time to force reload
+                                final fileKey = '${signatureFile.path}_${signatureFile.lastModifiedSync().millisecondsSinceEpoch}_v$_signatureVersion';
+                                
                                 return GestureDetector(
                                   onTap: _handleSignatureTap,
                                   child: Padding(
                                     padding: const EdgeInsets.all(8.0),
                                     child: Image.file(
-                                      snapshot.data!,
+                                      signatureFile,
+                                      key: ValueKey(fileKey),
                                       fit: BoxFit.contain,
+                                      cacheWidth: null,
+                                      cacheHeight: null,
+                                      gaplessPlayback: false, // Don't show old signature while loading new one
+                                      errorBuilder: (context, error, stackTrace) {
+                                        // Log error and show placeholder if signature fails to load
+                                        if (kDebugMode) {
+                                          print('ProfileScreen: Error loading signature: $error');
+                                        }
+                                        return Center(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.error_outline,
+                                                size: 48,
+                                                color: theme.colorScheme.error,
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Failed to load signature',
+                                                style: GoogleFonts.inter(
+                                                  color: theme.colorScheme.error,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                                 );
                               } else {
+                                // No signature file found
                                 return Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,

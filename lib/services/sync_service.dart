@@ -68,7 +68,7 @@ class SyncService {
     
     // Initialize components
     _networkMonitor = NetworkMonitor(prefs: _prefs);
-    _deviceManager = DeviceManager(prefs: _prefs);
+    _deviceManager = DeviceManager();
     
     _profileHandler = ProfileSyncHandler(
       database: _database,
@@ -257,11 +257,22 @@ class SyncService {
 
       // Sync profile image if needed (including deletions)
       updateProgress(0.5);
+      // IMPORTANT: Re-fetch user data to get the latest state
+      // This prevents using stale data if image was just added/deleted
       final localUser = await _database.profileDao.getProfile(_userId!);
       if (localUser != null) {
         if (localUser.needsImageSync) {
           if (kDebugMode) {
             print('SyncService.syncNow: Syncing profile image...');
+            print('  Current imageLocalPath: "${localUser.imageLocalPath}"');
+            print('  imageMarkedForDeletion: ${localUser.imageMarkedForDeletion}');
+            print('  needsImageSync: ${localUser.needsImageSync}');
+            
+            // CRITICAL: Check if this is a spurious sync with null path but no deletion flag
+            if (localUser.imageLocalPath == null && !localUser.imageMarkedForDeletion) {
+              print('  WARNING: imageLocalPath is null but imageMarkedForDeletion is false!');
+              print('  This might be a database inconsistency - skipping image sync');
+            }
           }
           // Pass empty string if path is null (indicates deletion)
           final imageSuccess = await _profileHandler.syncProfileImage(

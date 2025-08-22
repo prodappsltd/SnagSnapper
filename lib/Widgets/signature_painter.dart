@@ -66,9 +66,7 @@ class SignaturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(SignaturePainter oldDelegate) {
-    // Repaint if strokes have changed
-    return strokes.length != oldDelegate.strokes.length ||
-        strokeColor != oldDelegate.strokeColor ||
-        strokeWidth != oldDelegate.strokeWidth;
+    // Always repaint to show real-time drawing
+    return true;
   }
 }

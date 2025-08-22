@@ -1,7 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:snagsnapper/Data/colleague.dart';
 
 /// AppUser model for offline-first profile management
 /// Implements PRD Section 4.2.1 specifications
+/// Unified model combining offline-first architecture with business logic
 @immutable
 class AppUser {
   // Core Fields
@@ -42,6 +46,11 @@ class AppUser {
   final int localVersion;
   final int firebaseVersion;
 
+  // Business Logic Fields (from legacy model)
+  // TODO: These will be refactored when implementing Sites module
+  final List<Colleague>? listOfALLColleagues; // List of colleagues for this user
+  final Map<String, String>? mapOfSitePaths; // Map of <SiteID, OwnerID> for shared sites
+
   const AppUser({
     required this.id,
     required this.name,
@@ -67,6 +76,8 @@ class AppUser {
     required this.updatedAt,
     this.localVersion = 1,
     this.firebaseVersion = 0,
+    this.listOfALLColleagues,
+    this.mapOfSitePaths,
   });
 
   /// Create AppUser from database map
@@ -100,6 +111,10 @@ class AppUser {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int),
       localVersion: map['local_version'] as int? ?? 1,
       firebaseVersion: map['firebase_version'] as int? ?? 0,
+      // Note: Colleagues and site paths are not stored in the database
+      // They come from Firebase and are managed separately
+      listOfALLColleagues: null,
+      mapOfSitePaths: null,
     );
   }
 
@@ -133,6 +148,69 @@ class AppUser {
     };
   }
 
+  /// Create AppUser from Firebase JSON data
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
+    return AppUser(
+      id: json['id'] ?? FirebaseAuth.instance.currentUser?.uid ?? '',
+      name: json['name'] ?? '',
+      email: json['email'] ?? '',
+      phone: json['phone'] ?? '',
+      jobTitle: json['jobTitle'] ?? '',
+      companyName: json['companyName'] ?? '',
+      postcodeOrArea: json['postcodeOrArea'],
+      dateFormat: json['dateFormat'] ?? 'dd-MM-yyyy',
+      // Image and signature paths
+      imageLocalPath: json['imageLocalPath'],
+      imageFirebasePath: json['imagePath'],
+      signatureLocalPath: json['signatureLocalPath'],
+      signatureFirebasePath: json['signaturePath'],
+      // Deletion flags - usually not from Firebase
+      imageMarkedForDeletion: json['imageMarkedForDeletion'] ?? false,
+      signatureMarkedForDeletion: json['signatureMarkedForDeletion'] ?? false,
+      // Sync flags
+      needsProfileSync: json['needsProfileSync'] ?? false,
+      needsImageSync: json['needsImageSync'] ?? false,
+      needsSignatureSync: json['needsSignatureSync'] ?? false,
+      lastSyncTime: json['lastSyncTime'] != null 
+          ? (json['lastSyncTime'] is DateTime 
+              ? json['lastSyncTime'] 
+              : DateTime.parse(json['lastSyncTime'].toString()))
+          : null,
+      // Device management
+      currentDeviceId: json['currentDeviceId'],
+      lastLoginTime: json['lastLoginTime'] != null 
+          ? (json['lastLoginTime'] is DateTime 
+              ? json['lastLoginTime'] 
+              : DateTime.parse(json['lastLoginTime'].toString()))
+          : null,
+      // Metadata - handle Firestore Timestamp
+      createdAt: json['createdAt'] != null 
+          ? (json['createdAt'] is DateTime 
+              ? json['createdAt'] 
+              : (json['createdAt'] is Timestamp 
+                  ? (json['createdAt'] as Timestamp).toDate()
+                  : DateTime.parse(json['createdAt'].toString())))
+          : now,
+      updatedAt: json['updatedAt'] != null 
+          ? (json['updatedAt'] is DateTime 
+              ? json['updatedAt'] 
+              : (json['updatedAt'] is Timestamp 
+                  ? (json['updatedAt'] as Timestamp).toDate()
+                  : DateTime.parse(json['updatedAt'].toString())))
+          : now,
+      // Versioning
+      localVersion: json['version'] ?? json['localVersion'] ?? 1,
+      firebaseVersion: json['firebaseVersion'] ?? json['version'] ?? 1,
+      // Business logic fields
+      listOfALLColleagues: json['colleagues'] != null
+          ? (json['colleagues'] as List<dynamic>)
+              .map((e) => Colleague.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : null,
+      mapOfSitePaths: null, // Not used yet
+    );
+  }
 
   /// Create a copy with updated fields
   AppUser copyWith({
@@ -192,6 +270,8 @@ class AppUser {
       imageFirebasePath: imageFirebasePath != null ? imageFirebasePath() : this.imageFirebasePath,
       signatureLocalPath: signatureLocalPath != null ? signatureLocalPath() : this.signatureLocalPath,
       signatureFirebasePath: signatureFirebasePath != null ? signatureFirebasePath() : this.signatureFirebasePath,
+      // CRITICAL: Must preserve colleagues but avoid reference sharing
+      listOfALLColleagues: this.listOfALLColleagues,  // PRESERVE COLLEAGUES!
       imageMarkedForDeletion: imageMarkedForDeletion ?? this.imageMarkedForDeletion,
       signatureMarkedForDeletion: signatureMarkedForDeletion ?? this.signatureMarkedForDeletion,
       needsProfileSync: needsProfileSync ?? (profileChanged ? true : this.needsProfileSync),

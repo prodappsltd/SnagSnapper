@@ -8,13 +8,13 @@ part 'colleague.g.dart';
 
 @JsonSerializable()
 class Colleague {
-  @JsonKey(name: NAME)
+  @JsonKey(name: 'name')
   String name;
-  @JsonKey(name: EMAIL)
+  @JsonKey(name: 'email')
   String email;
-  @JsonKey(name: PHONE)
+  @JsonKey(name: 'phone')
   String? phone;
-  @JsonKey(name: UID)
+  @JsonKey(name: 'uid')
   String uniqueID;
 
   Colleague({

@@ -14,7 +14,7 @@ import 'package:snagsnapper/Data/snag.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:snagsnapper/Data/user.dart';
+import 'package:snagsnapper/Data/models/app_user.dart';
 import 'dart:io';
 
 import 'package:uuid/uuid.dart';
@@ -297,16 +297,20 @@ class CreatePDF {
                 children: <pw.Widget>[
                   pw.Container(
                     padding: const pw.EdgeInsets.only(right: 16.0),
-                    decoration: _user.signature.isNotEmpty
-                        ? pw.BoxDecoration(
-                        //color: PdfColors.green500,
-                          image: pw.DecorationImage(
-                            alignment: pw.Alignment.center,
-                            image: pw.MemoryImage(
-                              base64Decode(_user.signature),
-                            ),
-                            fit: pw.BoxFit.contain))
-                    : const pw.BoxDecoration(),
+                    // TODO: Update to use signatureLocalPath when implementing PDF module
+                    // The new AppUser model stores file paths, not base64 data
+                    // Need to read image from file and convert to base64 for PDF generation
+                    decoration: const pw.BoxDecoration(),
+                    // decoration: _user.signatureLocalPath != null && _user.signatureLocalPath!.isNotEmpty
+                    //     ? pw.BoxDecoration(
+                    //       //color: PdfColors.green500,
+                    //         image: pw.DecorationImage(
+                    //           alignment: pw.Alignment.center,
+                    //           image: pw.MemoryImage(
+                    //             base64Decode(_user.signature), // Need to read from file
+                    //           ),
+                    //           fit: pw.BoxFit.contain))
+                    // : const pw.BoxDecoration(),
                     height: 50.0,
                     width: 150.0,
                   ),

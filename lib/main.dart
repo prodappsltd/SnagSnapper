@@ -318,17 +318,20 @@ class HomePageState extends State<HomePage> {
       // Phase 1: Check widget is still mounted
       if (!mounted) return InitializationState.contextError;
       
-      // Phase 2: Check internet connectivity
+      // Phase 2: Check internet connectivity (informational only - don't block)
       if (mounted) {
-        setState(() => message = 'Checking internet connection...');
+        setState(() => message = 'Checking connectivity...');
       }
       bool hasInternet = await Provider.of<CP>(context, listen: false).getNetworkStatus();
       if (!hasInternet) {
-        // Log breadcrumb for no internet
-        if (!kDebugMode) {
-          FirebaseCrashlytics.instance.log('Initialization failed: No internet connection');
+        // Log that we're offline but DON'T block - this is an offline-first app!
+        if (kDebugMode) {
+          print('No internet connection detected - continuing in offline mode');
         }
-        return InitializationState.noInternet;
+        if (!kDebugMode) {
+          FirebaseCrashlytics.instance.log('Starting in offline mode - no internet connection');
+        }
+        // Continue to load the app - we work offline!
       }
       
       // Verify still mounted after async operation

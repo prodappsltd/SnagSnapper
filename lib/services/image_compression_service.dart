@@ -75,15 +75,28 @@ class ImageCompressionService {
         throw InvalidImageException('Invalid image file');
       }
       
-      // Step 1: Resize to fixed dimensions (1024x1024)
-      final resized = img.copyResize(
+      // Step 1: Auto-crop to square (as per PRD)
+      final squareSize = image.width < image.height ? image.width : image.height;
+      final x = (image.width - squareSize) ~/ 2;
+      final y = (image.height - squareSize) ~/ 2;
+      
+      final cropped = img.copyCrop(
         image,
+        x: x,
+        y: y,
+        width: squareSize,
+        height: squareSize,
+      );
+      
+      // Step 2: Resize to fixed dimensions (1024x1024)
+      final resized = img.copyResize(
+        cropped,
         width: TARGET_DIMENSION,
         height: TARGET_DIMENSION,
         interpolation: img.Interpolation.linear,
       );
       
-      // Step 2: Progressive quality compression
+      // Step 3: Progressive quality compression
       int currentQuality = START_QUALITY;
       Uint8List? compressed;
       
@@ -97,7 +110,7 @@ class ImageCompressionService {
           return ImageProcessingResult(
             data: compressed,
             status: ImageProcessingStatus.optimal,
-            message: '✅ Image optimized successfully (${compressed.length ~/ 1024}KB)',
+            message: 'Image optimized successfully (${compressed.length ~/ 1024}KB)',
             finalQuality: currentQuality,
           );
         }
@@ -109,7 +122,7 @@ class ImageCompressionService {
             return ImageProcessingResult(
               data: compressed,
               status: ImageProcessingStatus.acceptable,
-              message: '⚠️ Image compressed to ${compressed.length ~/ 1024}KB (larger than optimal)',
+              message: 'Image compressed to ${compressed.length ~/ 1024}KB (larger than optimal)',
               finalQuality: currentQuality,
             );
           } else {
@@ -124,7 +137,7 @@ class ImageCompressionService {
       // Step 3: Reject if still too large
       if (compressed!.length > MAX_SIZE) {
         throw ImageTooLargeException(
-          '❌ Image too complex. Please choose a simpler image',
+          'Image too complex. Please choose a simpler image',
         );
       }
       
@@ -132,7 +145,7 @@ class ImageCompressionService {
       return ImageProcessingResult(
         data: compressed,
         status: ImageProcessingStatus.acceptable,
-        message: '⚠️ Image compressed to ${compressed.length ~/ 1024}KB',
+        message: 'Image compressed to ${compressed.length ~/ 1024}KB',
         finalQuality: MIN_QUALITY,
       );
     } catch (e) {

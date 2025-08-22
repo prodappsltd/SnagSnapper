@@ -6,8 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
-import 'package:snagsnapper/Data/models/unified_app_user.dart';
-import 'package:snagsnapper/Data/models/app_user.dart' as models;
+import 'package:snagsnapper/Data/models/app_user.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_database/firebase_database.dart' hide Transaction;
 import 'package:device_info_plus/device_info_plus.dart';
@@ -26,8 +25,10 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/colleague.dart';
 import 'package:snagsnapper/Data/site.dart';
 import 'package:snagsnapper/Data/snag.dart';
-import 'package:snagsnapper/Data/user.dart';
 import 'package:snagsnapper/services/sync_service.dart';
+import 'package:snagsnapper/services/sync/handlers/profile_sync_handler.dart';
+import 'package:snagsnapper/services/image_storage_service.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:snagsnapper/Helper/purchasesHelper.dart';
 import 'package:snagsnapper/main.dart' show navigatorKey;
@@ -307,7 +308,8 @@ class CP extends ChangeNotifier {
           if (kDebugMode) print('DATA_UP: Updating Profile on FIREBASE...');
           tx.update(postRef, {'Ignore': 1}); // Without this if nothing is getting updated then Exception happens. MUST do a write// TODO CHECK THIS, NOT MAKING SENSE
           if (_appUser!.name != _name && _name.isNotEmpty) tx.update(postRef, {NAME: _name});
-          if (_appUser!.signature != _signature && _signature.isNotEmpty) tx.update(postRef, {SIGNATURE: _signature});
+          // TODO: Update signature field handling when implementing signature module
+          // if (_appUser!.signatureLocalPath != _signature && _signature.isNotEmpty) tx.update(postRef, {SIGNATURE: _signature});
           if (_appUser!.jobTitle != _jobTitle && _jobTitle.isNotEmpty) tx.update(postRef, {JOB_TITLE: _jobTitle});
           if (_appUser!.companyName != _companyName && _companyName.isNotEmpty) tx.update(postRef, {COMPANY_NAME: _companyName});
           if (_appUser!.postcodeOrArea != _postCode && _postCode.isNotEmpty) tx.update(postRef, {POSTCODE_AREA: _postCode});
@@ -316,30 +318,29 @@ class CP extends ChangeNotifier {
           if (_appUser!.dateFormat != _dateFormat && _dateFormat.isNotEmpty) tx.update(postRef, {DATE_FORMAT: _dateFormat})
 
           ;
-          if (_appUser!.name != _name && _name.isNotEmpty) _appUser!.name = _name;
-          if (_appUser!.signature != _signature && _signature.isNotEmpty) _appUser!.signature = _signature;
-          if (_appUser!.jobTitle != _jobTitle && _jobTitle.isNotEmpty) _appUser!.jobTitle = _jobTitle;
-          if (_appUser!.companyName != _companyName && _companyName.isNotEmpty) _appUser!.companyName = _companyName;
-          if (_appUser!.postcodeOrArea != _postCode && _postCode.isNotEmpty) _appUser!.postcodeOrArea = _postCode;
-          if (_appUser!.phone != _phone && _phone.isNotEmpty) _appUser!.phone = _phone;
-          if (_appUser!.email != _email && _email.isNotEmpty) _appUser!.email = _email;
-          if (_appUser!.dateFormat != _dateFormat && _dateFormat.isNotEmpty) _appUser!.dateFormat = _dateFormat;
-          
-          // Clear sync flags after successful Firebase update
-          // These flags are local-only and not synced to Firebase
-          _appUser!.needsProfileSync = false;
-          _appUser!.needsSignatureSync = false;
-          _appUser!.lastSyncTime = DateTime.now();
+          // Update local AppUser instance using copyWith
+          _appUser = _appUser!.copyWith(
+            name: _name.isNotEmpty && _appUser!.name != _name ? _name : null,
+            jobTitle: _jobTitle.isNotEmpty && _appUser!.jobTitle != _jobTitle ? _jobTitle : null,
+            companyName: _companyName.isNotEmpty && _appUser!.companyName != _companyName ? _companyName : null,
+            postcodeOrArea: _postCode.isNotEmpty && _appUser!.postcodeOrArea != _postCode ? () => _postCode : null,
+            phone: _phone.isNotEmpty && _appUser!.phone != _phone ? _phone : null,
+            email: _email.isNotEmpty && _appUser!.email != _email ? _email : null,
+            dateFormat: _dateFormat.isNotEmpty && _appUser!.dateFormat != _dateFormat ? _dateFormat : null,
+            needsProfileSync: false,
+            needsSignatureSync: false,
+            lastSyncTime: () => DateTime.now(),
+          );
           
           result = true;
         } on PlatformException catch (e) {
           if (kDebugMode) print('DATA_UP: Error Updating Profile: ${e.message!}');
           
           // On error, set sync flags to retry later
-          _appUser!.needsProfileSync = true;
-          if (_signature.isNotEmpty) {
-            _appUser!.needsSignatureSync = true;
-          }
+          _appUser = _appUser!.copyWith(
+            needsProfileSync: true,
+            needsSignatureSync: _signature.isNotEmpty ? true : null,
+          );
         }
       }
     });
@@ -350,8 +351,9 @@ class CP extends ChangeNotifier {
 
   void changeDateFormat(bool british) {
     if (kDebugMode) print('DATA-F_CDF: Change Date Format');
-    if (british) _appUser!.dateFormat = 'dd-MM-yyyy';
-    if (!british) _appUser!.dateFormat = 'MM-dd-yyyy';
+    _appUser = _appUser!.copyWith(
+      dateFormat: british ? 'dd-MM-yyyy' : 'MM-dd-yyyy',
+    );
     if (kDebugMode) print('DATA_CDF: Notifying Listeners');
     notifyListeners();
     if (kDebugMode) print('DATA-L_CDF: END Final format:${_appUser!.dateFormat}');
@@ -667,14 +669,18 @@ class CP extends ChangeNotifier {
         if (kDebugMode) print('DATA_UPI: Getting existing profile');
         if (postSnapshot.exists) {
           if (kDebugMode) print('DATA_UPI: Existing profile found - Updating image');
+          // TODO: Update to use imageLocalPath when implementing image sync
+          // The new AppUser model uses imageLocalPath instead of image
           tx.update(postRef, {
-            IMAGE: _appUser!.image,
+            // IMAGE: _appUser!.imageLocalPath, // Need to handle file to base64 conversion
             'LAST_UPDATED': FieldValue.serverTimestamp(),
           });
           
           // Clear image sync flag after successful Firebase update
-          _appUser!.needsImageSync = false;
-          _appUser!.lastSyncTime = DateTime.now();
+          _appUser = _appUser!.copyWith(
+            needsImageSync: false,
+            lastSyncTime: () => DateTime.now(),
+          );
           
           if (kDebugMode) print('DATA_UPI: Notifying listeners');
           notifyListeners();
@@ -685,7 +691,9 @@ class CP extends ChangeNotifier {
       if (kDebugMode) print('DATA_UPI: Error updating profile image - Details: ' + e.details);
       
       // On error, set sync flag to retry later
-      _appUser!.needsImageSync = true;
+      _appUser = _appUser!.copyWith(
+        needsImageSync: true,
+      );
     }
     //--FIREBASE UPDATE FINISH--
     if (kDebugMode) print('DATA-L_UPI: END Profile Image Update? $result');
@@ -723,8 +731,8 @@ class CP extends ChangeNotifier {
   void setAppUser(AppUser? user) {
     if (kDebugMode) print('DATA-F_SS: Set Profile user');
     _appUser = user;
-    if (_appUser != null) if (_appUser!.listOfALLColleagues == null) _appUser!.listOfALLColleagues = [];
-    if (_appUser != null) if (_appUser!.mapOfSitePaths == null) _appUser!.mapOfSitePaths = {};
+    // Note: listOfALLColleagues and mapOfSitePaths are initialized in AppUser model
+    // They are optional fields for future modules and don't need initialization here
     //if (kDebugMode) print('DATA_SS: Notifying Listeners');
     //notifyListeners();
     if (kDebugMode) print('DATA-L_SS: END set user');
@@ -803,11 +811,11 @@ class CP extends ChangeNotifier {
         // Device matches or no device ID stored - update device info
         await profileDao.updateDeviceInfo(userId, currentDeviceId);
         
-        // Convert from new AppUser format to old format for compatibility
-        final unifiedUser = UnifiedAppUser.fromDatabase(localProfile.toDatabase());
-        final oldFormatUser = AppUser.fromJson(unifiedUser.toJson());
-        setAppUser(oldFormatUser);
+        // Use the unified AppUser model directly - no conversion needed
+        setAppUser(localProfile);
         result = true;
+        
+        if (kDebugMode) print('DATA_LP: 3.3 - Successfully set app user from local profile');
         
         // Check sync flags (background operation, don't block)
         if (localProfile.needsProfileSync || localProfile.needsImageSync || localProfile.needsSignatureSync) {
@@ -873,31 +881,78 @@ class CP extends ChangeNotifier {
             }
             
             // Download profile to local database
-            if (kDebugMode) print('DATA_LP: 3.11 - Downloading profile to local database');
+            if (kDebugMode) {
+              print('DATA_LP: 3.11 - Downloading profile to local database');
+              print('DATA_LP: Firebase data contains:');
+              print('  - colleagues: ${data['colleagues']}');
+              if (data['colleagues'] != null) {
+                print('  - colleagues type: ${data['colleagues'].runtimeType}');
+                print('  - colleagues count: ${(data['colleagues'] as List).length}');
+              }
+            }
             
-            // Create old format user from Firebase
-            final firebaseUser = AppUser.fromJson(data);
+            // Create AppUser from Firebase data using the unified model
+            final firebaseUser = AppUser.fromJson(data).copyWith(
+              currentDeviceId: () => currentDeviceId,
+              lastLoginTime: () => DateTime.now(),
+              needsProfileSync: false,
+              needsImageSync: (data['IMAGE'] ?? data['image']) != null,
+              needsSignatureSync: (data['SIGNATURE'] ?? data['signature']) != null,
+            );
+            
             setAppUser(firebaseUser);
             
-            // Convert to UnifiedAppUser for database storage
-            final unifiedUser = UnifiedAppUser.fromOldAppUser(firebaseUser, userId);
-            
-            // Add current device ID
-            final dbData = unifiedUser.toDatabase();
-            dbData['currentDeviceId'] = currentDeviceId;
-            dbData['lastLoginTime'] = DateTime.now().millisecondsSinceEpoch;
-            
-            // Convert to database format
-            final dbUser = models.AppUser.fromDatabase(dbData);
-            
             // Save to local database for offline use
-            await profileDao.insertProfile(dbUser);
+            await profileDao.insertProfile(firebaseUser);
             
             // Clear sync flags since we just downloaded from Firebase
             await profileDao.clearSyncFlags(userId);
             
             // Register device in Realtime Database (PRD 4.3.1 step 6c)
             await _registerDeviceSession(userId, currentDeviceId);
+            
+            // Download images and signatures if they exist in Firebase
+            if (kDebugMode) print('DATA_LP: 3.11a - Checking for images to download...');
+            
+            // Check for profile image
+            final imagePath = data['imagePath'] as String?;
+            if (imagePath != null && imagePath.isNotEmpty) {
+              if (kDebugMode) print('DATA_LP: 3.11b - Downloading profile image from: $imagePath');
+              try {
+                // Use the profile sync handler to download the image
+                final db = await AppDatabase.getInstance();
+                final syncHandler = ProfileSyncHandler(
+                  database: db,
+                  firestore: FirebaseFirestore.instance,
+                  storage: FirebaseStorage.instance,
+                  imageStorage: ImageStorageService.instance,
+                );
+                await syncHandler.downloadProfileImage(userId, imagePath);
+                if (kDebugMode) print('DATA_LP: 3.11c - Profile image downloaded successfully');
+              } catch (e) {
+                if (kDebugMode) print('DATA_LP: 3.11d - Error downloading profile image: $e');
+              }
+            }
+            
+            // Check for signature
+            final signaturePath = data['signaturePath'] as String?;
+            if (signaturePath != null && signaturePath.isNotEmpty) {
+              if (kDebugMode) print('DATA_LP: 3.11e - Downloading signature from: $signaturePath');
+              try {
+                // Use the profile sync handler to download the signature
+                final db = await AppDatabase.getInstance();
+                final syncHandler = ProfileSyncHandler(
+                  database: db,
+                  firestore: FirebaseFirestore.instance,
+                  storage: FirebaseStorage.instance,
+                  imageStorage: ImageStorageService.instance,
+                );
+                await syncHandler.downloadSignatureImage(userId, signaturePath);
+                if (kDebugMode) print('DATA_LP: 3.11f - Signature downloaded successfully');
+              } catch (e) {
+                if (kDebugMode) print('DATA_LP: 3.11g - Error downloading signature: $e');
+              }
+            }
             
             result = true;
             if (kDebugMode) print('DATA_LP: 3.12 - Firebase profile saved locally for offline use');

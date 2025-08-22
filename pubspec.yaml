@@ -7,10 +7,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
-# followed by an optional build number separated by a +.
+# followed by an optional build number separated by a +.okYes,Check for any memory leaks of performance Chec
 # Both the version and the builder number may be overridden in flutter
 # build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
+# In Android, build-name is used as versionName while build-number used as versionCode.CheckNowI uninstalled the app
 # Read more about Android versioning at https://developer.android.com/studio/publish/versioning
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # Read more about iOS versioning at
@@ -107,7 +107,7 @@ dependencies:
   path: ^1.8.0
   rxdart: ^0.28.0  # For reactive streams
   device_info_plus: ^11.5.0  # For device identification
-  workmanager: ^0.5.2  # For background sync
+  workmanager: ^0.9.0+2  # For background sync
 
 
 dev_dependencies:

@@ -25,7 +25,7 @@ import 'package:snagsnapper/Widgets/snagCardView.dart';
 
 import '../../../Data/ArgsViewPDF.dart';
 import '../../../Data/createPDF.dart';
-import '../../../Data/user.dart';
+import '../../../Data/models/app_user.dart';
 
 bool viewPermission = false;
 

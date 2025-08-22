@@ -1,6 +1,6 @@
 # Bug Tracker
-**Last Updated**: 2025-01-12
-**Total Bugs**: 15 (0 Critical, 0 High, 12 Low)
+**Last Updated**: 2025-08-21
+**Total Bugs**: 19 (0 Critical, 4 High, 12 Low)
 
 ---
 
@@ -9,7 +9,7 @@
 
 ---
 
-## 🟡 High Priority Bugs (0)
+## 🟡 High Priority Bugs (4)
 
 ### Bug #001
 **Severity**: High
@@ -53,6 +53,53 @@
 **Assigned**: Development Team
 **Fix**: Updated SyncStatusIndicator to immediately update UI state, added initial status broadcast
 **Fixed in**: 2025-01-12
+
+### Bug #016
+**Severity**: High
+**Module**: Profile/Colleagues
+**Description**: Colleagues being overwritten in Firebase instead of appended
+**Steps to Reproduce**:
+1. Add a colleague and save
+2. Add another colleague and save
+3. Check Firebase - only the second colleague is present
+**Expected**: Both colleagues should be in Firebase as an array
+**Actual**: Only the most recent colleague is saved, previous ones are lost
+**Status**: Fixed ✅
+**Assigned**: Development Team
+**Fix**: Fixed reference sharing bug - _colleagues list was sharing reference with _currentUser.listOfALLColleagues
+**Fixed in**: 2025-08-21
+
+### Bug #017
+**Severity**: High  
+**Module**: Profile/Colleagues
+**Description**: Colleagues not downloaded after app reinstall (copyWith bug)
+**Steps to Reproduce**:
+1. Add colleagues to profile
+2. Reinstall app
+3. Login again
+4. Colleagues are not shown despite being in Firebase
+**Expected**: Colleagues should be downloaded and displayed
+**Actual**: Colleagues are downloaded from Firebase but lost when copyWith is called
+**Status**: Fixed ✅
+**Fix**: Added `listOfALLColleagues: this.listOfALLColleagues` to copyWith method in AppUser
+**Fixed in**: 2025-08-21
+
+### Bug #018
+**Severity**: High
+**Module**: Profile/Colleagues  
+**Description**: Colleague changes not detected, preventing sync to Firebase
+**Steps to Reproduce**:
+1. Load profile with existing colleague
+2. Add a new colleague
+3. Press Save
+4. Check logs - "Colleagues changed: false"
+5. Firebase is not updated with new colleague
+**Expected**: Colleague changes should be detected and trigger sync
+**Actual**: _hasColleaguesChanged() returns false even when colleagues are added
+**Status**: Fixed ✅
+**Assigned**: Development Team
+**Fix**: Used List<Colleague>.from() to create a copy instead of sharing reference
+**Fixed in**: 2025-08-21
 
 ---
 
@@ -131,6 +178,24 @@
 **Description**: Migration strategy not tested
 **Status**: Open
 
+### Bug #019
+**Severity**: High
+**Module**: Profile/Sync
+**Description**: Sync operation blocks UI when saving profile changes
+**Steps to Reproduce**:
+1. Edit any profile field (name, email, etc.)
+2. Press Save button
+3. UI shows blocking "Syncing..." dialog
+4. User cannot interact with app until sync completes or fails
+**Expected**: Save should be instant with background sync
+**Actual**: User has to wait for sync operation to complete
+**Impact**: Poor UX, especially on slow connections
+**Status**: Fixed ✅
+**Assigned**: Development Team
+**Notes**: Violates offline-first principle - local save should be instant
+**Fix**: Implemented fire-and-forget architecture - removed all sync calls from profile screen, sync now happens in background from MainMenu
+**Fixed in**: 2025-08-21
+
 ---
 
 ## 📊 Bug Statistics
@@ -144,14 +209,14 @@
 - Other: 1 bug
 
 ### By Status
-- Open: 11
+- Open: 12
 - In Progress: 0
-- Fixed: 4
+- Fixed: 8
 - Verified: 0
 
 ### Trend
 - New this week: 0
-- Fixed this week: 1
+- Fixed this week: 4
 - Days since critical bug: 7
 
 ---

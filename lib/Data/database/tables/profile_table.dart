@@ -20,6 +20,9 @@ class Profiles extends Table {
   TextColumn get signatureLocalPath => text().named('signature_local_path').nullable()();
   TextColumn get signatureFirebasePath => text().named('signature_firebase_path').nullable()();
   
+  // Colleagues list (stored as JSON string)
+  TextColumn get colleagues => text().named('colleagues').nullable()();
+  
   // Deletion flags for offline sync
   BoolColumn get imageMarkedForDeletion => boolean().named('image_marked_for_deletion').withDefault(const Constant(false))();
   BoolColumn get signatureMarkedForDeletion => boolean().named('signature_marked_for_deletion').withDefault(const Constant(false))();

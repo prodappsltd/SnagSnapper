@@ -20,7 +20,7 @@ class SignatureCaptureScreen extends StatefulWidget {
     String userId, {
     SignatureService? signatureService,
   }) async {
-    // Lock to portrait orientation
+    // Lock to portrait orientation (PRD requirement)
     await SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -67,10 +67,9 @@ class _SignatureCaptureScreenState extends State<SignatureCaptureScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Calculate canvas size based on screen width
-    final screenWidth = MediaQuery.of(context).size.width;
-    _canvasSize = _signatureService.calculateCanvasSize(screenWidth);
-    debugPrint('SignatureCaptureScreen: Canvas size set to $_canvasSize');
+    // Calculate canvas size based on screen dimensions (16:9 aspect ratio)
+    final screenSize = MediaQuery.of(context).size;
+    _canvasSize = _signatureService.calculateCanvasSize(screenSize.width, screenSize.height);
   }
 
   @override
@@ -83,15 +82,17 @@ class _SignatureCaptureScreenState extends State<SignatureCaptureScreen> {
             // Header
             _buildHeader(),
             
-            // Canvas
-            Expanded(
-              child: Center(
-                child: _buildCanvas(),
-              ),
-            ),
+            // Spacer to center the canvas and buttons vertically
+            const Spacer(),
             
-            // Buttons
+            // Canvas
+            _buildCanvas(),
+            
+            // Buttons immediately below canvas
             _buildButtons(),
+            
+            // Spacer to balance the layout
+            const Spacer(),
           ],
         ),
       ),
@@ -252,10 +253,11 @@ class _SignatureCaptureScreenState extends State<SignatureCaptureScreen> {
   void _handlePanUpdate(DragUpdateDetails details) {
     if (_canvasSize == null) return;
     
-    setState(() {
-      final localPosition = details.localPosition;
-      _signatureService.addPointWithBounds(localPosition, _canvasSize!);
-    });
+    final localPosition = details.localPosition;
+    _signatureService.addPointWithBounds(localPosition, _canvasSize!);
+    
+    // Force immediate repaint for better drawing visibility
+    setState(() {});
   }
 
   void _handlePanEnd(DragEndDetails details) {

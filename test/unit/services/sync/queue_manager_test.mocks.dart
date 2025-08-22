@@ -1676,6 +1676,25 @@ class MockProfileSyncHandler extends _i1.Mock
           as _i7.Future<void>);
 
   @override
+  _i7.Future<bool> downloadProfileImage(String? userId, String? firebasePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#downloadProfileImage, [userId, firebasePath]),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
+  _i7.Future<bool> downloadSignatureImage(
+    String? userId,
+    String? firebasePath,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#downloadSignatureImage, [userId, firebasePath]),
+            returnValue: _i7.Future<bool>.value(false),
+          )
+          as _i7.Future<bool>);
+
+  @override
   _i7.Future<void> syncAll(String? userId) =>
       (super.noSuchMethod(
             Invocation.method(#syncAll, [userId]),

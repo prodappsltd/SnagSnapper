@@ -61,8 +61,9 @@ void main() {
         // Assert - Check all required columns exist
         final expectedColumns = [
           'id', 'name', 'email', 'phone', 'job_title', 'company_name',
-          'postcode_area', 'date_format', 'image_local_path', 'image_firebase_url',
-          'signature_local_path', 'signature_firebase_url',
+          'postcode_area', 'date_format', 'image_local_path', 'image_firebase_path',
+          'signature_local_path', 'signature_firebase_path',
+          'image_marked_for_deletion', 'signature_marked_for_deletion',
           'needs_profile_sync', 'needs_image_sync', 'needs_signature_sync',
           'last_sync_time', 'sync_status', 'sync_error_message', 'sync_retry_count',
           'current_device_id', 'last_login_time',

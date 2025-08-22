@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import '../app_database.dart';
 import '../tables/profile_table.dart';
 import '../../models/app_user.dart';
+import '../../colleague.dart';
 
 part 'profile_dao.g.dart';
 
@@ -15,6 +17,15 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
   /// Insert a new profile
   /// Returns true if successful, false otherwise
   Future<bool> insertProfile(AppUser user) async {
+    if (kDebugMode) {
+      print('🔍 ProfileDao: Inserting profile with flags:');
+      print('  - needsProfileSync: ${user.needsProfileSync}');
+      print('  - needsImageSync: ${user.needsImageSync}');
+      print('  - needsSignatureSync: ${user.needsSignatureSync}');
+      print('  - imageMarkedForDeletion: ${user.imageMarkedForDeletion}');
+      print('  - signatureMarkedForDeletion: ${user.signatureMarkedForDeletion}');
+    }
+    
     try {
       // Validate the user data before inserting
       AppUser.validate(
@@ -28,6 +39,14 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         dateFormat: user.dateFormat,
       );
 
+      // Convert colleagues list to JSON string
+      String? colleaguesJson;
+      if (user.listOfALLColleagues != null && user.listOfALLColleagues!.isNotEmpty) {
+        colleaguesJson = json.encode(
+          user.listOfALLColleagues!.map((c) => c.toJson()).toList()
+        );
+      }
+      
       // Convert AppUser to ProfilesCompanion for Drift
       final companion = ProfilesCompanion(
         id: Value(user.id),
@@ -42,6 +61,7 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         imageFirebasePath: Value(user.imageFirebasePath),
         signatureLocalPath: Value(user.signatureLocalPath),
         signatureFirebasePath: Value(user.signatureFirebasePath),
+        colleagues: Value(colleaguesJson),
         imageMarkedForDeletion: Value(user.imageMarkedForDeletion),
         signatureMarkedForDeletion: Value(user.signatureMarkedForDeletion),
         needsProfileSync: Value(user.needsProfileSync),
@@ -60,7 +80,7 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
       await into(profiles).insert(companion);
       
       if (kDebugMode) {
-        print('ProfileDao: Profile inserted for user ${user.id}');
+        print('🔍 ProfileDao: Insert complete for user ${user.id}');
       }
       
       return true;
@@ -113,6 +133,22 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         dateFormat: updatedUser.dateFormat,
       );
 
+      // Convert colleagues list to JSON string
+      String? colleaguesJson;
+      if (updatedUser.listOfALLColleagues != null && updatedUser.listOfALLColleagues!.isNotEmpty) {
+        colleaguesJson = json.encode(
+          updatedUser.listOfALLColleagues!.map((c) => c.toJson()).toList()
+        );
+        if (kDebugMode) {
+          print('ProfileDao.updateProfile: Saving ${updatedUser.listOfALLColleagues!.length} colleagues');
+          print('ProfileDao.updateProfile: Colleagues JSON: $colleaguesJson');
+        }
+      } else {
+        if (kDebugMode) {
+          print('ProfileDao.updateProfile: No colleagues to save');
+        }
+      }
+
       // Create update companion
       final companion = ProfilesCompanion(
         name: Value(updatedUser.name),
@@ -126,6 +162,7 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         imageFirebasePath: Value(updatedUser.imageFirebasePath),
         signatureLocalPath: Value(updatedUser.signatureLocalPath),
         signatureFirebasePath: Value(updatedUser.signatureFirebasePath),
+        colleagues: Value(colleaguesJson),
         imageMarkedForDeletion: Value(updatedUser.imageMarkedForDeletion),
         signatureMarkedForDeletion: Value(updatedUser.signatureMarkedForDeletion),
         needsProfileSync: Value(updatedUser.needsProfileSync),
@@ -265,6 +302,171 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
 
   /// Clear all sync flags for a user
   /// Called after successful sync
+  /// Clear only the profile sync flag (not image/signature sync flags)
+  Future<bool> clearProfileSyncFlag(String userId) async {
+    try {
+      final now = DateTime.now();
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          needsProfileSync: const Value(false),
+          lastSyncTime: Value(now),
+          updatedAt: Value(now),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Cleared profile sync flag for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error clearing profile sync flag: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Clear only the image sync flag
+  Future<bool> clearImageSyncFlag(String userId) async {
+    try {
+      final now = DateTime.now();
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          needsImageSync: const Value(false),
+          updatedAt: Value(now),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Cleared image sync flag for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error clearing image sync flag: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Clear only the signature sync flag
+  Future<bool> clearSignatureSyncFlag(String userId) async {
+    try {
+      final now = DateTime.now();
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          needsSignatureSync: const Value(false),
+          updatedAt: Value(now),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Cleared signature sync flag for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error clearing signature sync flag: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Update only the image Firebase path
+  Future<bool> updateImageFirebasePath(String userId, String? firebasePath) async {
+    try {
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          imageFirebasePath: Value(firebasePath),
+          updatedAt: Value(DateTime.now()),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Updated image Firebase path for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error updating image Firebase path: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Update only the signature Firebase path
+  Future<bool> updateSignatureFirebasePath(String userId, String? firebasePath) async {
+    try {
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          signatureFirebasePath: Value(firebasePath),
+          updatedAt: Value(DateTime.now()),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Updated signature Firebase path for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error updating signature Firebase path: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Update only the image local path (after download)
+  Future<bool> updateImageLocalPath(String userId, String? localPath) async {
+    try {
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          imageLocalPath: Value(localPath),
+          updatedAt: Value(DateTime.now()),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Updated image local path for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error updating image local path: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Update only the signature local path (after download)
+  Future<bool> updateSignatureLocalPath(String userId, String? localPath) async {
+    try {
+      final rowsAffected = await (update(profiles)
+        ..where((tbl) => tbl.id.equals(userId)))
+        .write(ProfilesCompanion(
+          signatureLocalPath: Value(localPath),
+          updatedAt: Value(DateTime.now()),
+        ));
+      
+      if (kDebugMode) {
+        print('ProfileDao: Updated signature local path for user $userId');
+      }
+      
+      return rowsAffected > 0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error updating signature local path: $e');
+      }
+      return false;
+    }
+  }
+
   Future<bool> clearSyncFlags(String userId) async {
     try {
       final now = DateTime.now();
@@ -535,6 +737,21 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
   /// Private helper to convert ProfileEntry to AppUser
   /// Handles the conversion between database model and domain model
   AppUser _profileEntryToAppUser(ProfileEntry entry) {
+    // Parse colleagues from JSON string
+    List<Colleague>? colleagues;
+    if (entry.colleagues != null && entry.colleagues!.isNotEmpty) {
+      try {
+        final List<dynamic> colleaguesJson = json.decode(entry.colleagues!);
+        colleagues = colleaguesJson
+            .map((json) => Colleague.fromJson(json as Map<String, dynamic>))
+            .toList();
+      } catch (e) {
+        if (kDebugMode) {
+          print('ProfileDao: Error parsing colleagues JSON: $e');
+        }
+      }
+    }
+    
     return AppUser(
       id: entry.id,
       name: entry.name,
@@ -548,6 +765,7 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
       imageFirebasePath: entry.imageFirebasePath,
       signatureLocalPath: entry.signatureLocalPath,
       signatureFirebasePath: entry.signatureFirebasePath,
+      listOfALLColleagues: colleagues,
       imageMarkedForDeletion: entry.imageMarkedForDeletion,
       signatureMarkedForDeletion: entry.signatureMarkedForDeletion,
       needsProfileSync: entry.needsProfileSync,

@@ -10,9 +10,9 @@ import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Screens/moreOptions.dart';
 // import 'package:snagsnapper/Screens/profile.dart'; // TODO: DELETE - Old profile replaced
 // import 'package:snagsnapper/Screens/profile_cleaned.dart'; // TODO: DELETE - Temporary for comparison
-import 'package:snagsnapper/screens/profile/profile_screen_ui_matched.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:snagsnapper/Screens/SignUp_SignIn/unified_auth_screen.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:rate_my_app/rate_my_app.dart';
 import 'package:snagsnapper/services/sync_service.dart';
@@ -70,8 +70,11 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       await _initRateMyApp();
       await _initializeSyncService();
       _setupConnectivityListener();
-      _checkForPendingSync();
       _setupProfileSyncListener();
+      // Check for pending sync after listeners are setup
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _checkForPendingSync();
+      });
     });
   }
   
@@ -177,6 +180,13 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       // Setup auto-sync for connectivity changes
       _syncService.setupAutoSync();
       
+      // Register for force logout callback
+      _syncService.onForceLogout(() {
+        if (kDebugMode) print('MainMenu: Force logout detected, cancelling sync');
+        _syncService.cancelSync();
+        _handleForceLogout();
+      });
+      
       _isSyncInitialized = true;
       
       if (kDebugMode) print('MainMenu: SyncService initialized for background sync');
@@ -216,6 +226,11 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
         });
         
         if (kDebugMode) print('MainMenu: Profile sync status changed - needsSync: $needsSync');
+        
+        // Trigger sync check when status changes to needs sync
+        if (needsSync) {
+          _checkForPendingSync();
+        }
       }
     });
   }
@@ -252,6 +267,26 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                 _hasPendingSync = false;
               });
               if (kDebugMode) print('MainMenu: Background sync completed successfully');
+            } else if (!result.success && result.message.isNotEmpty && mounted) {
+              // Check if it's a permanent failure that needs user attention
+              final errorMessage = result.message;
+              if (errorMessage.contains('permission') || 
+                  errorMessage.contains('quota') || 
+                  errorMessage.contains('invalid')) {
+                // Show toast for permanent failures
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Sync failed: $errorMessage'),
+                    duration: const Duration(seconds: 4),
+                    action: SnackBarAction(
+                      label: 'Retry',
+                      onPressed: () => _checkForPendingSync(),
+                    ),
+                  ),
+                );
+              }
+              // Temporary failures will retry automatically
+              if (kDebugMode) print('MainMenu: Sync failed - ${result.message}');
             }
           }).catchError((e) {
             if (kDebugMode) print('MainMenu: Background sync error: $e');
@@ -267,6 +302,25 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       
     } catch (e) {
       if (kDebugMode) print('MainMenu: Error checking for pending sync: $e');
+    }
+  }
+  
+  /// Handle force logout when another device logs in with same account
+  Future<void> _handleForceLogout() async {
+    if (kDebugMode) print('MainMenu: Handling force logout');
+    
+    // Cancel any ongoing sync immediately
+    _syncService.cancelSync();
+    
+    // Sign out the user
+    await FirebaseAuth.instance.signOut();
+    
+    // Navigate to login screen
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const UnifiedAuthScreen()),
+        (route) => false,
+      );
     }
   }
   
@@ -441,6 +495,10 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   @override
   Widget build(BuildContext context) {
     if (kDebugMode) print ('MAIN-MENU: -----  BUILD SECTION   -----');
+    
+    // Dismiss any active keyboard focus to prevent keyboard from showing
+    FocusScope.of(context).unfocus();
+    
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
     
@@ -507,7 +565,7 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Project Management Made Simple',
+                          'Snag Management Made Simple',
                           style: GoogleFonts.inter(
                             fontSize: 14,
                             color: theme.colorScheme.onSurfaceVariant,
@@ -594,80 +652,83 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                                     ),
                                     // Content
                                     Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            width: 100,
-                                            height: 100,
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withValues(alpha: 0.2),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(
-                                                color: Colors.white.withValues(alpha: 0.3),
-                                                width: 2,
+                                      child: SingleChildScrollView(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 80,
+                                              height: 80,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.2),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: Colors.white.withValues(alpha: 0.3),
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              child: Icon(
+                                                Icons.dashboard_rounded,
+                                                color: Colors.white,
+                                                size: 40,
                                               ),
                                             ),
-                                            child: Icon(
-                                              Icons.dashboard_rounded,
-                                              color: Colors.white,
-                                              size: 50,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 24),
-                                          Text(
-                                            'MY SITES',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 36,
-                                              fontWeight: FontWeight.w800,
-                                              color: Colors.white,
-                                              letterSpacing: 2,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Manage all your projects',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 16,
-                                              color: Colors.white.withValues(alpha: 0.9),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 24),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 32,
-                                              vertical: 16,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withValues(alpha: 0.2),
-                                              borderRadius: BorderRadius.circular(50),
-                                              border: Border.all(
-                                                color: Colors.white.withValues(alpha: 0.3),
-                                                width: 1,
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              'MY SITES',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 32,
+                                                fontWeight: FontWeight.w800,
+                                                color: Colors.white,
+                                                letterSpacing: 1.5,
                                               ),
                                             ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  'ENTER',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                    letterSpacing: 1.5,
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Manage all your projects',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 14,
+                                                color: Colors.white.withValues(alpha: 0.9),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 28,
+                                                vertical: 12,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(50),
+                                                border: Border.all(
+                                                  color: Colors.white.withValues(alpha: 0.3),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    'ENTER',
+                                                    style: GoogleFonts.poppins(
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Colors.white,
+                                                      letterSpacing: 1.2,
+                                                    ),
                                                   ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Icon(
-                                                  Icons.arrow_forward_rounded,
-                                                  color: Colors.white,
-                                                  size: 22,
-                                                ),
-                                              ],
+                                                  const SizedBox(width: 6),
+                                                  Icon(
+                                                    Icons.arrow_forward_rounded,
+                                                    color: Colors.white,
+                                                    size: 20,
+                                                  ),
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -851,11 +912,11 @@ class MainMenuItems extends StatelessWidget {
                       children: <TextSpan>[
                         TextSpan(
                           text: '$heading\n',
-                            style: GoogleFonts.roboto(textStyle: TextStyle(fontSize: 23, color: Theme.of(context).colorScheme.onTertiaryContainer))
+                            style: GoogleFonts.inter(textStyle: TextStyle(fontSize: 23, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onTertiaryContainer))
                         ),
                         TextSpan(
                           text: subHeading,
-                            style: GoogleFonts.montserrat(textStyle: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onTertiaryContainer))
+                            style: GoogleFonts.inter(textStyle: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onTertiaryContainer))
 
                         )
                       ]

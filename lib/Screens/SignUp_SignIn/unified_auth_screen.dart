@@ -9,8 +9,8 @@ import 'package:another_flushbar/flushbar.dart';
 import '../../Data/contentProvider.dart';
 import '../../Helper/auth.dart';
 import '../../Helper/error.dart';
-import '../../services/image_service.dart';
-import '../../services/image_preload_service.dart';
+// import '../../services/image_service.dart'; // REMOVED - Service is commented out
+// import '../../services/image_preload_service.dart'; // REMOVED - Service is commented out
 
 /// Unified authentication screen that combines login and signup functionality
 /// Provides direct access to email/password fields and Google sign-in
@@ -54,15 +54,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
   
   /// Cleanup any remaining cached images
   Future<void> _cleanupCachedImages() async {
-    try {
-      if (kDebugMode) print('UnifiedAuthScreen: Checking for cached images to cleanup');
-      final imageService = ImageService();
-      await imageService.clearAllUserCache();
-      if (kDebugMode) print('UnifiedAuthScreen: Cache cleanup complete');
-    } catch (e) {
-      if (kDebugMode) print('UnifiedAuthScreen: Error during cache cleanup: $e');
-      // Don't block login flow if cleanup fails
-    }
+    // DISABLED: ImageService is deprecated
+    // TODO: Implement cache clearing with new ImageStorageService if needed
+    if (kDebugMode) print('UnifiedAuthScreen: Image cache cleanup disabled (service deprecated)');
   }
   
   @override
@@ -147,15 +141,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           if (mounted) {
             if (kDebugMode) print('UnifiedAuthScreen: Mounted, checking profile result...');
             if (profileResult == 'Profile Found') {
-              // Preload images after successful login
-              if (kDebugMode) print('Starting image preload...');
-              final preloadService = ImagePreloadService();
-              // Don't await - let it run in background
-              preloadService.preloadUserImages().then((_) {
-                if (kDebugMode) print('Image preload completed');
-              }).catchError((e) {
-                if (kDebugMode) print('Image preload error: $e');
-              });
+              // Image preloading disabled - service is deprecated
+              // TODO: Implement preloading with new ImageStorageService if needed
+              if (kDebugMode) print('Image preload disabled (service deprecated)');
               
               // Profile exists - navigate to main menu
               Navigator.of(context).pushNamedAndRemoveUntil(
@@ -289,15 +277,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
         
         if (mounted) {
           if (profileResult == 'Profile Found') {
-            // Preload images after successful Google login
-            if (kDebugMode) print('Starting image preload...');
-            final preloadService = ImagePreloadService();
-            // Don't await - let it run in background
-            preloadService.preloadUserImages().then((_) {
-              if (kDebugMode) print('Image preload completed');
-            }).catchError((e) {
-              if (kDebugMode) print('Image preload error: $e');
-            });
+            // Image preloading disabled - service is deprecated
+            // TODO: Implement preloading with new ImageStorageService if needed
+            if (kDebugMode) print('Image preload disabled (service deprecated)');
             
             // Profile exists - navigate to main menu
             Navigator.of(context).pushNamedAndRemoveUntil(
@@ -443,7 +425,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
         const SizedBox(height: 16),
         RichText(
           text: TextSpan(
-            style: GoogleFonts.montserrat(
+            style: GoogleFonts.inter(
               fontSize: 32,
               fontWeight: FontWeight.bold,
               color: theme.colorScheme.primary,
@@ -451,7 +433,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
             children: [
               TextSpan(
                 text: 'S',
-                style: GoogleFonts.montserrat(
+                style: GoogleFonts.inter(
                   fontSize: 44.8, // 32 * 1.4
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.primary,
@@ -460,7 +442,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
               const TextSpan(text: 'nag'),
               TextSpan(
                 text: 'S',
-                style: GoogleFonts.montserrat(
+                style: GoogleFonts.inter(
                   fontSize: 44.8, // 32 * 1.4
                   fontWeight: FontWeight.bold,
                   color: theme.colorScheme.primary,
@@ -472,7 +454,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
         ),
         Text(
           'Your ultimate LIVE SNAG SHARING app',
-          style: GoogleFonts.montserrat(
+          style: GoogleFonts.inter(
             fontSize: 14,
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -603,7 +585,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
                 },
                 child: Text(
                   'Forgot Password?',
-                  style: TextStyle(
+                  style: GoogleFonts.inter(
                     color: theme.colorScheme.primary,
                   ),
                 ),
@@ -653,7 +635,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
               )
             : Text(
                 _isLoginMode ? 'Sign In' : 'Sign Up',
-                style: GoogleFonts.montserrat(
+                style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: theme.colorScheme.onPrimary,
@@ -676,7 +658,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             'OR',
-            style: TextStyle(
+            style: GoogleFonts.inter(
               color: theme.colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),
@@ -717,7 +699,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           const SizedBox(width: 12),
           Text(
             'Continue with Google',
-            style: GoogleFonts.roboto(
+            style: GoogleFonts.inter(
               fontSize: 16,
               fontWeight: FontWeight.w500,
               color: theme.colorScheme.onSurface,
@@ -737,7 +719,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           _isLoginMode 
               ? "Don't have an account?" 
               : "Already have an account?",
-          style: TextStyle(
+          style: GoogleFonts.inter(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
@@ -745,7 +727,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           onPressed: _toggleAuthMode,
           child: Text(
             _isLoginMode ? 'Sign Up' : 'Sign In',
-            style: TextStyle(
+            style: GoogleFonts.inter(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.w600,
             ),

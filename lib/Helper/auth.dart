@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:snagsnapper/Helper/baseAuth.dart';
 import 'package:snagsnapper/Helper/error.dart';
-import 'package:snagsnapper/services/image_service.dart';
+// import 'package:snagsnapper/services/image_service.dart'; // REMOVED - Service is commented out
 
 
 class Auth extends BaseAuth {
@@ -212,18 +212,17 @@ class Auth extends BaseAuth {
   @override
   Future<void> signOut(BuildContext? context) async {
     try {
-      // Clear all cached images
-      if (kDebugMode) print('Auth.signOut: Clearing image cache');
-      final imageService = ImageService();
-      await imageService.clearAllUserCache();
+      // Clear all cached images - DISABLED: ImageService is deprecated
+      // TODO: Implement cache clearing with new ImageStorageService if needed
+      if (kDebugMode) print('Auth.signOut: Image cache clearing disabled (service deprecated)');
       
       // Sign out from Firebase
       await FirebaseAuth.instance.signOut();
       
-      if (kDebugMode) print('Auth.signOut: Successfully signed out and cleared cache');
+      if (kDebugMode) print('Auth.signOut: Successfully signed out');
     } catch (e) {
       if (kDebugMode) print('Auth.signOut: Error during signout: $e');
-      // Still try to sign out even if cache clearing fails
+      // Still try to sign out even if other operations fail
       await FirebaseAuth.instance.signOut();
     }
   }
