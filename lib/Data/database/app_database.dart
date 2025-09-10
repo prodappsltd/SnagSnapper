@@ -9,14 +9,19 @@ import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
 import 'tables/profile_table.dart';
 import 'tables/sync_queue_table.dart';
+import 'tables/sites_table.dart';
 import 'daos/profile_dao.dart';
 import 'daos/sync_queue_dao.dart';
+import 'daos/site_dao.dart';
 
 part 'app_database.g.dart';
 
 /// Main database class for SnagSnapper offline-first architecture
 /// Implements singleton pattern for database access
-@DriftDatabase(tables: [Profiles, SyncQueueTable], daos: [ProfileDao, SyncQueueDao])
+@DriftDatabase(
+  tables: [Profiles, SyncQueueTable, Sites], 
+  daos: [ProfileDao, SyncQueueDao, SiteDao]
+)
 class AppDatabase extends _$AppDatabase {
   // Singleton instance
   static AppDatabase? _instance;
@@ -40,8 +45,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Database schema version
+  /// Version 2: Added Sites table for site management
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   /// Migration strategy for database upgrades
   @override
@@ -59,8 +65,15 @@ class AppDatabase extends _$AppDatabase {
         }
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // No migrations needed since we're starting fresh at version 1
-        // All tables are created in onCreate
+        // Handle migrations between versions
+        if (from < 2) {
+          // Migration from version 1 to 2: Add Sites table
+          await m.create(sites);
+          if (kDebugMode) {
+            print('Added Sites table in migration to version 2');
+          }
+        }
+        
         if (kDebugMode) {
           print('Database upgraded from version $from to $to');
         }

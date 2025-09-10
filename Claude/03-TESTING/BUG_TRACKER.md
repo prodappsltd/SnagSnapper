@@ -1,6 +1,6 @@
 # Bug Tracker
-**Last Updated**: 2025-08-21
-**Total Bugs**: 19 (0 Critical, 4 High, 12 Low)
+**Last Updated**: 2025-08-29
+**Total Bugs**: 21 (0 Critical, 4 High, 14 Low)
 
 ---
 
@@ -196,12 +196,44 @@
 **Fix**: Implemented fire-and-forget architecture - removed all sync calls from profile screen, sync now happens in background from MainMenu
 **Fixed in**: 2025-08-21
 
+### Bug #020
+**Severity**: Low
+**Module**: Site/UI
+**Description**: Missing info icons on form fields in Site creation screen
+**Steps to Reproduce**:
+1. Navigate to Create Site screen
+2. Observe form fields
+3. No info icons present to explain field purposes
+**Expected**: All form fields should have info icons with help text
+**Actual**: Fields missing info icons
+**Status**: Fixed ✅
+**Assigned**: Development Team
+**Fix**: Added info icons with dismissible popup dialogs to all form fields (Company Name, Site Name, Location, Contact Person, Contact Phone, Expected Completion). Popups can be dismissed by tapping outside or using the "Got it" button
+**Fixed in**: 2025-08-29
+
+### Bug #021
+**Severity**: Low
+**Module**: Site/UI
+**Description**: "Add more colleagues" button navigates directly to Profile without warning
+**Steps to Reproduce**:
+1. Navigate to Create Site screen
+2. Scroll to colleagues section
+3. Click "Add more colleagues"
+4. User is taken to Profile screen unexpectedly
+**Expected**: User should be warned about navigation and potential data loss
+**Actual**: Direct navigation to Profile without explanation
+**Status**: Fixed ✅
+**Assigned**: Development Team
+**Fix**: Added confirmation dialog explaining that colleagues are managed in Profile settings and asking for confirmation before navigating
+**Fixed in**: 2025-08-29
+
 ---
 
 ## 📊 Bug Statistics
 
 ### By Module
 - Profile UI: 5 bugs
+- Site UI: 2 bugs
 - Sync Service: 3 bugs
 - Images: 2 bugs
 - Database: 1 bug
@@ -209,9 +241,9 @@
 - Other: 1 bug
 
 ### By Status
-- Open: 12
+- Open: 11
 - In Progress: 0
-- Fixed: 8
+- Fixed: 10
 - Verified: 0
 
 ### Trend

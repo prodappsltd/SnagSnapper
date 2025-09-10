@@ -113,43 +113,46 @@ The Sites module enables construction site management with offline-first archite
 
 ### 4.2 Data Models
 
-#### 4.2.1 Site Model
+#### 4.2.1 Site Model (Updated 2025-08-28)
 ```dart
 class Site {
   // Identity
   String id;                        // UUID v4 (locally generated)
   String ownerUID;                  // Firebase UID of owner
-  String ownerEmail;
-  String ownerName;
+  String ownerEmail;                // Used for ownership verification
+  // REMOVED: ownerName - Can be fetched from Profile using ownerUID
   
-  // Core Fields (Owner-editable)
-  String name;                      // Required - Site name
-  String? companyName;              // Optional - Client company
-  String? address;                  // Optional - Site address (renamed from location)
-  String? contactPerson;            // Optional - Client contact name
-  String? contactPhone;             // Optional - Client phone
-  DateTime date;                    // Auto-set creation date
-  DateTime? expectedCompletion;     // Optional - Target completion
+  // Core Fields (UI Visibility noted)
+  String name;                      // Required - Site name (UI visible)
+  String? companyName;              // Optional - Client company or name (UI visible)
+  String? address;                  // Optional - Site address (UI visible)
+  String? contactPerson;            // Optional - Client contact name (UI visible)
+  String? contactPhone;             // Optional - Client phone (UI visible)
+  DateTime date;                    // Site creation date (Auto-set, not UI visible)
+  DateTime? expectedCompletion;     // Optional - Target completion (UI visible)
   
   // Site Image
-  String? imageLocalPath;           // Local file path
-  String? imageFirebasePath;        // Firebase Storage path
+  String? imageLocalPath;           // Local file path (System-managed)
+  String? imageFirebasePath;        // Firebase Storage path (System-managed)
   
-  // Settings (Hidden from colleagues)
-  int pictureQuality;               // 0-2 (kept for future use)
-  bool archive;                     // Archive status
+  // Settings
+  int pictureQuality;               // 0-2 (Low, Medium, High) for PDF (UI visible)
+  bool archive;                     // Archive status (Not in create UI, editable later)
   
   // Sharing & Permissions
   Map<String, String> sharedWith;  // {email: permission}
-  // Permissions: VIEW, FIXER, CONTRIBUTOR
+  // Permissions: VIEW, FIXER, CONTRIBUTOR only
+  // NOTE: Owner is NOT a permission level - identified by ownerEmail match
   
   // Statistics (Auto-calculated)
   int totalSnags;                   // Total snag count
   int openSnags;                    // Open snag count  
   int closedSnags;                  // Closed snag count
   
-  // Categories (Site-specific)
-  List<String> snagCategories;      // Custom categories for this site
+  // Categories (Site-specific) - CHANGED FROM LIST TO MAP
+  Map<int, String> snagCategories;  // {1: 'Electrical', 2: 'Plumbing'}
+  // Categories are added dynamically when creating snags
+  // Empty by default, populated as snags are created
   
   // Sync Management
   bool needsSiteSync;               // Site data changed
@@ -170,6 +173,11 @@ class Site {
   // Versioning
   int localVersion;
   int firebaseVersion;
+  
+  // Metadata
+  DateTime updatedAt;               // Last update timestamp
+  // REMOVED: createdAt - Redundant with 'date' field
+  // REMOVED: isOwned - Calculated at runtime via isOwnedBy(userEmail) method
 }
 ```
 
@@ -239,34 +247,39 @@ class Snag {
 }
 ```
 
-### 4.3 Permission Model
+### 4.3 Permission Model (Updated 2025-08-28)
 
 #### 4.3.1 Permission Levels
-1. **OWNER** - Full control
-   - All CRUD operations on site and snags
-   - Manage sharing and permissions
-   - Delete site
-   - Assign snags to colleagues
+**IMPORTANT**: Owner is NOT a permission level. Ownership is determined by comparing site's ownerEmail with current user's email.
 
-2. **CONTRIBUTOR** - Can create and work
+1. **VIEW** - Read-only access (Default permission)
+   - View all site info and snags
+   - Cannot create or edit anything
+   - Cannot be assigned to snags
+
+2. **FIXER** - Work on assigned snags only
+   - View site info
+   - View ONLY assigned snags (cannot see other snags)
+   - Add fix information to assigned snags (fix description, fix images)
+   - Mark assigned snags as complete (pending owner confirmation)
+   - Cannot create new snags
+   - Cannot edit snag core details
+
+3. **CONTRIBUTOR** - Can create and work
    - View all site info and snags
    - Create new snags (tracked as creator)
-   - Edit assigned snag fix fields
-   - Cannot assign snags
-   - Cannot edit others' snags
-   - Manually granted by owner
+   - Edit their own created snags
+   - Work on assigned snags like FIXER
+   - Cannot assign snags to others (owner only)
+   - Cannot delete snags
 
-3. **FIXER** - Work on assigned only
-   - View site info
-   - See ONLY assigned snags
-   - Edit fix fields on assigned snags
-   - Cannot create new snags
-   - Auto-granted when snag assigned
-
-4. **VIEW** - Read-only access
-   - View site and all snags
-   - Cannot edit anything
-   - Cannot create snags
+**Site Owner** (not a permission, identified by email):
+   - Full control over site and all snags
+   - Manage sharing and permissions
+   - Assign snags to colleagues
+   - Edit any snag details
+   - Confirm or reject completed fixes
+   - Archive or delete site
 
 #### 4.3.2 Field-Level Permissions
 
@@ -419,15 +432,20 @@ CREATE TABLE snags (
 
 ### 4.5 User Flows
 
-#### 4.5.1 Site Creation Flow
+#### 4.5.1 Site Creation Flow (Updated 2025-08-29)
 ```
 1. User navigates to Sites → My Sites
 2. Taps "Create Site" (Pro users only)
 3. Form appears with fields:
-   - Name (required)
-   - Company, Address, Contact (optional)
-   - Expected Completion (optional)
+   - Name (required) [ℹ️ Info icon: "Provide a unique, descriptive name for this site (e.g., 'Main Street Renovation', 'Office Building Phase 2')"]
+   - Company Name (optional) [ℹ️ Info icon: "Enter the company or client name associated with this site"]
+   - Address (optional) [ℹ️ Info icon: "Enter the full street address or location description"]
+   - Contact Person (optional) [ℹ️ Info icon: "Name of the primary contact person at this site"]
+   - Contact Phone (optional) [ℹ️ Info icon: "Phone number of the site contact person"]
+   - Expected Completion (optional) [ℹ️ Info icon: "Select the anticipated project completion date"]
+   - Picture Quality selector (default: Medium)
    - Site Image (optional)
+   - Share with Colleagues (tap to cycle: VIEW → FIXER → CONTRIBUTOR)
 4. User fills form and taps Save
 5. System:
    - Generates UUID locally
@@ -1192,7 +1210,15 @@ class Colleague {
 - **Date Format**: Toggle between UK/US formats
 - **Sync Indicator**: Shows pending changes count
 
-#### 5.4.2 Sync Indicator Design (Selected: Option C)
+#### 5.4.2 General UI Requirements (Added 2025-08-28)
+**Information Icons for Form Fields**
+- All user-editable form fields should have an info icon (ℹ️)
+- Tapping the icon shows a tooltip/popup with help text
+- Help text should explain the field's purpose and any validation rules
+- Icons should be subtle and positioned consistently (e.g., right side of field label)
+- Implementation: Use IconButton with Tooltip or custom popup dialog
+
+#### 5.4.3 Sync Indicator Design (Selected: Option C)
 **Status Bar Implementation**
 - Position: Below app bar
 - Shows: "X changes pending sync" 
@@ -1595,7 +1621,16 @@ dependencies:
   - Added imageMarkedForDeletion and signatureMarkedForDeletion fields
   - Documented critical delete-then-add offline scenario
   - Fixed file naming to use static names (profile.jpg, signature.jpg) for auto-overwrite
-- **Next Update**: Sites module requirements (when in scope)
+- **2025-08-28**: Updated Sites module based on implementation review:
+  - Removed ownerName field (redundant with ownerUID)
+  - Removed createdAt field (redundant with date field)
+  - Removed isOwned field (calculated at runtime)
+  - Changed snagCategories from List<String> to Map<int, String> for consistency
+  - Clarified that Owner is NOT a permission level
+  - Updated permission descriptions for VIEW, FIXER, CONTRIBUTOR
+  - Added UI field visibility annotations
+  - Added info icon requirement for all form fields
+  - Updated Site Creation Flow with all fields and help text
 
 ---
 
