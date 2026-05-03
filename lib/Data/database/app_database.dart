@@ -240,10 +240,8 @@ class AppDatabase extends _$AppDatabase {
 /// Open database connection
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    // Ensure SQLite3 flutter libs are initialized
-    if (Platform.isAndroid || Platform.isIOS) {
-      await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
-    }
+    // Note: applyWorkaroundToOpenSqlite3OnOldAndroidVersions was removed in sqlite3_flutter_libs 0.6.0
+    // The workaround is no longer needed for modern Android versions
 
     // Get database path
     final dbPath = await AppDatabase._getDatabasePath();

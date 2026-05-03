@@ -2,17 +2,15 @@
 
 import 'dart:convert';
 import 'package:encrypt/encrypt.dart';
-import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
+// TODO: Firebase Dynamic Links is discontinued - to be replaced with alternative solution
+// import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
 import 'package:rflutter_alert/rflutter_alert.dart';
 import 'package:uuid/uuid.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-
-import '../Data/contentProvider.dart';
 
 const kColorPrimary = Color(0xff283149);
 const kColorPrimaryLight = Color(0xff424B67);
@@ -96,6 +94,10 @@ const String DATE_CREATED = 'DATE_CREATED';
 const String SHARED_WITH = 'SHARED_WITH';
 const int FRACTION = 4;
 
+/// Maximum number of colleagues allowed per user.
+/// This limit is enforced in both Profile and Create Site screens.
+const int MAX_COLLEAGUES = 13;
+
 double getProportionalHeightForTopImage(BuildContext context, int fractionOfScreen) =>
     MediaQuery.of(context).size.height / fractionOfScreen;
 
@@ -117,7 +119,11 @@ String getuID() {
   return Uuid().v4();
 }
 
-Future<String?> openGallery(BuildContext context1,  double maxImageSize) async {
+/// Legacy image picker functions for snag screens
+/// These use base64 encoding and are kept for backwards compatibility
+/// For site images, use ReusableImagePicker + ImageStorageService instead
+
+Future<String?> openGallery(BuildContext context1, double maxImageSize) async {
   final picker = ImagePicker();
   var gallery = await picker.pickImage(
     source: ImageSource.gallery,
@@ -133,7 +139,6 @@ Future<String?> openGallery(BuildContext context1,  double maxImageSize) async {
   return null;
 }
 
-
 Future<String?> openCamera(BuildContext context1, double maxImageSize) async {
   try {
     XFile? picture = await ImagePicker().pickImage(
@@ -142,9 +147,13 @@ Future<String?> openCamera(BuildContext context1, double maxImageSize) async {
       maxWidth: maxImageSize,
       preferredCameraDevice: CameraDevice.rear,
     );
-    if (!context1.mounted) return null;
-    _dealWithSaving(picture, true, context1);
-  }on PlatformException catch (e){
+    if (picture != null) {
+      var bytes = await picture.readAsBytes();
+      if (kDebugMode) print('Camera image bytes: ${bytes.length / 1024} KB');
+      if (!context1.mounted) return null;
+      Navigator.of(context1).pop(base64Encode(bytes));
+    }
+  } on PlatformException catch (e) {
     await showDialog(context: context1, builder: (BuildContext context) {
       return AlertDialog(
         title: Icon(
@@ -152,25 +161,15 @@ Future<String?> openCamera(BuildContext context1, double maxImageSize) async {
           size: 35,
           color: Theme.of(context1).colorScheme.error,
         ),
-        content: Text("${e.message?? ''}\n\nPlease enable camera/storage/library permissions in settings", textAlign: TextAlign.center,),
+        content: Text("${e.message ?? ''}\n\nPlease enable camera/storage/library permissions in settings", textAlign: TextAlign.center,),
       );
     });
     Navigator.pop(context1);
   }
-}
-
-_dealWithSaving(XFile? pic, bool saveExternally, BuildContext context) async {
-  if (pic == null) return;
-  String? completePath = await Provider.of<CP>(context, listen: false).saveNewPicture(pic, siteID: null, storeExternally: saveExternally, snagID: null);
-  //if (completePath == null) await showFailureAlert();
-  if (completePath == null) return;
-  var temp = completePath;
-  //setState(() => widget.profile.imageLogoPath = temp);
-  //Navigator.pop(context);
+  return null;
 }
 
 Future<String?> optionsDialogBox(BuildContext context1, double maxImageSize) {
-  //return optionsDialogBoxPretty(context1);
   return showDialog(
       context: context1,
       builder: (BuildContext context) {
@@ -180,13 +179,13 @@ Future<String?> optionsDialogBox(BuildContext context1, double maxImageSize) {
               children: <Widget>[
                 ListTile(
                   leading: Icon(Icons.camera_alt_outlined, color: Theme.of(context1).colorScheme.primary, size: 40.0,),
-                  title: const Text('OPEN CAMERA', style: TextStyle(fontSize: 16.0)),
+                  title: const Text('CAMERA', style: TextStyle(fontSize: 16.0)),
                   onTap: () => openCamera(context1, maxImageSize),
                 ),
                 const Divider(height: 10.0,),
                 ListTile(
-                  leading: Icon(Icons.collections,color: Theme.of(context1).colorScheme.primary, size: 40.0,),
-                  title: const Text('SELECT FROM GALLERY', style: TextStyle(fontSize: 16.0)),
+                  leading: Icon(Icons.collections, color: Theme.of(context1).colorScheme.primary, size: 40.0,),
+                  title: const Text('GALLERY', style: TextStyle(fontSize: 16.0)),
                   onTap: () => openGallery(context1, maxImageSize),
                 ),
               ],
@@ -200,28 +199,29 @@ Future<String?> optionsDialogBoxWithDEL(BuildContext context1, callBackDelete) {
   return showDialog(
       context: context1,
       builder: (BuildContext context) {
+        final theme = Theme.of(context);
         return AlertDialog(
           content: SingleChildScrollView(
             child: ListBody(
               children: <Widget>[
                 ListTile(
                   dense: false,
-                  leading: const Icon(Icons.camera_alt_outlined, color: Colors.deepOrange, size: 40.0,),
-                  title: const Text('OPEN CAMERA', style: TextStyle(fontSize: 16.0)),
+                  leading: Icon(Icons.camera_alt_outlined, color: theme.colorScheme.primary, size: 40.0,),
+                  title: const Text('CAMERA', style: TextStyle(fontSize: 16.0)),
                   onTap: () => openCamera(context1, 1000),
                 ),
                 const Divider(height: 10.0,),
                 ListTile(
                   dense: false,
-                  leading: const Icon(Icons.collections,color: Colors.deepOrange, size: 40.0,),
-                  title: const Text('SELECT FROM GALLERY', style: TextStyle(fontSize: 16.0)),
+                  leading: Icon(Icons.collections, color: theme.colorScheme.primary, size: 40.0,),
+                  title: const Text('GALLERY', style: TextStyle(fontSize: 16.0)),
                   onTap: () => openGallery(context1, 1000),
                 ),
                 const Divider(height: 10.0,),
                 ListTile(
                   dense: false,
-                  leading: const Icon(Icons.delete_outline,color: Colors.deepOrange, size: 40.0,),
-                  title: const Text('DELETE PIC', style: TextStyle(fontSize: 16.0)),
+                  leading: Icon(Icons.delete_outline, color: theme.colorScheme.error, size: 40.0,),
+                  title: Text('DELETE', style: TextStyle(fontSize: 16.0, color: theme.colorScheme.error)),
                   onTap: callBackDelete
                 ),
               ],
@@ -236,70 +236,82 @@ Future<String?> optionsDialogBoxWithDEL(BuildContext context1, callBackDelete) {
 
 
 
+// TODO: Firebase Dynamic Links is discontinued - commented out for now
+// Future<Uri?> createDynamicLinkForThisSite(String userUID, String? siteUID) async {
+//   if (siteUID == null || siteUID.isEmpty) return null;
+//   final DynamicLinkParameters parameters = DynamicLinkParameters(
+//     // Firebase assigned domain
+//     uriPrefix: 'https://snagsnapper.productiveapps.co.uk', // This should also be updated in Android Manifest.com under intent filters
+//     // Link the target app will try to open
+//     link: Uri.parse('https://snagsnapper.productiveapps.co.uk/?ownerID=$userUID&siteID=$siteUID'),
+//     androidParameters: AndroidParameters(
+//       // Link to open if app isn't installed!
+//       fallbackUrl: Uri.parse('https://play.google.com/store/apps/details?id=com.productiveapps.snagsnapper'),
+//       packageName: 'com.productiveapps.snagsnapper',
+//       minimumVersion: 1,
+//     ),
+//     iosParameters: IOSParameters(
+//       bundleId: 'com.productiveapps.snagsnapper',
+//       fallbackUrl: Uri.parse('https://play.google.com/store/apps/details?id=com.productiveapps.snagsnapper'),
+//       ipadFallbackUrl: Uri.parse('https://play.google.com/store/apps/details?id=com.productiveapps.snagsnapper'),
+//       ipadBundleId: 'com.productiveapps.snagsnapper',
+//       minimumVersion: '0',
+//       appStoreId: '6474559094',
+//     ),
+//     navigationInfoParameters: const NavigationInfoParameters(
+//       forcedRedirectEnabled: false,
+//     ),
+//     //dynamicLinkParametersOptions: DynamicLinkParametersOptions(
+//     // shortDynamicLinkPathLength: ShortDynamicLinkPathLength.short,
+//     //),
+//   );
+//   var dynamicLinks = FirebaseDynamicLinks.instance;
+//   return (await dynamicLinks.buildShortLink(parameters)).shortUrl;
+// }
 
-
-
+// Stub function - returns null until dynamic links replacement is implemented
 Future<Uri?> createDynamicLinkForThisSite(String userUID, String? siteUID) async {
-  if (siteUID == null || siteUID.isEmpty) return null;
-  final DynamicLinkParameters parameters = DynamicLinkParameters(
-    // Firebase assigned domain
-    uriPrefix: 'https://snagsnapper.productiveapps.co.uk', // This should also be updated in Android Manifest.com under intent filters
-    // Link the target app will try to open
-    link: Uri.parse('https://snagsnapper.productiveapps.co.uk/?ownerID=$userUID&siteID=$siteUID'),
-    androidParameters: AndroidParameters(
-      // Link to open if app isn't installed!
-      fallbackUrl: Uri.parse('https://play.google.com/store/apps/details?id=com.productiveapps.snagsnapper'),
-      packageName: 'com.productiveapps.snagsnapper',
-      minimumVersion: 1,
-    ),
-    iosParameters: IOSParameters(
-      bundleId: 'com.productiveapps.snagsnapper',
-      fallbackUrl: Uri.parse('https://play.google.com/store/apps/details?id=com.productiveapps.snagsnapper'),
-      ipadFallbackUrl: Uri.parse('https://play.google.com/store/apps/details?id=com.productiveapps.snagsnapper'),
-      ipadBundleId: 'com.productiveapps.snagsnapper',
-      minimumVersion: '0',
-      appStoreId: '6474559094',
-    ),
-    navigationInfoParameters: const NavigationInfoParameters(
-      forcedRedirectEnabled: false,
-    ),
-    //dynamicLinkParametersOptions: DynamicLinkParametersOptions(
-    // shortDynamicLinkPathLength: ShortDynamicLinkPathLength.short,
-    //),
-  );
-  var dynamicLinks = FirebaseDynamicLinks.instance;
-  return (await dynamicLinks.buildShortLink(parameters)).shortUrl;
+  // TODO: Implement alternative to Firebase Dynamic Links
+  return null;
 }
 
+// TODO: Firebase Dynamic Links is discontinued - commented out for now
+// Future<Uri> createDynamicLinkForThisReport(String URL) async {
+//   final DynamicLinkParameters parameters = DynamicLinkParameters(
+//     uriPrefix: 'https://snagsnapper.productiveapps.co.uk',
+//     link: Uri.parse(URL),
+//     navigationInfoParameters: const NavigationInfoParameters(
+//       forcedRedirectEnabled: true,
+//     ),
+// //    dynamicLinkParametersOptions: DynamicLinkParametersOptions(
+// //      shortDynamicLinkPathLength: ShortDynamicLinkPathLength.short,
+// //    ),
+//
+// //      googleAnalyticsParameters: GoogleAnalyticsParameters(
+// //        campaign: 'example-promo',
+// //        medium: 'social',
+// //        source: 'orkut',
+// //      ),
+// //      itunesConnectAnalyticsParameters: ItunesConnectAnalyticsParameters(
+// //        providerToken: '123456',
+// //        campaignToken: 'example-promo',
+// //      ),
+// //      socialMetaTagParameters:  SocialMetaTagParameters(
+// //        title: 'Example of a Dynamic Link',
+// //        description: 'This link works whether app is installed or not!',
+// //      ),
+//   );
+//
+//   var link = (await FirebaseDynamicLinks.instance.buildShortLink(parameters)).shortUrl;
+//   if (kDebugMode) print('Complete Report link: $URL');
+//   return link;
+// }
+
+// Stub function - returns the original URL until dynamic links replacement is implemented
 Future<Uri> createDynamicLinkForThisReport(String URL) async {
-  final DynamicLinkParameters parameters = DynamicLinkParameters(
-    uriPrefix: 'https://snagsnapper.productiveapps.co.uk',
-    link: Uri.parse(URL),
-    navigationInfoParameters: const NavigationInfoParameters(
-      forcedRedirectEnabled: true,
-    ),
-//    dynamicLinkParametersOptions: DynamicLinkParametersOptions(
-//      shortDynamicLinkPathLength: ShortDynamicLinkPathLength.short,
-//    ),
-
-//      googleAnalyticsParameters: GoogleAnalyticsParameters(
-//        campaign: 'example-promo',
-//        medium: 'social',
-//        source: 'orkut',
-//      ),
-//      itunesConnectAnalyticsParameters: ItunesConnectAnalyticsParameters(
-//        providerToken: '123456',
-//        campaignToken: 'example-promo',
-//      ),
-//      socialMetaTagParameters:  SocialMetaTagParameters(
-//        title: 'Example of a Dynamic Link',
-//        description: 'This link works whether app is installed or not!',
-//      ),
-  );
-
-  var link = (await FirebaseDynamicLinks.instance.buildShortLink(parameters)).shortUrl;
-  if (kDebugMode) print('Complete Report link: $URL');
-  return link;
+  // TODO: Implement alternative to Firebase Dynamic Links
+  if (kDebugMode) print('Dynamic Links disabled - returning original URL: $URL');
+  return Uri.parse(URL);
 }
 
 String encryptText(String text) {

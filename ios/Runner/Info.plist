@@ -2,16 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>FirebaseDynamicLinksCustomDomains</key>
-    <array>
-        <string>https://snagsnapper.productiveapps.co.uk</string>
-    </array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-   	<string> SnagSnapper app needs access to camera to enable you to be able to take photos of snags using this app. Please grant this permission for the app to work as intended.</string>
-   	<key>NSPhotoLibraryUsageDescription</key>
-    <string> SnagSnapper app needs access to the photo library to enable you to access and store photos in the library which you take while using the app. Please grant this permission for the app to work as intended. </string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -49,12 +41,41 @@
 			</array>
 		</dict>
 	</array>
-	<key>GIDClientID</key>
-	<string>752613191889-9ir7991g9edtl69hviacf2k4rag9heou.apps.googleusercontent.com</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FirebaseDynamicLinksCustomDomains</key>
+	<array>
+		<string>https://snagsnapper.productiveapps.co.uk</string>
+	</array>
+	<key>GIDClientID</key>
+	<string>752613191889-9ir7991g9edtl69hviacf2k4rag9heou.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string> SnagSnapper app needs access to camera to enable you to be able to take photos of snags using this app. Please grant this permission for the app to work as intended.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string> SnagSnapper app needs access to the photo library to enable you to access and store photos in the library which you take while using the app. Please grant this permission for the app to work as intended. </string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>FlutterSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

@@ -38,6 +38,7 @@ import 'package:shared_preferences/src/shared_preferences_legacy.dart' as _i17;
 // ignore_for_file: unnecessary_parenthesis
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
+// ignore_for_file: invalid_use_of_internal_member
 
 class _FakeFirebaseApp_0 extends _i1.SmartFake implements _i2.FirebaseApp {
   _FakeFirebaseApp_0(Object parent, Invocation parentInvocation)
@@ -94,75 +95,81 @@ class _FakeConfirmationResult_9 extends _i1.SmartFake
     : super(parent, parentInvocation);
 }
 
-class _FakeUserMetadata_10 extends _i1.SmartFake implements _i4.UserMetadata {
-  _FakeUserMetadata_10(Object parent, Invocation parentInvocation)
+class _FakePasswordValidationStatus_10 extends _i1.SmartFake
+    implements _i4.PasswordValidationStatus {
+  _FakePasswordValidationStatus_10(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMultiFactor_11 extends _i1.SmartFake implements _i5.MultiFactor {
-  _FakeMultiFactor_11(Object parent, Invocation parentInvocation)
+class _FakeUserMetadata_11 extends _i1.SmartFake implements _i4.UserMetadata {
+  _FakeUserMetadata_11(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeIdTokenResult_12 extends _i1.SmartFake implements _i4.IdTokenResult {
-  _FakeIdTokenResult_12(Object parent, Invocation parentInvocation)
+class _FakeMultiFactor_12 extends _i1.SmartFake implements _i5.MultiFactor {
+  _FakeMultiFactor_12(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeUser_13 extends _i1.SmartFake implements _i5.User {
-  _FakeUser_13(Object parent, Invocation parentInvocation)
+class _FakeIdTokenResult_13 extends _i1.SmartFake implements _i4.IdTokenResult {
+  _FakeIdTokenResult_13(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeAndroidDeviceInfo_14 extends _i1.SmartFake
+class _FakeUser_14 extends _i1.SmartFake implements _i5.User {
+  _FakeUser_14(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeAndroidDeviceInfo_15 extends _i1.SmartFake
     implements _i6.AndroidDeviceInfo {
-  _FakeAndroidDeviceInfo_14(Object parent, Invocation parentInvocation)
+  _FakeAndroidDeviceInfo_15(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeIosDeviceInfo_15 extends _i1.SmartFake implements _i7.IosDeviceInfo {
-  _FakeIosDeviceInfo_15(Object parent, Invocation parentInvocation)
+class _FakeIosDeviceInfo_16 extends _i1.SmartFake implements _i7.IosDeviceInfo {
+  _FakeIosDeviceInfo_16(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeLinuxDeviceInfo_16 extends _i1.SmartFake
+class _FakeLinuxDeviceInfo_17 extends _i1.SmartFake
     implements _i8.LinuxDeviceInfo {
-  _FakeLinuxDeviceInfo_16(Object parent, Invocation parentInvocation)
+  _FakeLinuxDeviceInfo_17(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeWebBrowserInfo_17 extends _i1.SmartFake
+class _FakeWebBrowserInfo_18 extends _i1.SmartFake
     implements _i9.WebBrowserInfo {
-  _FakeWebBrowserInfo_17(Object parent, Invocation parentInvocation)
+  _FakeWebBrowserInfo_18(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeMacOsDeviceInfo_18 extends _i1.SmartFake
+class _FakeMacOsDeviceInfo_19 extends _i1.SmartFake
     implements _i10.MacOsDeviceInfo {
-  _FakeMacOsDeviceInfo_18(Object parent, Invocation parentInvocation)
+  _FakeMacOsDeviceInfo_19(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeWindowsDeviceInfo_19 extends _i1.SmartFake
+class _FakeWindowsDeviceInfo_20 extends _i1.SmartFake
     implements _i11.WindowsDeviceInfo {
-  _FakeWindowsDeviceInfo_19(Object parent, Invocation parentInvocation)
+  _FakeWindowsDeviceInfo_20(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeBaseDeviceInfo_20 extends _i1.SmartFake
+class _FakeBaseDeviceInfo_21 extends _i1.SmartFake
     implements _i12.BaseDeviceInfo {
-  _FakeBaseDeviceInfo_20(Object parent, Invocation parentInvocation)
+  _FakeBaseDeviceInfo_21(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeAndroidBuildVersion_21 extends _i1.SmartFake
+class _FakeAndroidBuildVersion_22 extends _i1.SmartFake
     implements _i6.AndroidBuildVersion {
-  _FakeAndroidBuildVersion_21(Object parent, Invocation parentInvocation)
+  _FakeAndroidBuildVersion_22(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeIosUtsname_22 extends _i1.SmartFake implements _i7.IosUtsname {
-  _FakeIosUtsname_22(Object parent, Invocation parentInvocation)
+class _FakeIosUtsname_23 extends _i1.SmartFake implements _i7.IosUtsname {
+  _FakeIosUtsname_23(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -183,14 +190,14 @@ class MockFirebaseDatabase extends _i1.Mock implements _i3.FirebaseDatabase {
           as _i2.FirebaseApp);
 
   @override
-  set app(_i2.FirebaseApp? _app) => super.noSuchMethod(
-    Invocation.setter(#app, _app),
+  set app(_i2.FirebaseApp? value) => super.noSuchMethod(
+    Invocation.setter(#app, value),
     returnValueForMissingStub: null,
   );
 
   @override
-  set databaseURL(String? _databaseURL) => super.noSuchMethod(
-    Invocation.setter(#databaseURL, _databaseURL),
+  set databaseURL(String? value) => super.noSuchMethod(
+    Invocation.setter(#databaseURL, value),
     returnValueForMissingStub: null,
   );
 
@@ -714,8 +721,8 @@ class MockFirebaseAuth extends _i1.Mock implements _i5.FirebaseAuth {
           as _i2.FirebaseApp);
 
   @override
-  set app(_i2.FirebaseApp? _app) => super.noSuchMethod(
-    Invocation.setter(#app, _app),
+  set app(_i2.FirebaseApp? value) => super.noSuchMethod(
+    Invocation.setter(#app, value),
     returnValueForMissingStub: null,
   );
 
@@ -814,14 +821,6 @@ class MockFirebaseAuth extends _i1.Mock implements _i5.FirebaseAuth {
             ),
           )
           as _i13.Future<_i5.UserCredential>);
-
-  @override
-  _i13.Future<List<String>> fetchSignInMethodsForEmail(String? email) =>
-      (super.noSuchMethod(
-            Invocation.method(#fetchSignInMethodsForEmail, [email]),
-            returnValue: _i13.Future<List<String>>.value(<String>[]),
-          )
-          as _i13.Future<List<String>>);
 
   @override
   _i13.Future<_i5.UserCredential> getRedirectResult() =>
@@ -1080,15 +1079,6 @@ class MockFirebaseAuth extends _i1.Mock implements _i5.FirebaseAuth {
           as _i13.Future<void>);
 
   @override
-  _i13.Future<void> signOut() =>
-      (super.noSuchMethod(
-            Invocation.method(#signOut, []),
-            returnValue: _i13.Future<void>.value(),
-            returnValueForMissingStub: _i13.Future<void>.value(),
-          )
-          as _i13.Future<void>);
-
-  @override
   _i13.Future<String> verifyPasswordResetCode(String? code) =>
       (super.noSuchMethod(
             Invocation.method(#verifyPasswordResetCode, [code]),
@@ -1146,6 +1136,15 @@ class MockFirebaseAuth extends _i1.Mock implements _i5.FirebaseAuth {
           as _i13.Future<void>);
 
   @override
+  _i13.Future<void> signOut() =>
+      (super.noSuchMethod(
+            Invocation.method(#signOut, []),
+            returnValue: _i13.Future<void>.value(),
+            returnValueForMissingStub: _i13.Future<void>.value(),
+          )
+          as _i13.Future<void>);
+
+  @override
   _i13.Future<void> initializeRecaptchaConfig() =>
       (super.noSuchMethod(
             Invocation.method(#initializeRecaptchaConfig, []),
@@ -1153,6 +1152,22 @@ class MockFirebaseAuth extends _i1.Mock implements _i5.FirebaseAuth {
             returnValueForMissingStub: _i13.Future<void>.value(),
           )
           as _i13.Future<void>);
+
+  @override
+  _i13.Future<_i4.PasswordValidationStatus> validatePassword(
+    _i5.FirebaseAuth? auth,
+    String? password,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#validatePassword, [auth, password]),
+            returnValue: _i13.Future<_i4.PasswordValidationStatus>.value(
+              _FakePasswordValidationStatus_10(
+                this,
+                Invocation.method(#validatePassword, [auth, password]),
+              ),
+            ),
+          )
+          as _i13.Future<_i4.PasswordValidationStatus>);
 }
 
 /// A class which mocks [User].
@@ -1177,7 +1192,7 @@ class MockUser extends _i1.Mock implements _i5.User {
   _i4.UserMetadata get metadata =>
       (super.noSuchMethod(
             Invocation.getter(#metadata),
-            returnValue: _FakeUserMetadata_10(
+            returnValue: _FakeUserMetadata_11(
               this,
               Invocation.getter(#metadata),
             ),
@@ -1204,7 +1219,7 @@ class MockUser extends _i1.Mock implements _i5.User {
   _i5.MultiFactor get multiFactor =>
       (super.noSuchMethod(
             Invocation.getter(#multiFactor),
-            returnValue: _FakeMultiFactor_11(
+            returnValue: _FakeMultiFactor_12(
               this,
               Invocation.getter(#multiFactor),
             ),
@@ -1235,7 +1250,7 @@ class MockUser extends _i1.Mock implements _i5.User {
       (super.noSuchMethod(
             Invocation.method(#getIdTokenResult, [forceRefresh]),
             returnValue: _i13.Future<_i4.IdTokenResult>.value(
-              _FakeIdTokenResult_12(
+              _FakeIdTokenResult_13(
                 this,
                 Invocation.method(#getIdTokenResult, [forceRefresh]),
               ),
@@ -1393,19 +1408,10 @@ class MockUser extends _i1.Mock implements _i5.User {
       (super.noSuchMethod(
             Invocation.method(#unlink, [providerId]),
             returnValue: _i13.Future<_i5.User>.value(
-              _FakeUser_13(this, Invocation.method(#unlink, [providerId])),
+              _FakeUser_14(this, Invocation.method(#unlink, [providerId])),
             ),
           )
           as _i13.Future<_i5.User>);
-
-  @override
-  _i13.Future<void> updateEmail(String? newEmail) =>
-      (super.noSuchMethod(
-            Invocation.method(#updateEmail, [newEmail]),
-            returnValue: _i13.Future<void>.value(),
-            returnValueForMissingStub: _i13.Future<void>.value(),
-          )
-          as _i13.Future<void>);
 
   @override
   _i13.Future<void> updatePassword(String? newPassword) =>
@@ -1486,7 +1492,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#androidInfo),
             returnValue: _i13.Future<_i6.AndroidDeviceInfo>.value(
-              _FakeAndroidDeviceInfo_14(this, Invocation.getter(#androidInfo)),
+              _FakeAndroidDeviceInfo_15(this, Invocation.getter(#androidInfo)),
             ),
           )
           as _i13.Future<_i6.AndroidDeviceInfo>);
@@ -1496,7 +1502,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#iosInfo),
             returnValue: _i13.Future<_i7.IosDeviceInfo>.value(
-              _FakeIosDeviceInfo_15(this, Invocation.getter(#iosInfo)),
+              _FakeIosDeviceInfo_16(this, Invocation.getter(#iosInfo)),
             ),
           )
           as _i13.Future<_i7.IosDeviceInfo>);
@@ -1506,7 +1512,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#linuxInfo),
             returnValue: _i13.Future<_i8.LinuxDeviceInfo>.value(
-              _FakeLinuxDeviceInfo_16(this, Invocation.getter(#linuxInfo)),
+              _FakeLinuxDeviceInfo_17(this, Invocation.getter(#linuxInfo)),
             ),
           )
           as _i13.Future<_i8.LinuxDeviceInfo>);
@@ -1516,7 +1522,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#webBrowserInfo),
             returnValue: _i13.Future<_i9.WebBrowserInfo>.value(
-              _FakeWebBrowserInfo_17(this, Invocation.getter(#webBrowserInfo)),
+              _FakeWebBrowserInfo_18(this, Invocation.getter(#webBrowserInfo)),
             ),
           )
           as _i13.Future<_i9.WebBrowserInfo>);
@@ -1526,7 +1532,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#macOsInfo),
             returnValue: _i13.Future<_i10.MacOsDeviceInfo>.value(
-              _FakeMacOsDeviceInfo_18(this, Invocation.getter(#macOsInfo)),
+              _FakeMacOsDeviceInfo_19(this, Invocation.getter(#macOsInfo)),
             ),
           )
           as _i13.Future<_i10.MacOsDeviceInfo>);
@@ -1536,7 +1542,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#windowsInfo),
             returnValue: _i13.Future<_i11.WindowsDeviceInfo>.value(
-              _FakeWindowsDeviceInfo_19(this, Invocation.getter(#windowsInfo)),
+              _FakeWindowsDeviceInfo_20(this, Invocation.getter(#windowsInfo)),
             ),
           )
           as _i13.Future<_i11.WindowsDeviceInfo>);
@@ -1546,7 +1552,7 @@ class MockDeviceInfoPlugin extends _i1.Mock implements _i16.DeviceInfoPlugin {
       (super.noSuchMethod(
             Invocation.getter(#deviceInfo),
             returnValue: _i13.Future<_i12.BaseDeviceInfo>.value(
-              _FakeBaseDeviceInfo_20(this, Invocation.getter(#deviceInfo)),
+              _FakeBaseDeviceInfo_21(this, Invocation.getter(#deviceInfo)),
             ),
           )
           as _i13.Future<_i12.BaseDeviceInfo>);
@@ -1564,7 +1570,7 @@ class MockAndroidDeviceInfo extends _i1.Mock implements _i6.AndroidDeviceInfo {
   _i6.AndroidBuildVersion get version =>
       (super.noSuchMethod(
             Invocation.getter(#version),
-            returnValue: _FakeAndroidBuildVersion_21(
+            returnValue: _FakeAndroidBuildVersion_22(
               this,
               Invocation.getter(#version),
             ),
@@ -1784,17 +1790,6 @@ class MockAndroidDeviceInfo extends _i1.Mock implements _i6.AndroidDeviceInfo {
           as List<String>);
 
   @override
-  String get serialNumber =>
-      (super.noSuchMethod(
-            Invocation.getter(#serialNumber),
-            returnValue: _i14.dummyValue<String>(
-              this,
-              Invocation.getter(#serialNumber),
-            ),
-          )
-          as String);
-
-  @override
   bool get isLowRamDevice =>
       (super.noSuchMethod(
             Invocation.getter(#isLowRamDevice),
@@ -1927,10 +1922,18 @@ class MockIosDeviceInfo extends _i1.Mock implements _i7.IosDeviceInfo {
           as bool);
 
   @override
+  bool get isiOSAppOnVision =>
+      (super.noSuchMethod(
+            Invocation.getter(#isiOSAppOnVision),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   _i7.IosUtsname get utsname =>
       (super.noSuchMethod(
             Invocation.getter(#utsname),
-            returnValue: _FakeIosUtsname_22(this, Invocation.getter(#utsname)),
+            returnValue: _FakeIosUtsname_23(this, Invocation.getter(#utsname)),
           )
           as _i7.IosUtsname);
 

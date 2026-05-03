@@ -1,4 +1,5 @@
-import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
+// TODO: Firebase Dynamic Links is discontinued - to be replaced with alternative solution
+// import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -35,8 +36,8 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   // Rate my app feature
   final RateMyApp _rateMyApp = RateMyApp(
     preferencesPrefix: 'rateMyApp_snagSnapper',
-    minDays: 4,
-    minLaunches: 10,
+    minDays: 0,  // TODO: Change back to 4 for production
+    minLaunches: 0,  // TODO: Change back to 10 for production
     remindDays: 7,
     remindLaunches: 8,
     googlePlayIdentifier: 'uk.co.productiveapps.snagsnapper',
@@ -66,7 +67,8 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     WidgetsBinding.instance.addObserver(this);
     _setupAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await initDynamicLinks();
+      // TODO: Firebase Dynamic Links is discontinued - commented out for now
+      // await initDynamicLinks();
       await _initRateMyApp();
       await _initializeSyncService();
       _setupConnectivityListener();
@@ -82,36 +84,178 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     try {
       await _rateMyApp.init();
       if (mounted && _rateMyApp.shouldOpenDialog) {
-        _rateMyApp.showRateDialog(
-          context,
-          title: 'Please rate SnagSnapper',
-          message: 'If this app has helped you, please consider a few minutes rating it as it helps a small business to support the app.',
-          rateButton: 'RATE',
-          noButton: 'NO THANKS',
-          laterButton: 'MAYBE LATER',
-          listener: (button) {
-            switch (button) {
-              case RateMyAppDialogButton.rate:
-                if (kDebugMode) print('User chose to rate the app');
-                break;
-              case RateMyAppDialogButton.later:
-                if (kDebugMode) print('User chose maybe later');
-                break;
-              case RateMyAppDialogButton.no:
-                if (kDebugMode) print('User declined to rate');
-                break;
-            }
-            return true;
-          },
-          ignoreNativeDialog: Platform.isAndroid || Platform.isIOS,
-          onDismissed: () {
-            if (kDebugMode) print('Rate dialog dismissed');
-          },
-        );
+        _showCustomRateDialog();
       }
     } catch (e) {
       if (kDebugMode) print('Error initializing RateMyApp: $e');
     }
+  }
+
+  void _showCustomRateDialog() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Rate Dialog',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Container();
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curvedAnimation = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutBack,
+        );
+        return ScaleTransition(
+          scale: curvedAnimation,
+          child: FadeTransition(
+            opacity: animation,
+            child: AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              contentPadding: EdgeInsets.zero,
+              content: Container(
+                width: MediaQuery.of(context).size.width * 0.85,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // App Icon with glow effect
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(22),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFE85D4C).withOpacity(0.4),
+                            blurRadius: 24,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
+                        child: Image.asset(
+                          'images/1024LowPoly.png',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Title
+                    Text(
+                      'Enjoying SnagSnapper?',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Star rating display (decorative)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Icon(
+                            Icons.star_rounded,
+                            size: 32,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Message
+                    Text(
+                      'Your review helps us improve and supports a small business. It only takes a moment!',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Rate Now Button (Primary)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          // TODO: Uncomment when app is published to stores
+                          // _rateMyApp.launchStore();
+                          if (kDebugMode) print('User chose to rate the app - store link not yet available');
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.star_rounded, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Rate Now',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Maybe Later button
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _rateMyApp.callEvent(RateMyAppEventType.laterButtonPressed);
+                          if (kDebugMode) print('User chose maybe later');
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          'Maybe Later',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
   
   void _setupAnimations() {
@@ -347,23 +491,24 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     super.dispose();
   }
 
-  /// Initialise Dynamic Links first
-  initDynamicLinks() async {
-    if (kDebugMode) print('Dynamic link initialisation');
-    if (kDebugMode) print('MAIN Menu >initDynamicLinks: ---- CHECKING FOR DYNAMIC LINKS');
-    // When application is TERMINATED - This gets the link which opened the application
-    final PendingDynamicLinkData? dynamicLink = await FirebaseDynamicLinks.instance.getInitialLink();
-
-    final Uri? deepLink = dynamicLink?.link;
-    if (kDebugMode && deepLink != null) print('DEEP LINK NOT NUll...: ${deepLink.data}');
-    if (deepLink != null) await _dealWithDeepLink(dynamicLink!);
-
-    // When app is in Foreground Or Background - Listener
-    FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData? dynamicLink) async {
-      if (kDebugMode) print(':: APP IN BACKGROUND TRIGGER HERE ::');
-      if (dynamicLink != null) await _dealWithDeepLink(dynamicLink);
-    });
-  }
+  // TODO: Firebase Dynamic Links is discontinued - commented out for now
+  // /// Initialise Dynamic Links first
+  // initDynamicLinks() async {
+  //   if (kDebugMode) print('Dynamic link initialisation');
+  //   if (kDebugMode) print('MAIN Menu >initDynamicLinks: ---- CHECKING FOR DYNAMIC LINKS');
+  //   // When application is TERMINATED - This gets the link which opened the application
+  //   final PendingDynamicLinkData? dynamicLink = await FirebaseDynamicLinks.instance.getInitialLink();
+  //
+  //   final Uri? deepLink = dynamicLink?.link;
+  //   if (kDebugMode && deepLink != null) print('DEEP LINK NOT NUll...: ${deepLink.data}');
+  //   if (deepLink != null) await _dealWithDeepLink(dynamicLink!);
+  //
+  //   // When app is in Foreground Or Background - Listener
+  //   FirebaseDynamicLinks.instance.onLink.listen((PendingDynamicLinkData? dynamicLink) async {
+  //     if (kDebugMode) print(':: APP IN BACKGROUND TRIGGER HERE ::');
+  //     if (dynamicLink != null) await _dealWithDeepLink(dynamicLink);
+  //   });
+  // }
 
   // TODO - See what this does - experiment with an open app
   Future onDidReceiveLocalNotification(int id, String? title, String? body, String? payLoad) async {
@@ -452,45 +597,46 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
 
   }
 
-  /// If dynamic link was found then deal with the deep link it comes with
-  _dealWithDeepLink(PendingDynamicLinkData dynamicLink) async {
-    if (kDebugMode) print ('... Dealing with deep link...');
-    bool result = false;
-    final Uri deepLink = dynamicLink.link;
-    if (deepLink.data != null) {
-      if (kDebugMode) print('Deeplink : $deepLink');
-      if (kDebugMode) print('Deeplink path: ${deepLink.path}');
-      if (deepLink.path.toString().contains('snagsnapper.produtiveapps.co.uk')){
-        var url = '$deepLink';
-        if (kDebugMode) print('DeepLink is a URL');
-        if (await canLaunchUrlString(url)) {
-          if (kDebugMode) print('----Launching URL----');
-          await launchUrlString(url);
-          if (kDebugMode) print('----Launching URL----');
-          return;
-        } else {
-          if (kDebugMode) print('----Can\'t launch URL----');
-          return;
-        }
-      } else {
-        if (kDebugMode) print('Deeplink does NOT contain ::: snagsnapper.produtiveapps.co.uk');
-        String? ownerID = deepLink.queryParameters['ownerID'];
-        String? siteID = deepLink.queryParameters['siteID'];
-        if (kDebugMode) print ('Owner UID Encrypted: $ownerID');
-        if (kDebugMode) print ('Site UID Encrypted: $siteID');
-        //ownerID = decryptText(ownerID??'');
-        //siteID = decryptText(siteID??'');
-        if (kDebugMode) print ('Owner UID: $ownerID');
-        if (kDebugMode) print ('Site UID: $siteID');
-      }
-    }
-    if (deepLink.queryParameters['ownerID'] != null && deepLink.queryParameters['siteID'] != null) {
-      result = await Provider.of<CP>(context, listen: false).downloadSite(deepLink.queryParameters['ownerID']!, deepLink.queryParameters['siteID']!);
-      // result = await Provider.of<CP>(context, listen: false).downloadSite(decryptText(deepLink.queryParameters['ownerID']!), decryptText(deepLink.queryParameters['siteID']!));
-    }
-    if (kDebugMode) print ('*** RESULT: $result');
-    showPopUpResult(result);
-  }
+  // TODO: Firebase Dynamic Links is discontinued - commented out for now
+  // /// If dynamic link was found then deal with the deep link it comes with
+  // _dealWithDeepLink(PendingDynamicLinkData dynamicLink) async {
+  //   if (kDebugMode) print ('... Dealing with deep link...');
+  //   bool result = false;
+  //   final Uri deepLink = dynamicLink.link;
+  //   if (deepLink.data != null) {
+  //     if (kDebugMode) print('Deeplink : $deepLink');
+  //     if (kDebugMode) print('Deeplink path: ${deepLink.path}');
+  //     if (deepLink.path.toString().contains('snagsnapper.produtiveapps.co.uk')){
+  //       var url = '$deepLink';
+  //       if (kDebugMode) print('DeepLink is a URL');
+  //       if (await canLaunchUrlString(url)) {
+  //         if (kDebugMode) print('----Launching URL----');
+  //         await launchUrlString(url);
+  //         if (kDebugMode) print('----Launching URL----');
+  //         return;
+  //       } else {
+  //         if (kDebugMode) print('----Can\'t launch URL----');
+  //         return;
+  //       }
+  //     } else {
+  //       if (kDebugMode) print('Deeplink does NOT contain ::: snagsnapper.produtiveapps.co.uk');
+  //       String? ownerID = deepLink.queryParameters['ownerID'];
+  //       String? siteID = deepLink.queryParameters['siteID'];
+  //       if (kDebugMode) print ('Owner UID Encrypted: $ownerID');
+  //       if (kDebugMode) print ('Site UID Encrypted: $siteID');
+  //       //ownerID = decryptText(ownerID??'');
+  //       //siteID = decryptText(siteID??'');
+  //       if (kDebugMode) print ('Owner UID: $ownerID');
+  //       if (kDebugMode) print ('Site UID: $siteID');
+  //     }
+  //   }
+  //   if (deepLink.queryParameters['ownerID'] != null && deepLink.queryParameters['siteID'] != null) {
+  //     result = await Provider.of<CP>(context, listen: false).downloadSite(deepLink.queryParameters['ownerID']!, deepLink.queryParameters['siteID']!);
+  //     // result = await Provider.of<CP>(context, listen: false).downloadSite(decryptText(deepLink.queryParameters['ownerID']!), decryptText(deepLink.queryParameters['siteID']!));
+  //   }
+  //   if (kDebugMode) print ('*** RESULT: $result');
+  //   showPopUpResult(result);
+  // }
   
   @override
   Widget build(BuildContext context) {

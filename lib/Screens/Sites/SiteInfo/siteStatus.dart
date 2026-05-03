@@ -87,7 +87,8 @@ class _SiteStatusState extends State<SiteStatus> {
     }
     if (kDebugMode) print('SiteStatus: Calling attachListeners()');
     await _attachSiteListener();
-    getDynamicLink();
+    // TODO: Firebase Dynamic Links is discontinued - commented out for now
+    // getDynamicLink();
     listenersSet = true;
     resetCounters();
   }
@@ -1060,29 +1061,30 @@ class _SiteStatusState extends State<SiteStatus> {
         );
   }
 
-  Future getDynamicLink() async {
-    var user = FirebaseAuth.instance.currentUser;
-    // String encryptedUserID = encryptText(user!.uid);
-    // String encryptedSiteID = encryptText(widget.site.uID);
-    // if (kDebugMode) {
-    //   print('UserUID: ${user.uid}');
-    //   print('Encrypted UserID: $encryptedUserID');
-    //   print('Decrypted UserID: ${decryptText(encryptedUserID)}');
-    //   print('SiteUID: ${widget.site.uID}');
-    //   print('Encrypted SiteID: $encryptedSiteID');
-    //   print('Decrypted SiteID: ${decryptText(encryptedSiteID)}');
-    // }
-
-    try {
-      // Bypassing the encryption as it is not decrupting properly!
-      //link = (await createDynamicLinkForThisSite(encryptedUserID, encryptedSiteID)).toString();
-      link = (await createDynamicLinkForThisSite(user!.uid, widget.site.uID)).toString();
-    } on PlatformException catch(e){
-      link = '';
-      if (kDebugMode) print('**************************** - Platform Exception oCcured : ${e.details}');
-    }
-    setState(() => link);
-  }
+  // TODO: Firebase Dynamic Links is discontinued - commented out for now
+  // Future getDynamicLink() async {
+  //   var user = FirebaseAuth.instance.currentUser;
+  //   // String encryptedUserID = encryptText(user!.uid);
+  //   // String encryptedSiteID = encryptText(widget.site.uID);
+  //   // if (kDebugMode) {
+  //   //   print('UserUID: ${user.uid}');
+  //   //   print('Encrypted UserID: $encryptedUserID');
+  //   //   print('Decrypted UserID: ${decryptText(encryptedUserID)}');
+  //   //   print('SiteUID: ${widget.site.uID}');
+  //   //   print('Encrypted SiteID: $encryptedSiteID');
+  //   //   print('Decrypted SiteID: ${decryptText(encryptedSiteID)}');
+  //   // }
+  //
+  //   try {
+  //     // Bypassing the encryption as it is not decrupting properly!
+  //     //link = (await createDynamicLinkForThisSite(encryptedUserID, encryptedSiteID)).toString();
+  //     link = (await createDynamicLinkForThisSite(user!.uid, widget.site.uID)).toString();
+  //   } on PlatformException catch(e){
+  //     link = '';
+  //     if (kDebugMode) print('**************************** - Platform Exception oCcured : ${e.details}');
+  //   }
+  //   setState(() => link);
+  // }
 
 
   networkAlertDialog() {

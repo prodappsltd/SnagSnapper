@@ -37,18 +37,17 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  firebase_core: ^3.15.1
-  firebase_dynamic_links: ^6.1.9
-  firebase_auth: ^5.6.2
-  cloud_firestore: ^5.6.11
-  google_sign_in: ^7.1.1
-  firebase_analytics: ^11.5.2
-  firebase_crashlytics: ^4.3.9
-  firebase_storage: ^12.4.9
-  firebase_database: ^11.0.0  # For device management
-  # For security - D/
-  firebase_app_check: ^0.3.2+9
-  firebase_core_platform_interface: ^6.0.0
+  # Firebase packages - all updated to latest compatible versions
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
+  cloud_firestore: ^6.2.0
+  google_sign_in: ^7.2.0
+  firebase_analytics: ^12.2.0
+  firebase_crashlytics: ^5.1.0
+  firebase_storage: ^13.2.0
+  firebase_database: ^12.2.0  # For device management
+  # For security
+  firebase_app_check: ^0.4.2
   another_flushbar: ^1.12.30
   provider: ^6.1.5
   image_picker: ^1.1.2
@@ -61,7 +60,7 @@ dependencies:
   intl: ^0.20.2
   uuid: ^4.5.1
 
-  json_annotation: ^4.9.0
+  json_annotation: ^4.11.0
   # For image processing and compression
   image: ^4.5.4
   # To create PDF files
@@ -69,14 +68,14 @@ dependencies:
   # To be able to mail PDF files. NEEDED?
   flutter_mailer: ^3.0.1
   # To view PDF files
-  syncfusion_flutter_pdfviewer: ^30.1.40
+  syncfusion_flutter_pdfviewer: ^31.1.21
   path_provider: ^2.1.5
   encrypt: ^5.0.3
   # To have different fonts
-  google_fonts: ^6.2.1
+  google_fonts: ^8.0.0
   #flutter_local_notifications: ^9.6.0
   # To share PDF reports
-  share_plus: ^11.0.0
+  share_plus: ^12.0.2
   # To get signature, handdrawn and saving as image
   signature: ^6.3.0
   # To be able to launch URLs
@@ -85,7 +84,7 @@ dependencies:
   flutter_colorpicker: ^1.1.0
   # To save data locally
   shared_preferences: ^2.5.3
-  connectivity_plus: ^6.0.5
+  connectivity_plus: ^6.1.5
   # Revenue cat, subscription checks
   purchases_flutter: ^9.0.0
   # To create nice looking pop-up alerts
@@ -98,15 +97,15 @@ dependencies:
   # If package name needs changing
   change_app_package_name: ^1.5.0
   # To keep screen awake
-  wakelock_plus: ^1.3.2
-  package_info_plus: ^8.3.0
+  wakelock_plus: ^1.5.1
+  package_info_plus: ^9.0.1
   
   # Database dependencies for offline-first architecture
   drift: ^2.14.0
-  sqlite3_flutter_libs: ^0.5.0
+  sqlite3_flutter_libs: ^0.6.0+eol
   path: ^1.8.0
   rxdart: ^0.28.0  # For reactive streams
-  device_info_plus: ^11.5.0  # For device identification
+  device_info_plus: ^11.2.0  # For device identification (12.x has visionOS API issues)
   workmanager: ^0.9.0+2  # For background sync
 
 
@@ -117,11 +116,11 @@ dev_dependencies:
     sdk: flutter
   build_runner: ^2.6.0
   json_serializable: ^6.10.0
-  fake_cloud_firestore: ^3.0.3
-  firebase_storage_mocks: ^0.7.0
+  fake_cloud_firestore: ^4.1.0
+  firebase_storage_mocks: ^0.8.0
   mockito: ^5.5.0
   drift_dev: ^2.14.0
-  sqlite3: ^2.1.0  # For testing
+  sqlite3: ^3.3.1  # For testing
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

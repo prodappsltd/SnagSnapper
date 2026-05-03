@@ -12,6 +12,7 @@ import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/app_user.dart';
 import 'package:snagsnapper/Data/colleague.dart';
 import 'package:snagsnapper/Constants/validation_rules.dart';
+import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/services/image_storage_service.dart';
 import 'package:snagsnapper/services/image_compression_service.dart';
 import 'signature_capture_screen.dart';
@@ -1406,34 +1407,47 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                 position: _slideAnimation,
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 20),
 
                       // Header
-                      Text(
-                        'My Profile',
-                        style: GoogleFonts.poppins(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'My Profile',
+                          style: GoogleFonts.poppins(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Manage your personal information',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          color: theme.colorScheme.onSurfaceVariant,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Manage your personal information',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+
+                      // Colleague Circles Section (edge-to-edge)
+                      _buildColleagueCircles(),
+
+                      const SizedBox(height: 24),
 
                       // Company Logo Section
-                      _buildCompanyLogoSection(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildCompanyLogoSection(),
+                      ),
 
                       const SizedBox(height: 12),
 
@@ -1452,7 +1466,10 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
                       const SizedBox(height: 32),
 
                       // Profile Form
-                      _buildProfileForm(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _buildProfileForm(),
+                      ),
 
                       const SizedBox(height: 32),
                     ],
@@ -1462,6 +1479,507 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Build colleague circles - 13 circular placeholders in horizontal scroll
+  /// Shows first 2 letters of name for existing colleagues, + for empty slots
+  Widget _buildColleagueCircles() {
+    final theme = Theme.of(context);
+    final colleagueCount = _colleagues.length;
+    final isAtLimit = colleagueCount >= MAX_COLLEAGUES;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.15),
+            width: 1,
+          ),
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section label with counter badge
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+            child: Row(
+              children: [
+                Text(
+                  'Manage Colleagues',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                // Counter badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isAtLimit
+                        ? Colors.orange.withValues(alpha: 0.2)
+                        : theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$colleagueCount/$MAX_COLLEAGUES',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isAtLimit
+                          ? Colors.orange.shade800
+                          : theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Horizontal scroll of circles with names
+          SizedBox(
+            height: 100,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: MAX_COLLEAGUES,
+              itemBuilder: (context, index) {
+                final bool hasColleague = index < _colleagues.length;
+                final Colleague? colleague = hasColleague ? _colleagues[index] : null;
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: index == 0 ? 16 : 10,
+                    right: index == MAX_COLLEAGUES - 1 ? 16 : 0,
+                  ),
+                  child: _buildColleagueCircleWithName(
+                    colleague: colleague,
+                    index: index,
+                    theme: theme,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build individual colleague circle with name below
+  Widget _buildColleagueCircleWithName({
+    Colleague? colleague,
+    required int index,
+    required ThemeData theme,
+  }) {
+    final bool hasColleague = colleague != null;
+
+    // Get initials from name (first 2 letters, uppercase)
+    String getInitials(String name) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) return '??';
+
+      final words = trimmed.split(' ').where((w) => w.isNotEmpty).toList();
+      if (words.length >= 2) {
+        // First letter of first two words
+        return '${words[0][0]}${words[1][0]}'.toUpperCase();
+      } else if (trimmed.length >= 2) {
+        // First two letters of single word
+        return trimmed.substring(0, 2).toUpperCase();
+      } else {
+        return trimmed[0].toUpperCase();
+      }
+    }
+
+    // Get first name only, truncated if needed
+    String getFirstName(String name) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) return '';
+      final firstName = trimmed.split(' ').first;
+      if (firstName.length > 8) {
+        return '${firstName.substring(0, 7)}…';
+      }
+      return firstName;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (hasColleague) {
+          // Show quick tooltip popup with index for delete functionality
+          _showColleagueTooltip(context, colleague, index);
+        } else {
+          // Add new colleague
+          _onAddColleagueCircleTap();
+        }
+      },
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Circle avatar
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: hasColleague
+                    ? theme.colorScheme.primaryContainer
+                    : theme.colorScheme.surfaceContainerHighest,
+                border: Border.all(
+                  color: hasColleague
+                      ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                      : theme.colorScheme.outline.withValues(alpha: 0.3),
+                  width: 2.5,
+                ),
+                boxShadow: hasColleague
+                    ? [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Center(
+                child: hasColleague
+                    ? Text(
+                        getInitials(colleague.name),
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      )
+                    : Icon(
+                        Icons.add,
+                        size: 28,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Name below
+            Text(
+              hasColleague ? getFirstName(colleague.name) : 'Add',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: hasColleague ? FontWeight.w500 : FontWeight.w400,
+                color: hasColleague
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show quick tooltip popup for colleague info
+  void _showColleagueTooltip(BuildContext context, Colleague colleague, int index) {
+    final theme = Theme.of(context);
+    final overlay = Overlay.of(context);
+
+    late OverlayEntry overlayEntry;
+
+    void removeOverlay() {
+      if (overlayEntry.mounted) {
+        overlayEntry.remove();
+      }
+    }
+
+    void showRemoveConfirmation() {
+      removeOverlay();
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.person_remove_outlined,
+                color: theme.colorScheme.error,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Remove Colleague?',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Remove ${colleague.name} from your colleagues list?',
+            style: GoogleFonts.inter(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                // TODO: Before deleting colleague, check if any site is shared with this colleague
+                // If site is shared with this colleague, show error and prevent deletion
+                // Only delete if NO sites are shared with this colleague
+                // Implementation needed:
+                // 1. Query all sites owned by current user
+                // 2. Check if colleague.email exists in any site's sharedWith map
+                // 3. If found, show error: "Cannot remove - colleague has shared sites"
+                // 4. If not found, proceed with _handleRemoveColleague(index)
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'TODO: Check shared sites before removing ${colleague.name}',
+                      style: GoogleFonts.inter(),
+                    ),
+                    backgroundColor: Colors.orange,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
+              },
+              child: Text(
+                'Remove',
+                style: GoogleFonts.inter(
+                  color: theme.colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => TapRegion(
+        onTapOutside: (_) {
+          removeOverlay();
+        },
+        child: Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              // Semi-transparent background
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: removeOverlay,
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.3),
+                  ),
+                ),
+              ),
+              // Tooltip card centered
+              Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.8, end: 1.0),
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, scale, child) {
+                    return Transform.scale(
+                      scale: scale,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: theme.colorScheme.shadow.withValues(alpha: 0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Avatar
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: theme.colorScheme.primaryContainer,
+                          ),
+                          child: Center(
+                            child: Text(
+                              colleague.name.isNotEmpty
+                                  ? colleague.name.split(' ').length >= 2
+                                      ? '${colleague.name.split(' ')[0][0]}${colleague.name.split(' ')[1][0]}'.toUpperCase()
+                                      : colleague.name.substring(0, colleague.name.length >= 2 ? 2 : 1).toUpperCase()
+                                  : '??',
+                              style: GoogleFonts.poppins(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Name
+                        Text(
+                          colleague.name,
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        // Email
+                        if (colleague.email.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.email_outlined,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  colleague.email,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        // Phone
+                        if (colleague.phone != null && colleague.phone!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.phone_outlined,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                colleague.phone!,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                        // Remove button
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: showRemoveConfirmation,
+                            icon: Icon(
+                              Icons.person_remove_outlined,
+                              size: 18,
+                              color: theme.colorScheme.error,
+                            ),
+                            label: Text(
+                              'Remove',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w500,
+                                color: theme.colorScheme.error,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Tap to dismiss hint
+                        Text(
+                          'Tap anywhere to close',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(overlayEntry);
+
+    // Auto-dismiss after 6 seconds (increased to give time for remove action)
+    Future.delayed(const Duration(seconds: 6), () {
+      removeOverlay();
+    });
+  }
+
+  /// Handle tap on empty colleague circle - opens Add Colleague dialog
+  void _onAddColleagueCircleTap() {
+    // Check if max colleagues reached
+    if (_colleagues.length >= MAX_COLLEAGUES) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Maximum $MAX_COLLEAGUES colleagues allowed'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Show the Add Colleague dialog
+    showDialog(
+      context: context,
+      builder: (context) => AddColleagueDialog(
+        onAdd: _handleAddColleague,
+        existingColleagues: _colleagues,
       ),
     );
   }
@@ -1532,10 +2050,10 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
     final theme = Theme.of(context);
     
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.2),
           width: 1,
@@ -1553,6 +2071,19 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Section Header: Your Information
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                'Your Information',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+
             // Name Field
             _buildModernInputField(
               icon: Icons.person_outline,
@@ -1569,6 +2100,61 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             ),
 
             const SizedBox(height: 20),
+
+            // Phone Field
+            _buildModernInputField(
+              icon: Icons.phone_outlined,
+              label: 'Phone',
+              hint: 'Enter phone number',
+              initialValue: _phoneController.text,
+              controller: _phoneController,
+              isFocused: _focusedField == 'phone',
+              focusNode: _focusNodes['phone'],
+              keyboardType: TextInputType.phone,
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[+0-9]'))],
+              validator: ValidationRules.validatePhone,
+              isRequired: true,
+            ),
+
+            const SizedBox(height: 20),
+
+            // Email Field (Read-only)
+            _buildModernInputField(
+              icon: Icons.email_outlined,
+              label: 'Email',
+              hint: 'Email address',
+              initialValue: _emailController.text,
+              controller: _emailController,
+              enabled: false,
+              isFocused: _focusedField == 'email',
+              focusNode: _focusNodes['email'],
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Email is required';
+                }
+                if (!ValidationRules.emailPattern.hasMatch(value.trim())) {
+                  return 'Invalid email address';
+                }
+                return null;
+              },
+              isRequired: true,
+            ),
+
+            const SizedBox(height: 32),
+
+            // Section Header: Your Company Information
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                'Your Company Information',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
 
             // Job Title Field
             _buildModernInputField(
@@ -1637,48 +2223,6 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
               },
             ),
 
-            const SizedBox(height: 20),
-
-            // Phone Field
-            _buildModernInputField(
-              icon: Icons.phone_outlined,
-              label: 'Phone',
-              hint: 'Enter phone number',
-              initialValue: _phoneController.text,
-              controller: _phoneController,
-              isFocused: _focusedField == 'phone',
-              focusNode: _focusNodes['phone'],
-              keyboardType: TextInputType.phone,
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[+0-9]'))],
-              validator: ValidationRules.validatePhone,
-              isRequired: true,
-            ),
-
-            const SizedBox(height: 20),
-
-            // Email Field (Read-only)
-            _buildModernInputField(
-              icon: Icons.email_outlined,
-              label: 'Email',
-              hint: 'Email address',
-              initialValue: _emailController.text,
-              controller: _emailController,
-              enabled: false,
-              isFocused: _focusedField == 'email',
-              focusNode: _focusNodes['email'],
-              keyboardType: TextInputType.emailAddress,
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Email is required';
-                }
-                if (!ValidationRules.emailPattern.hasMatch(value.trim())) {
-                  return 'Invalid email address';
-                }
-                return null;
-              },
-              isRequired: true,
-            ),
-
             const SizedBox(height: 32),
 
             // Date Format Section
@@ -1690,14 +2234,14 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             _buildSignatureSection(),
             
             const SizedBox(height: 20),
-            
-            // Colleagues Section
-            ColleaguesSection(
-              colleagues: _colleagues,
-              onAddColleague: _handleAddColleague,
-              onRemoveColleague: _handleRemoveColleague,
-              isEditable: !busy,
-            ),
+
+            // Colleagues Section (commented out - replaced by circle avatars above)
+            // ColleaguesSection(
+            //   colleagues: _colleagues,
+            //   onAddColleague: _handleAddColleague,
+            //   onRemoveColleague: _handleRemoveColleague,
+            //   isEditable: !busy,
+            // ),
           ],
         ),
       ),

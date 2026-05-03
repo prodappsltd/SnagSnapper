@@ -1,5 +1,5 @@
 # SnagSnapper Development Roadmap
-**Last Updated**: 2025-08-21
+**Last Updated**: 2025-04-11
 **Overall Progress**: 25% (Profile Module 100% Complete with Colleagues)
 
 ---
@@ -98,6 +98,15 @@ Week 10 (Mar 17-23) : Testing & Deployment
 - Data management
 - Backup/restore
 - About/help
+
+**Current Status** (as of 2025-04-11):
+- ✅ Basic Settings screen (moreOptions.dart) - theme toggle, sign out, about dialog
+- ⚠️ Privacy Policy / Terms of Service - placeholder (needs URLs)
+- ⚠️ Share App links - placeholder (needs store links)
+- ⚠️ SyncSettingsScreen exists but not connected to navigation
+- ❌ Data management - not implemented
+- ❌ Backup/restore - not implemented
+- See BUG_TRACKER.md for detailed TODO list (11 items)
 
 ### 🧪 Module 7: Integration & Testing
 **Duration**: 1 week

@@ -1,6 +1,7 @@
 # Bug Tracker
-**Last Updated**: 2025-08-29
+**Last Updated**: 2025-04-11
 **Total Bugs**: 21 (0 Critical, 4 High, 14 Low)
+**Total TODOs/Placeholders**: 13 (Settings Module + Orphaned Components + Profile)
 
 ---
 
@@ -229,6 +230,135 @@
 
 ---
 
+## 🟠 TODOs & Placeholders (Settings Module)
+
+### TODO #001
+**Type**: Placeholder
+**Module**: Settings/moreOptions
+**File**: `lib/Screens/moreOptions.dart:295-301`
+**Description**: Privacy Policy - Shows "TODO: Privacy Policy" snackbar instead of actual content
+**Required**: Add actual Privacy Policy URL or in-app content
+**Status**: Pending
+**Priority**: Low
+
+### TODO #002
+**Type**: Placeholder
+**Module**: Settings/moreOptions
+**File**: `lib/Screens/moreOptions.dart:313-320`
+**Description**: Terms of Service - Shows "TODO: Terms of Service" snackbar instead of actual content
+**Required**: Add actual Terms of Service URL or in-app content
+**Status**: Pending
+**Priority**: Low
+
+### TODO #003
+**Type**: Placeholder
+**Module**: Settings/moreOptions
+**File**: `lib/Screens/moreOptions.dart:661-667`
+**Description**: Share iOS - Shows "TODO: Share iOS App Store link" snackbar
+**Required**: Add actual App Store link when app is published
+**Status**: Pending
+**Priority**: Low
+
+### TODO #004
+**Type**: Placeholder
+**Module**: Settings/moreOptions
+**File**: `lib/Screens/moreOptions.dart:676-682`
+**Description**: Share Android - Shows "TODO: Share Play Store link" snackbar
+**Required**: Add actual Play Store link when app is published
+**Status**: Pending
+**Priority**: Low
+
+### TODO #005
+**Type**: Incomplete Implementation
+**Module**: Settings/SyncSettings
+**File**: `lib/Screens/settings/sync_settings_screen.dart:147-148`
+**Description**: `_clearSyncQueue()` only clears SharedPreferences key, doesn't clear actual database queue via SyncQueueManager
+**Required**: Implement proper queue clearing through SyncQueueManager
+**Status**: Pending
+**Priority**: Medium
+
+### TODO #006
+**Type**: Not Implemented
+**Module**: Settings/SyncSettings
+**File**: `lib/Screens/settings/sync_settings_screen.dart:437-439`
+**Description**: Error "Details" button has empty `onPressed: () {}` handler - does nothing when tapped
+**Required**: Implement error details dialog showing sync error history
+**Status**: Pending
+**Priority**: Low
+
+### TODO #007
+**Type**: Orphaned Screen
+**Module**: Settings/SyncSettings
+**File**: `lib/Screens/settings/sync_settings_screen.dart`
+**Description**: SyncSettingsScreen exists but has no navigation route - cannot be accessed by users
+**Required**: Add navigation from moreOptions.dart or main settings
+**Status**: Pending
+**Priority**: Medium
+
+### TODO #008
+**Type**: Stub Implementation
+**Module**: Services/BackgroundSync
+**File**: `lib/services/background_sync_service.dart:119-127`
+**Description**: `_checkBatteryLevel()` always returns true - battery check not implemented
+**Required**: Implement actual battery level check using battery_plus package
+**Status**: Pending
+**Priority**: Low
+
+### TODO #009
+**Type**: Stub Implementation
+**Module**: Services/BackgroundSync
+**File**: `lib/services/background_sync_service.dart:129-138`
+**Description**: `_checkStorageSpace()` always returns true - storage check not implemented
+**Required**: Implement actual storage space check using disk_space package
+**Status**: Pending
+**Priority**: Low
+
+### TODO #010
+**Type**: Missing Feature
+**Module**: Settings
+**Description**: Data Management screen not implemented (per ROADMAP.md Module 6)
+**Required**: Create data management screen with clear cache, export data options
+**Status**: Planned
+**Priority**: Medium
+
+### TODO #011
+**Type**: Missing Feature
+**Module**: Settings
+**Description**: Backup/Restore functionality not implemented (per ROADMAP.md Module 6)
+**Required**: Implement backup to cloud and restore from cloud features
+**Status**: Planned
+**Priority**: Medium
+
+### TODO #012
+**Type**: Orphaned Component
+**Module**: Profile/Sync
+**File**: `lib/Screens/profile/components/sync_status_indicator.dart`
+**Description**: SyncStatusIndicator widget exists but is NOT integrated anywhere
+**Required**: Consider integrating into MainMenu AppBar for visibility (NOT Profile - Profile auto-syncs when returning to MainMenu)
+**Status**: Pending
+**Priority**: Low
+**Note**: Profile flow is OK - saves locally, then MainMenu auto-syncs. Manual sync may be useful for Sites or as general "sync all" in MainMenu/Settings.
+
+### TODO #013
+**Type**: Missing Feature
+**Module**: Profile/Colleagues
+**File**: `lib/Screens/profile/profile_screen_ui_matched.dart`
+**Description**: Delete colleague from circle UI - requires shared site validation
+**Required**: Before deleting colleague, check if any site is shared with this colleague. Only allow deletion if NO sites are shared.
+**Status**: Pending (UI ready, logic TODO)
+**Priority**: Medium
+**Current State**:
+- ✅ Remove button added to tooltip popup
+- ✅ Confirmation dialog implemented
+- ❌ Actual deletion blocked - shows TODO snackbar
+**Implementation needed**:
+1. Query all sites owned by current user
+2. Check if colleague.email exists in any site's sharedWith map
+3. If found → show error: "Cannot remove - colleague has shared sites"
+4. If not found → proceed with `_handleRemoveColleague(index)`
+
+---
+
 ## 📊 Bug Statistics
 
 ### By Module
@@ -238,6 +368,8 @@
 - Images: 2 bugs
 - Database: 1 bug
 - Tests: 3 bugs
+- Settings: 12 TODOs/placeholders
+- Profile/Colleagues: 1 TODO
 - Other: 1 bug
 
 ### By Status
@@ -245,6 +377,7 @@
 - In Progress: 0
 - Fixed: 10
 - Verified: 0
+- TODOs Pending: 13
 
 ### Trend
 - New this week: 0

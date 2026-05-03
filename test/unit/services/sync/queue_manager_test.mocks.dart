@@ -39,6 +39,7 @@ import 'package:snagsnapper/services/sync/network_monitor.dart' as _i15;
 // ignore_for_file: unnecessary_parenthesis
 // ignore_for_file: camel_case_types
 // ignore_for_file: subtype_of_sealed_class
+// ignore_for_file: invalid_use_of_internal_member
 
 class _FakeMigrationStrategy_0 extends _i1.SmartFake
     implements _i2.MigrationStrategy {
@@ -46,41 +47,41 @@ class _FakeMigrationStrategy_0 extends _i1.SmartFake
     : super(parent, parentInvocation);
 }
 
-class _Fake$ProfilesTable_1 extends _i1.SmartFake
-    implements _i3.$ProfilesTable {
-  _Fake$ProfilesTable_1(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _Fake$SyncQueueTableTable_2 extends _i1.SmartFake
-    implements _i3.$SyncQueueTableTable {
-  _Fake$SyncQueueTableTable_2(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _Fake$SitesTable_3 extends _i1.SmartFake implements _i3.$SitesTable {
-  _Fake$SitesTable_3(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _FakeProfileDao_4 extends _i1.SmartFake implements _i4.ProfileDao {
-  _FakeProfileDao_4(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _FakeSyncQueueDao_5 extends _i1.SmartFake implements _i5.SyncQueueDao {
-  _FakeSyncQueueDao_5(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _FakeSiteDao_6 extends _i1.SmartFake implements _i6.SiteDao {
-  _FakeSiteDao_6(Object parent, Invocation parentInvocation)
-    : super(parent, parentInvocation);
-}
-
-class _Fake$AppDatabaseManager_7 extends _i1.SmartFake
+class _Fake$AppDatabaseManager_1 extends _i1.SmartFake
     implements _i3.$AppDatabaseManager {
-  _Fake$AppDatabaseManager_7(Object parent, Invocation parentInvocation)
+  _Fake$AppDatabaseManager_1(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _Fake$ProfilesTable_2 extends _i1.SmartFake
+    implements _i3.$ProfilesTable {
+  _Fake$ProfilesTable_2(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _Fake$SyncQueueTableTable_3 extends _i1.SmartFake
+    implements _i3.$SyncQueueTableTable {
+  _Fake$SyncQueueTableTable_3(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _Fake$SitesTable_4 extends _i1.SmartFake implements _i3.$SitesTable {
+  _Fake$SitesTable_4(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeProfileDao_5 extends _i1.SmartFake implements _i4.ProfileDao {
+  _FakeProfileDao_5(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeSyncQueueDao_6 extends _i1.SmartFake implements _i5.SyncQueueDao {
+  _FakeSyncQueueDao_6(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeSiteDao_7 extends _i1.SmartFake implements _i6.SiteDao {
+  _FakeSiteDao_7(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -189,42 +190,48 @@ class _FakeAppDatabase_25 extends _i1.SmartFake implements _i3.AppDatabase {
     : super(parent, parentInvocation);
 }
 
-class _FakeFirebaseFirestore_26 extends _i1.SmartFake
+class _FakeSyncQueueDaoManager_26 extends _i1.SmartFake
+    implements _i5.SyncQueueDaoManager {
+  _FakeSyncQueueDaoManager_26(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeFirebaseFirestore_27 extends _i1.SmartFake
     implements _i9.FirebaseFirestore {
-  _FakeFirebaseFirestore_26(Object parent, Invocation parentInvocation)
+  _FakeFirebaseFirestore_27(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeFirebaseStorage_27 extends _i1.SmartFake
+class _FakeFirebaseStorage_28 extends _i1.SmartFake
     implements _i10.FirebaseStorage {
-  _FakeFirebaseStorage_27(Object parent, Invocation parentInvocation)
+  _FakeFirebaseStorage_28(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeImageStorageService_28 extends _i1.SmartFake
+class _FakeImageStorageService_29 extends _i1.SmartFake
     implements _i11.ImageStorageService {
-  _FakeImageStorageService_28(Object parent, Invocation parentInvocation)
+  _FakeImageStorageService_29(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeConnectivity_29 extends _i1.SmartFake implements _i12.Connectivity {
-  _FakeConnectivity_29(Object parent, Invocation parentInvocation)
+class _FakeConnectivity_30 extends _i1.SmartFake implements _i12.Connectivity {
+  _FakeConnectivity_30(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSharedPreferences_30 extends _i1.SmartFake
+class _FakeSharedPreferences_31 extends _i1.SmartFake
     implements _i13.SharedPreferences {
-  _FakeSharedPreferences_30(Object parent, Invocation parentInvocation)
+  _FakeSharedPreferences_31(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeClient_31 extends _i1.SmartFake implements _i14.Client {
-  _FakeClient_31(Object parent, Invocation parentInvocation)
+class _FakeClient_32 extends _i1.SmartFake implements _i14.Client {
+  _FakeClient_32(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakePingResult_32 extends _i1.SmartFake implements _i15.PingResult {
-  _FakePingResult_32(Object parent, Invocation parentInvocation)
+class _FakePingResult_33 extends _i1.SmartFake implements _i15.PingResult {
+  _FakePingResult_33(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -276,10 +283,21 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
           as _i8.Future<int>);
 
   @override
+  _i3.$AppDatabaseManager get managers =>
+      (super.noSuchMethod(
+            Invocation.getter(#managers),
+            returnValue: _Fake$AppDatabaseManager_1(
+              this,
+              Invocation.getter(#managers),
+            ),
+          )
+          as _i3.$AppDatabaseManager);
+
+  @override
   _i3.$ProfilesTable get profiles =>
       (super.noSuchMethod(
             Invocation.getter(#profiles),
-            returnValue: _Fake$ProfilesTable_1(
+            returnValue: _Fake$ProfilesTable_2(
               this,
               Invocation.getter(#profiles),
             ),
@@ -290,7 +308,7 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i3.$SyncQueueTableTable get syncQueueTable =>
       (super.noSuchMethod(
             Invocation.getter(#syncQueueTable),
-            returnValue: _Fake$SyncQueueTableTable_2(
+            returnValue: _Fake$SyncQueueTableTable_3(
               this,
               Invocation.getter(#syncQueueTable),
             ),
@@ -301,7 +319,7 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i3.$SitesTable get sites =>
       (super.noSuchMethod(
             Invocation.getter(#sites),
-            returnValue: _Fake$SitesTable_3(this, Invocation.getter(#sites)),
+            returnValue: _Fake$SitesTable_4(this, Invocation.getter(#sites)),
           )
           as _i3.$SitesTable);
 
@@ -309,7 +327,7 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i4.ProfileDao get profileDao =>
       (super.noSuchMethod(
             Invocation.getter(#profileDao),
-            returnValue: _FakeProfileDao_4(
+            returnValue: _FakeProfileDao_5(
               this,
               Invocation.getter(#profileDao),
             ),
@@ -320,7 +338,7 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i5.SyncQueueDao get syncQueueDao =>
       (super.noSuchMethod(
             Invocation.getter(#syncQueueDao),
-            returnValue: _FakeSyncQueueDao_5(
+            returnValue: _FakeSyncQueueDao_6(
               this,
               Invocation.getter(#syncQueueDao),
             ),
@@ -331,20 +349,9 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i6.SiteDao get siteDao =>
       (super.noSuchMethod(
             Invocation.getter(#siteDao),
-            returnValue: _FakeSiteDao_6(this, Invocation.getter(#siteDao)),
+            returnValue: _FakeSiteDao_7(this, Invocation.getter(#siteDao)),
           )
           as _i6.SiteDao);
-
-  @override
-  _i3.$AppDatabaseManager get managers =>
-      (super.noSuchMethod(
-            Invocation.getter(#managers),
-            returnValue: _Fake$AppDatabaseManager_7(
-              this,
-              Invocation.getter(#managers),
-            ),
-          )
-          as _i3.$AppDatabaseManager);
 
   @override
   Iterable<_i2.TableInfo<_i2.Table, Object?>> get allTables =>
@@ -554,6 +561,37 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
             returnValueForMissingStub: _i8.Future<void>.value(),
           )
           as _i8.Future<void>);
+
+  @override
+  _i8.Future<Ret> computeWithDatabase<Ret, DB extends _i2.GeneratedDatabase>({
+    required _i8.FutureOr<Ret> Function(DB)? computation,
+    required DB Function(_i2.DatabaseConnection)? connect,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#computeWithDatabase, [], {
+              #computation: computation,
+              #connect: connect,
+            }),
+            returnValue:
+                _i16.ifNotNull(
+                  _i16.dummyValueOrNull<Ret>(
+                    this,
+                    Invocation.method(#computeWithDatabase, [], {
+                      #computation: computation,
+                      #connect: connect,
+                    }),
+                  ),
+                  (Ret v) => _i8.Future<Ret>.value(v),
+                ) ??
+                _FakeFuture_15<Ret>(
+                  this,
+                  Invocation.method(#computeWithDatabase, [], {
+                    #computation: computation,
+                    #connect: connect,
+                  }),
+                ),
+          )
+          as _i8.Future<Ret>);
 
   @override
   _i8.Stream<T> createStream<T extends Object>(
@@ -998,17 +1036,6 @@ class MockSyncQueueDao extends _i1.Mock implements _i5.SyncQueueDao {
           as _i2.DatabaseConnection);
 
   @override
-  _i2.SqlTypes get typeMapping =>
-      (super.noSuchMethod(
-            Invocation.getter(#typeMapping),
-            returnValue: _i16.dummyValue<_i2.SqlTypes>(
-              this,
-              Invocation.getter(#typeMapping),
-            ),
-          )
-          as _i2.SqlTypes);
-
-  @override
   _i2.DriftDatabaseOptions get options =>
       (super.noSuchMethod(
             Invocation.getter(#options),
@@ -1018,6 +1045,17 @@ class MockSyncQueueDao extends _i1.Mock implements _i5.SyncQueueDao {
             ),
           )
           as _i2.DriftDatabaseOptions);
+
+  @override
+  _i2.SqlTypes get typeMapping =>
+      (super.noSuchMethod(
+            Invocation.getter(#typeMapping),
+            returnValue: _i16.dummyValue<_i2.SqlTypes>(
+              this,
+              Invocation.getter(#typeMapping),
+            ),
+          )
+          as _i2.SqlTypes);
 
   @override
   _i2.QueryExecutor get executor =>
@@ -1056,12 +1094,23 @@ class MockSyncQueueDao extends _i1.Mock implements _i5.SyncQueueDao {
   _i3.$SyncQueueTableTable get syncQueueTable =>
       (super.noSuchMethod(
             Invocation.getter(#syncQueueTable),
-            returnValue: _Fake$SyncQueueTableTable_2(
+            returnValue: _Fake$SyncQueueTableTable_3(
               this,
               Invocation.getter(#syncQueueTable),
             ),
           )
           as _i3.$SyncQueueTableTable);
+
+  @override
+  _i5.SyncQueueDaoManager get managers =>
+      (super.noSuchMethod(
+            Invocation.getter(#managers),
+            returnValue: _FakeSyncQueueDaoManager_26(
+              this,
+              Invocation.getter(#managers),
+            ),
+          )
+          as _i5.SyncQueueDaoManager);
 
   @override
   _i8.Future<int> insertItem(_i17.SyncQueueItem? item) =>
@@ -1619,7 +1668,7 @@ class MockProfileSyncHandler extends _i1.Mock
   _i9.FirebaseFirestore get firestore =>
       (super.noSuchMethod(
             Invocation.getter(#firestore),
-            returnValue: _FakeFirebaseFirestore_26(
+            returnValue: _FakeFirebaseFirestore_27(
               this,
               Invocation.getter(#firestore),
             ),
@@ -1630,7 +1679,7 @@ class MockProfileSyncHandler extends _i1.Mock
   _i10.FirebaseStorage get storage =>
       (super.noSuchMethod(
             Invocation.getter(#storage),
-            returnValue: _FakeFirebaseStorage_27(
+            returnValue: _FakeFirebaseStorage_28(
               this,
               Invocation.getter(#storage),
             ),
@@ -1641,7 +1690,7 @@ class MockProfileSyncHandler extends _i1.Mock
   _i11.ImageStorageService get imageStorage =>
       (super.noSuchMethod(
             Invocation.getter(#imageStorage),
-            returnValue: _FakeImageStorageService_28(
+            returnValue: _FakeImageStorageService_29(
               this,
               Invocation.getter(#imageStorage),
             ),
@@ -1751,7 +1800,7 @@ class MockNetworkMonitor extends _i1.Mock implements _i15.NetworkMonitor {
   _i12.Connectivity get connectivity =>
       (super.noSuchMethod(
             Invocation.getter(#connectivity),
-            returnValue: _FakeConnectivity_29(
+            returnValue: _FakeConnectivity_30(
               this,
               Invocation.getter(#connectivity),
             ),
@@ -1762,7 +1811,7 @@ class MockNetworkMonitor extends _i1.Mock implements _i15.NetworkMonitor {
   _i13.SharedPreferences get prefs =>
       (super.noSuchMethod(
             Invocation.getter(#prefs),
-            returnValue: _FakeSharedPreferences_30(
+            returnValue: _FakeSharedPreferences_31(
               this,
               Invocation.getter(#prefs),
             ),
@@ -1773,7 +1822,7 @@ class MockNetworkMonitor extends _i1.Mock implements _i15.NetworkMonitor {
   _i14.Client get httpClient =>
       (super.noSuchMethod(
             Invocation.getter(#httpClient),
-            returnValue: _FakeClient_31(this, Invocation.getter(#httpClient)),
+            returnValue: _FakeClient_32(this, Invocation.getter(#httpClient)),
           )
           as _i14.Client);
 
@@ -1824,7 +1873,7 @@ class MockNetworkMonitor extends _i1.Mock implements _i15.NetworkMonitor {
       (super.noSuchMethod(
             Invocation.method(#pingTest, []),
             returnValue: _i8.Future<_i15.PingResult>.value(
-              _FakePingResult_32(this, Invocation.method(#pingTest, [])),
+              _FakePingResult_33(this, Invocation.method(#pingTest, [])),
             ),
           )
           as _i8.Future<_i15.PingResult>);

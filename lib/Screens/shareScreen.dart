@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
+// TODO: Firebase Dynamic Links is discontinued - to be replaced with alternative solution
+// import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -247,53 +248,56 @@ class _LoggedInViewState extends State<LoggedInView> {
     String URL = await firebase_storage.FirebaseStorage.instance
         .ref('${widget.uID}/${widget.uID}')
         .getDownloadURL();
-    uri = await getDynamicLink(URL);
-    if (kDebugMode) print('Short link: $uri');
+    // TODO: Firebase Dynamic Links is discontinued - using direct URL for now
+    // uri = await getDynamicLink(URL);
+    uri = Uri.parse(URL); // Using direct URL instead of dynamic link
+    if (kDebugMode) print('Direct link (dynamic links disabled): $uri');
   }
 
-  Future getDynamicLink(String URL) async {
-    return (await createDynamicLinkForThisReport(URL));
-  }
-
-  Future<Uri?> createDynamicLinkForThisReport(String URL) async {
-    late Uri link;
-    try {
-      final DynamicLinkParameters parameters = DynamicLinkParameters(
-        uriPrefix:
-            'https://snagsnapper.web.app', //'https://eelavan.co.uk/auditrReport',
-        link: Uri.parse(URL),
-        navigationInfoParameters: const NavigationInfoParameters(
-          forcedRedirectEnabled: true,
-        ),
-        // Below three lines are obsolete
-        // dynamicLinkParametersOptions: DynamicLinkParametersOptions(
-        //   shortDynamicLinkPathLength: ShortDynamicLinkPathLength.short,
-        // ),
-
-//      googleAnalyticsParameters: GoogleAnalyticsParameters(
-//        campaign: 'example-promo',
-//        medium: 'social',
-//        source: 'orkut',
-//      ),
-//      itunesConnectAnalyticsParameters: ItunesConnectAnalyticsParameters(
-//        providerToken: '123456',
-//        campaignToken: 'example-promo',
-//      ),
-//      socialMetaTagParameters:  SocialMetaTagParameters(
-//        title: 'Example of a Dynamic Link',
-//        description: 'This link works whether app is installed or not!',
-//      ),
-      );
-      link = (await FirebaseDynamicLinks.instance.buildShortLink(parameters))
-          .shortUrl;
-    } on PlatformException catch (e) {
-      setState(() {
-        message = e.message!;
-      });
-    }
-    if (kDebugMode) print('Complete Report link: $URL');
-    return link;
-  }
+  // TODO: Firebase Dynamic Links is discontinued - commented out for now
+  // Future getDynamicLink(String URL) async {
+  //   return (await createDynamicLinkForThisReport(URL));
+  // }
+  //
+  // Future<Uri?> createDynamicLinkForThisReport(String URL) async {
+  //   late Uri link;
+  //   try {
+  //     final DynamicLinkParameters parameters = DynamicLinkParameters(
+  //       uriPrefix:
+  //           'https://snagsnapper.web.app', //'https://eelavan.co.uk/auditrReport',
+  //       link: Uri.parse(URL),
+  //       navigationInfoParameters: const NavigationInfoParameters(
+  //         forcedRedirectEnabled: true,
+  //       ),
+  //       // Below three lines are obsolete
+  //       // dynamicLinkParametersOptions: DynamicLinkParametersOptions(
+  //       //   shortDynamicLinkPathLength: ShortDynamicLinkPathLength.short,
+  //       // ),
+  //
+  // //      googleAnalyticsParameters: GoogleAnalyticsParameters(
+  // //        campaign: 'example-promo',
+  // //        medium: 'social',
+  // //        source: 'orkut',
+  // //      ),
+  // //      itunesConnectAnalyticsParameters: ItunesConnectAnalyticsParameters(
+  // //        providerToken: '123456',
+  // //        campaignToken: 'example-promo',
+  // //      ),
+  // //      socialMetaTagParameters:  SocialMetaTagParameters(
+  // //        title: 'Example of a Dynamic Link',
+  // //        description: 'This link works whether app is installed or not!',
+  // //      ),
+  //     );
+  //     link = (await FirebaseDynamicLinks.instance.buildShortLink(parameters))
+  //         .shortUrl;
+  //   } on PlatformException catch (e) {
+  //     setState(() {
+  //       message = e.message!;
+  //     });
+  //   }
+  //   if (kDebugMode) print('Complete Report link: $URL');
+  //   return link;
+  // }
 }
 
 class BusyContainer extends StatelessWidget {

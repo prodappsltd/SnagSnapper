@@ -26,7 +26,10 @@ class SiteService {
   
   /// Create a new site
   /// Returns the created site's ID
+  /// If [siteId] is provided, uses that ID instead of generating a new one
+  /// (useful when image was already saved with a pre-generated ID)
   Future<String> createSite({
+    String? siteId,
     required String name,
     String? companyName,
     String? address,
@@ -34,14 +37,15 @@ class SiteService {
     String? contactPhone,
     DateTime? expectedCompletion,
     int pictureQuality = 1,
+    String? imagePath,
   }) async {
     try {
-      // Generate a new UUID for the site
-      final siteId = const Uuid().v4();
+      // Use provided ID or generate a new UUID for the site
+      final actualSiteId = siteId ?? const Uuid().v4();
       
       // Create the site using the factory constructor
       final site = Site.create(
-        id: siteId,
+        id: actualSiteId,
         ownerUID: _currentUserUID,
         ownerEmail: _currentUserEmail,
         name: name,
@@ -52,15 +56,15 @@ class SiteService {
         expectedCompletion: expectedCompletion,
         pictureQuality: pictureQuality,
       );
-      
+
       // Insert into database
       await _siteDao.insertSite(site);
-      
+
       if (kDebugMode) {
-        print('SiteService: Created new site: $siteId - $name');
+        print('SiteService: Created new site: $actualSiteId - $name');
       }
-      
-      return siteId;
+
+      return actualSiteId;
     } catch (e) {
       if (kDebugMode) {
         print('SiteService: Error creating site "$name": $e');

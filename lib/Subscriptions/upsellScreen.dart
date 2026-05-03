@@ -103,7 +103,7 @@ class _UpsellScreenState extends State<UpsellScreen> {
                                   child: Text(
                                     'Share your sites and collaborate with others',
                                     textAlign: TextAlign.start,
-                                    style: GoogleFonts.robotoCondensed(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
+                                    style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
                                   ),
                                 ),
                               ),
@@ -123,7 +123,7 @@ class _UpsellScreenState extends State<UpsellScreen> {
                                   child: Text(
                                     'Control permissions to assigned sites',
                                     textAlign: TextAlign.start,
-                                    style: GoogleFonts.robotoCondensed(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
+                                    style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
                                   ),
                                 ),
                               ),
@@ -143,7 +143,7 @@ class _UpsellScreenState extends State<UpsellScreen> {
                                   child: Text(
                                     'Enjoy cross platform sharing (iOS & Android)',
                                     textAlign: TextAlign.start,
-                                    style: GoogleFonts.robotoCondensed(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
+                                    style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
                                   ),
                                 ),
                               ),
@@ -163,7 +163,7 @@ class _UpsellScreenState extends State<UpsellScreen> {
                                   child: Text(
                                     'Create customised PDF reports',
                                     textAlign: TextAlign.start,
-                                    style: GoogleFonts.robotoCondensed(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
+                                    style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
                                   ),
                                 ),
                               ),
@@ -183,7 +183,7 @@ class _UpsellScreenState extends State<UpsellScreen> {
                                   child: Text(
                                     'Get firsthand access to new features',
                                     textAlign: TextAlign.start,
-                                    style: GoogleFonts.robotoCondensed(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
+                                    style: GoogleFonts.roboto(textStyle: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500)),
                                   ),
                                 ),
                               ),
