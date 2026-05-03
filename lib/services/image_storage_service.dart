@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -193,6 +194,187 @@ class ImageStorageService {
     } catch (e) {
       if (kDebugMode) {
         print('Error deleting signature image: $e');
+      }
+      return false;
+    }
+  }
+
+  // ============================================================
+  // Site Image Methods
+  // ============================================================
+
+  /// Create site directory structure if it doesn't exist
+  Future<Directory> _ensureSiteDirectory(String userId, String siteId) async {
+    final appDir = await _appDocumentsDirectory;
+    final siteDir = Directory(p.join(appDir.path, 'SnagSnapper', userId, 'Sites', siteId));
+
+    if (!await siteDir.exists()) {
+      await siteDir.create(recursive: true);
+      if (kDebugMode) {
+        print('Created site directory: ${siteDir.path}');
+      }
+    }
+
+    return siteDir;
+  }
+
+  /// Save site image to local storage
+  /// Returns relative path for database storage
+  /// Uses fixed naming (site.jpg) for auto-overwrite
+  Future<String> saveSiteImage(File imageFile, String userId, String siteId) async {
+    try {
+      final siteDir = await _ensureSiteDirectory(userId, siteId);
+      const fileName = 'site.jpg'; // Fixed name for auto-overwrite
+      final destinationPath = p.join(siteDir.path, fileName);
+
+      // Use the two-tier compression service
+      final compressionService = ImageCompressionService.instance;
+      final xFile = XFile(imageFile.path);
+      final result = await compressionService.processSiteImage(xFile);
+
+      // Save compressed image to local storage (overwrites if exists)
+      final destinationFile = File(destinationPath);
+      await destinationFile.writeAsBytes(result.data);
+
+      // Return relative path for database
+      final relativePath = 'SnagSnapper/$userId/Sites/$siteId/$fileName';
+
+      if (kDebugMode) {
+        print('Saved site image: $relativePath');
+        print('Compression result: ${result.message}');
+      }
+
+      return relativePath;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error saving site image: $e');
+      }
+      // Re-throw specific exceptions for better error handling
+      if (e is ImageTooLargeException || e is InvalidImageException) {
+        rethrow;
+      }
+      throw Exception('Failed to save site image');
+    }
+  }
+
+  /// Save site image from bytes (for use with ImagePicker XFile)
+  /// Returns relative path for database storage
+  Future<String> saveSiteImageFromBytes(Uint8List imageBytes, String userId, String siteId) async {
+    try {
+      final siteDir = await _ensureSiteDirectory(userId, siteId);
+      const fileName = 'site.jpg';
+      final destinationPath = p.join(siteDir.path, fileName);
+
+      // Use the compression service
+      final compressionService = ImageCompressionService.instance;
+      final result = await compressionService.processSiteImageFromBytes(imageBytes);
+
+      // Save compressed image to local storage (overwrites if exists)
+      final destinationFile = File(destinationPath);
+      await destinationFile.writeAsBytes(result.data);
+
+      // Return relative path for database
+      final relativePath = 'SnagSnapper/$userId/Sites/$siteId/$fileName';
+
+      if (kDebugMode) {
+        print('Saved site image from bytes: $relativePath');
+        print('Compression result: ${result.message}');
+      }
+
+      return relativePath;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error saving site image from bytes: $e');
+      }
+      if (e is ImageTooLargeException || e is InvalidImageException) {
+        rethrow;
+      }
+      throw Exception('Failed to save site image');
+    }
+  }
+
+  /// Get site image path
+  /// Converts relative path to absolute for display
+  Future<String?> getSiteImagePath(String userId, String siteId) async {
+    try {
+      final siteDir = await _ensureSiteDirectory(userId, siteId);
+      final siteFile = File(p.join(siteDir.path, 'site.jpg'));
+
+      if (await siteFile.exists()) {
+        return siteFile.path;
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error getting site image path: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Get site image file from relative path
+  Future<File?> getSiteImageFile(String relativePath) async {
+    try {
+      if (relativePath.isEmpty) return null;
+
+      final absolutePath = await relativeToAbsolute(relativePath);
+      final file = File(absolutePath);
+
+      if (await file.exists()) {
+        return file;
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error getting site image file: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Delete site image from local storage
+  Future<bool> deleteSiteImage(String userId, String siteId) async {
+    try {
+      final imagePath = await getSiteImagePath(userId, siteId);
+      if (imagePath != null) {
+        final file = File(imagePath);
+        if (await file.exists()) {
+          await file.delete();
+          if (kDebugMode) {
+            print('Deleted site image: $imagePath');
+          }
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error deleting site image: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Delete entire site directory (for cleanup of abandoned new sites)
+  /// This removes all files associated with a site including images
+  Future<bool> deleteSiteDirectory(String userId, String siteId) async {
+    try {
+      final appDir = await _appDocumentsDirectory;
+      final siteDir = Directory(p.join(appDir.path, 'SnagSnapper', userId, 'Sites', siteId));
+
+      if (await siteDir.exists()) {
+        await siteDir.delete(recursive: true);
+        if (kDebugMode) {
+          print('Deleted site directory: ${siteDir.path}');
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error deleting site directory: $e');
       }
       return false;
     }

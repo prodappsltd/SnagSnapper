@@ -47,10 +47,11 @@ class ImageCompressionService {
   // Two-tier size validation constants
   static const int OPTIMAL_SIZE = 600 * 1024;     // 600KB
   static const int MAX_SIZE = 1024 * 1024;        // 1MB
-  static const int TARGET_DIMENSION = 1024;       // Fixed 1024x1024
+  static const int SKIP_COMPRESSION_SIZE = 800 * 1024; // 800KB - skip compression if already small
+  static const int TARGET_DIMENSION = 1024;       // Max dimension on longest side
   
   // Quality compression constants
-  static const int START_QUALITY = 90;            // Starting quality (updated per PRD)
+  static const int START_QUALITY = 85;            // Starting quality for smaller files
   static const int MIN_QUALITY = 30;              // Minimum quality
   static const int QUALITY_STEP = 10;             // Quality reduction step
   
@@ -65,34 +66,51 @@ class ImageCompressionService {
 
   /// Process profile image with two-tier validation
   /// Returns processed image data with status information
+  /// Maintains aspect ratio - resizes to 1024px on longest side
+  /// Skips processing if image is already small (≤1024px and ≤800KB)
   Future<ImageProcessingResult> processProfileImage(XFile imageFile) async {
     try {
       final bytes = await imageFile.readAsBytes();
-      
+
       // Validate image
       img.Image? image = img.decodeImage(bytes);
       if (image == null) {
         throw InvalidImageException('Invalid image file');
       }
-      
-      // Step 1: Auto-crop to square (as per PRD)
-      final squareSize = image.width < image.height ? image.width : image.height;
-      final x = (image.width - squareSize) ~/ 2;
-      final y = (image.height - squareSize) ~/ 2;
-      
-      final cropped = img.copyCrop(
-        image,
-        x: x,
-        y: y,
-        width: squareSize,
-        height: squareSize,
-      );
-      
-      // Step 2: Resize to fixed dimensions (1024x1024)
+
+      // Skip processing if image is already small enough
+      // (both dimensions ≤ 1024px AND size ≤ 800KB)
+      final bool dimensionsOk = image.width <= TARGET_DIMENSION && image.height <= TARGET_DIMENSION;
+      final bool sizeOk = bytes.length <= SKIP_COMPRESSION_SIZE;
+
+      if (dimensionsOk && sizeOk) {
+        return ImageProcessingResult(
+          data: bytes,
+          status: ImageProcessingStatus.optimal,
+          message: 'Image already optimized (${bytes.length ~/ 1024}KB, ${image.width}x${image.height})',
+          finalQuality: 100, // Original quality preserved
+        );
+      }
+
+      // Step 1: Calculate new dimensions maintaining aspect ratio
+      // Resize to TARGET_DIMENSION (1024px) on the longest side
+      int newWidth, newHeight;
+
+      if (image.width >= image.height) {
+        // Landscape or square - limit width
+        newWidth = image.width > TARGET_DIMENSION ? TARGET_DIMENSION : image.width;
+        newHeight = (image.height * newWidth / image.width).round();
+      } else {
+        // Portrait - limit height
+        newHeight = image.height > TARGET_DIMENSION ? TARGET_DIMENSION : image.height;
+        newWidth = (image.width * newHeight / image.height).round();
+      }
+
+      // Step 2: Resize maintaining aspect ratio (no cropping)
       final resized = img.copyResize(
-        cropped,
-        width: TARGET_DIMENSION,
-        height: TARGET_DIMENSION,
+        image,
+        width: newWidth,
+        height: newHeight,
         interpolation: img.Interpolation.linear,
       );
       
@@ -141,6 +159,121 @@ class ImageCompressionService {
         );
       }
       
+      // Should not reach here, but return acceptable as fallback
+      return ImageProcessingResult(
+        data: compressed,
+        status: ImageProcessingStatus.acceptable,
+        message: 'Image compressed to ${compressed.length ~/ 1024}KB',
+        finalQuality: MIN_QUALITY,
+      );
+    } catch (e) {
+      if (e is ImageTooLargeException || e is InvalidImageException) {
+        rethrow;
+      }
+      throw InvalidImageException('Failed to process image: $e');
+    }
+  }
+
+  /// Process site image with two-tier validation
+  /// Same logic as profile image - sites use consistent compression
+  Future<ImageProcessingResult> processSiteImage(XFile imageFile) async {
+    // Site images use the same compression as profile images
+    return processProfileImage(imageFile);
+  }
+
+  /// Process site image from bytes with two-tier validation
+  /// For use when image bytes are already available
+  /// Maintains aspect ratio - resizes to 1024px on longest side
+  /// Skips processing if image is already small (≤1024px and ≤800KB)
+  Future<ImageProcessingResult> processSiteImageFromBytes(Uint8List bytes) async {
+    try {
+      // Validate image
+      img.Image? image = img.decodeImage(bytes);
+      if (image == null) {
+        throw InvalidImageException('Invalid image file');
+      }
+
+      // Skip processing if image is already small enough
+      // (both dimensions ≤ 1024px AND size ≤ 800KB)
+      final bool dimensionsOk = image.width <= TARGET_DIMENSION && image.height <= TARGET_DIMENSION;
+      final bool sizeOk = bytes.length <= SKIP_COMPRESSION_SIZE;
+
+      if (dimensionsOk && sizeOk) {
+        return ImageProcessingResult(
+          data: bytes,
+          status: ImageProcessingStatus.optimal,
+          message: 'Image already optimized (${bytes.length ~/ 1024}KB, ${image.width}x${image.height})',
+          finalQuality: 100, // Original quality preserved
+        );
+      }
+
+      // Step 1: Calculate new dimensions maintaining aspect ratio
+      // Resize to TARGET_DIMENSION (1024px) on the longest side
+      int newWidth, newHeight;
+
+      if (image.width >= image.height) {
+        // Landscape or square - limit width
+        newWidth = image.width > TARGET_DIMENSION ? TARGET_DIMENSION : image.width;
+        newHeight = (image.height * newWidth / image.width).round();
+      } else {
+        // Portrait - limit height
+        newHeight = image.height > TARGET_DIMENSION ? TARGET_DIMENSION : image.height;
+        newWidth = (image.width * newHeight / image.height).round();
+      }
+
+      // Step 2: Resize maintaining aspect ratio (no cropping)
+      final resized = img.copyResize(
+        image,
+        width: newWidth,
+        height: newHeight,
+        interpolation: img.Interpolation.linear,
+      );
+
+      // Step 3: Progressive quality compression
+      int currentQuality = START_QUALITY;
+      Uint8List? compressed;
+
+      while (currentQuality >= MIN_QUALITY) {
+        compressed = Uint8List.fromList(
+          img.encodeJpg(resized, quality: currentQuality),
+        );
+
+        // Check if we achieved optimal size
+        if (compressed.length <= OPTIMAL_SIZE) {
+          return ImageProcessingResult(
+            data: compressed,
+            status: ImageProcessingStatus.optimal,
+            message: 'Image optimized successfully (${compressed.length ~/ 1024}KB)',
+            finalQuality: currentQuality,
+          );
+        }
+
+        // If we're at minimum quality, decide based on size
+        if (currentQuality == MIN_QUALITY) {
+          if (compressed.length <= MAX_SIZE) {
+            // Accept if under 1MB
+            return ImageProcessingResult(
+              data: compressed,
+              status: ImageProcessingStatus.acceptable,
+              message: 'Image compressed to ${compressed.length ~/ 1024}KB (larger than optimal)',
+              finalQuality: currentQuality,
+            );
+          } else {
+            // Reject if over 1MB at minimum quality
+            break;
+          }
+        }
+
+        currentQuality -= QUALITY_STEP;
+      }
+
+      // Step 3: Reject if still too large
+      if (compressed!.length > MAX_SIZE) {
+        throw ImageTooLargeException(
+          'Image too complex. Please choose a simpler image',
+        );
+      }
+
       // Should not reach here, but return acceptable as fallback
       return ImageProcessingResult(
         data: compressed,

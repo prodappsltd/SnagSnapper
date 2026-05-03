@@ -1,12 +1,11 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:another_flushbar/flushbar.dart';
 import 'package:another_flushbar/flushbar_route.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:snagsnapper/Constants/constants.dart';
@@ -15,7 +14,11 @@ import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/site.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/services/site_service.dart';
+import 'package:snagsnapper/services/image_storage_service.dart';
+import 'package:snagsnapper/services/image_compression_service.dart';
 import 'package:snagsnapper/Widgets/imageHelper.dart';
+import 'package:snagsnapper/Widgets/reusable_image_picker.dart';
+import 'package:snagsnapper/Screens/profile/components/colleagues_section.dart';
 
 // Removed BasicDateField import - date is now auto-set
 
@@ -42,7 +45,10 @@ class _SiteInfoState extends State<SiteInfo> {
   late int _btnPicQuality;
   /// Emails from map of colleagues where colleague is selected. <Name, Email> map
   Map<String,String> _assignedEmails = {};
-  late String _siteImage;
+  /// Site image path (relative path for database storage)
+  late String _siteImagePath;
+  /// Site ID - for new sites, generated upfront to ensure image paths match
+  late String _siteId;
   late String _siteAddress; // Renamed from _siteLocation
   late String _siteName;
   late String _siteCompanyName; // Renamed from _siteClientName
@@ -79,19 +85,47 @@ class _SiteInfoState extends State<SiteInfo> {
         backgroundColor: Theme.of(context).colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         title: Text(
-          newSite ? 'CREATE SITE' : 'EDIT SITE',
+          newSite ? 'Create Site' : 'Edit Site',
           style: GoogleFonts.montserrat(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
           color: Theme.of(context).colorScheme.onSurface,
-          onPressed: () => Navigator.pop(context),
+          onPressed: _handleBackPressed,
         ),
+        actions: [
+          if (!busy)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: TextButton.icon(
+                onPressed: _saveSite,
+                icon: Icon(
+                  Icons.check_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                label: Text(
+                  'Save',
+                  style: GoogleFonts.montserrat(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          if (busy)
+            const Padding(
+              padding: EdgeInsets.only(right: 24),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -112,19 +146,10 @@ class _SiteInfoState extends State<SiteInfo> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: ImageHelper(
-                    b64Image: _siteImage,
-                    height: MediaQuery.of(context).size.width * 0.5,
+                    filePath: _siteImagePath,
+                    height: MediaQuery.of(context).size.width * 0.6,
                     text: 'Add site photo',
-                    callBackFunction: () async {
-                      _siteImage.isEmpty
-                          ? _siteImage = await optionsDialogBox(context, 1000) ?? ''
-                          : _siteImage = await optionsDialogBoxWithDEL(context, () {
-                              setState(() => _siteImage = '');
-                              Navigator.pop(context);
-                              return;
-                            }) ?? _siteImage;
-                      setState(() => _siteImage);
-                    },
+                    callBackFunction: _pickSiteImage,
                   ),
                 ),
               ),
@@ -136,7 +161,7 @@ class _SiteInfoState extends State<SiteInfo> {
                   children: [
                     // Site Information Section
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(16),
@@ -189,60 +214,16 @@ class _SiteInfoState extends State<SiteInfo> {
                                     width: 2,
                                   ),
                                 ),
-                                prefixIcon: Icon(Icons.business_center, 
+                                prefixIcon: Icon(Icons.business_center,
                                   color: Theme.of(context).colorScheme.primary),
                                 labelText: 'Client Name',
                                 labelStyle: GoogleFonts.montserrat(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(Icons.info_outline,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: true,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Icon(Icons.info_outline, 
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 24,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text('Company Name',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: Text(
-                                            "Enter the company or client name associated with this site",
-                                            style: GoogleFonts.montserrat(fontSize: 14),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(context).pop(),
-                                              child: Text('Got it',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
+                                helperText: 'Company or client name for this site',
+                                helperStyle: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 hintText: 'Enter client name',
                                 hintStyle: GoogleFonts.montserrat(
@@ -287,60 +268,16 @@ class _SiteInfoState extends State<SiteInfo> {
                                     width: 2,
                                   ),
                                 ),
-                                prefixIcon: Icon(Icons.apartment, 
+                                prefixIcon: Icon(Icons.apartment,
                                   color: Theme.of(context).colorScheme.primary),
                                 labelText: 'Site Name',
                                 labelStyle: GoogleFonts.montserrat(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(Icons.info_outline,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: true,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Icon(Icons.info_outline, 
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 24,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text('Site Name',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: Text(
-                                            "Provide a unique, descriptive name for this site (e.g., 'Main Street Renovation', 'Office Building Phase 2')",
-                                            style: GoogleFonts.montserrat(fontSize: 14),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(context).pop(),
-                                              child: Text('Got it',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
+                                helperText: 'e.g., Main Street Renovation, Phase 2',
+                                helperStyle: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 hintText: 'Enter site name',
                                 hintStyle: GoogleFonts.montserrat(
@@ -385,60 +322,16 @@ class _SiteInfoState extends State<SiteInfo> {
                                     width: 2,
                                   ),
                                 ),
-                                prefixIcon: Icon(Icons.location_on, 
+                                prefixIcon: Icon(Icons.location_on,
                                   color: Theme.of(context).colorScheme.primary),
                                 labelText: 'Location (Optional)',
                                 labelStyle: GoogleFonts.montserrat(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(Icons.info_outline,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: true,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Icon(Icons.info_outline, 
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 24,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text('Location',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: Text(
-                                            "Enter the full street address or location description",
-                                            style: GoogleFonts.montserrat(fontSize: 14),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(context).pop(),
-                                              child: Text('Got it',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
+                                helperText: 'Street address or location description',
+                                helperStyle: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 hintText: 'Enter location or address',
                                 hintStyle: GoogleFonts.montserrat(
@@ -481,60 +374,16 @@ class _SiteInfoState extends State<SiteInfo> {
                                     width: 2,
                                   ),
                                 ),
-                                prefixIcon: Icon(Icons.person_outline, 
+                                prefixIcon: Icon(Icons.person_outline,
                                   color: Theme.of(context).colorScheme.primary),
                                 labelText: 'Contact Person (Optional)',
                                 labelStyle: GoogleFonts.montserrat(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(Icons.info_outline,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: true,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Icon(Icons.info_outline, 
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 24,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text('Contact Person',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: Text(
-                                            "Name of the primary contact person at this site",
-                                            style: GoogleFonts.montserrat(fontSize: 14),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(context).pop(),
-                                              child: Text('Got it',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
+                                helperText: 'Primary contact at this site',
+                                helperStyle: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 hintText: 'Enter contact person name',
                                 hintStyle: GoogleFonts.montserrat(
@@ -576,60 +425,16 @@ class _SiteInfoState extends State<SiteInfo> {
                                     width: 2,
                                   ),
                                 ),
-                                prefixIcon: Icon(Icons.phone_outlined, 
+                                prefixIcon: Icon(Icons.phone_outlined,
                                   color: Theme.of(context).colorScheme.primary),
                                 labelText: 'Contact Phone (Optional)',
                                 labelStyle: GoogleFonts.montserrat(
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
-                                suffixIcon: IconButton(
-                                  icon: Icon(Icons.info_outline,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      barrierDismissible: true,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Icon(Icons.info_outline, 
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 24,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text('Contact Phone',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: Text(
-                                            "Phone number of the site contact person",
-                                            style: GoogleFonts.montserrat(fontSize: 14),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(context).pop(),
-                                              child: Text('Got it',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
+                                helperText: 'Phone number for site contact',
+                                helperStyle: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                                 hintText: 'Enter contact phone number',
                                 hintStyle: GoogleFonts.montserrat(
@@ -672,69 +477,18 @@ class _SiteInfoState extends State<SiteInfo> {
                                         : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
                                   ),
                                 ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: Icon(Icons.info_outline,
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                        size: 20,
-                                      ),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          barrierDismissible: true,
-                                          builder: (BuildContext context) {
-                                            return AlertDialog(
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(16),
-                                              ),
-                                              title: Row(
-                                                children: [
-                                                  Icon(Icons.info_outline, 
-                                                    color: Theme.of(context).colorScheme.primary,
-                                                    size: 24,
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text('Expected Completion',
-                                                    style: GoogleFonts.montserrat(
-                                                      fontSize: 18,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              content: Text(
-                                                "Select the anticipated project completion date",
-                                                style: GoogleFonts.montserrat(fontSize: 14),
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.of(context).pop(),
-                                                  child: Text('Got it',
-                                                    style: GoogleFonts.montserrat(
-                                                      color: Theme.of(context).colorScheme.primary,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          },
-                                        );
-                                      },
-                                    ),
-                                    if (_siteExpectedCompletion != null)
-                                      IconButton(
-                                        icon: const Icon(Icons.clear),
+                                trailing: _siteExpectedCompletion != null
+                                    ? IconButton(
+                                        icon: Icon(Icons.clear,
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
                                         onPressed: () {
                                           setState(() {
                                             _siteExpectedCompletion = null;
                                           });
                                         },
-                                      ),
-                                  ],
-                                ),
+                                      )
+                                    : null,
                                 onTap: () async {
                                   final pickedDate = await showDatePicker(
                                     context: context,
@@ -759,7 +513,7 @@ class _SiteInfoState extends State<SiteInfo> {
                     
                     // Picture Quality Section
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(16),
@@ -797,125 +551,36 @@ class _SiteInfoState extends State<SiteInfo> {
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      FocusScope.of(context).unfocus();
-                                      setState(() => _btnPicQuality = 0);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: _btnPicQuality == 0
-                                            ? Theme.of(context).colorScheme.primary
-                                            : Colors.transparent,
-                                        borderRadius: const BorderRadius.only(
-                                          topLeft: Radius.circular(12),
-                                          bottomLeft: Radius.circular(12),
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          'LOW',
-                                          style: GoogleFonts.montserrat(
-                                            fontSize: 14,
-                                            fontWeight: _btnPicQuality == 0
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                            color: _btnPicQuality == 0
-                                                ? Theme.of(context).colorScheme.onPrimary
-                                                : Theme.of(context).colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: SegmentedButton<int>(
+                              segments: [
+                                ButtonSegment<int>(
+                                  value: 0,
+                                  label: Text('Low', style: GoogleFonts.montserrat(fontSize: 13)),
+                                  icon: const Icon(Icons.compress, size: 18),
                                 ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      FocusScope.of(context).unfocus();
-                                      setState(() => _btnPicQuality = 1);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: _btnPicQuality == 1
-                                            ? Theme.of(context).colorScheme.primary
-                                            : Colors.transparent,
-                                      ),
-                                      child: Center(
-                                        child: Column(
-                                          children: [
-                                            Text(
-                                              'MEDIUM',
-                                              style: GoogleFonts.montserrat(
-                                                fontSize: 14,
-                                                fontWeight: _btnPicQuality == 1
-                                                    ? FontWeight.w600
-                                                    : FontWeight.w400,
-                                                color: _btnPicQuality == 1
-                                                    ? Theme.of(context).colorScheme.onPrimary
-                                                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                                              ),
-                                            ),
-                                            if (_btnPicQuality == 1)
-                                              Text(
-                                                'Recommended',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 10,
-                                                  color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                ButtonSegment<int>(
+                                  value: 1,
+                                  label: Text('Medium', style: GoogleFonts.montserrat(fontSize: 13)),
+                                  icon: const Icon(Icons.tune, size: 18),
                                 ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      FocusScope.of(context).unfocus();
-                                      setState(() => _btnPicQuality = 2);
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: _btnPicQuality == 2
-                                            ? Theme.of(context).colorScheme.primary
-                                            : Colors.transparent,
-                                        borderRadius: const BorderRadius.only(
-                                          topRight: Radius.circular(12),
-                                          bottomRight: Radius.circular(12),
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          'HIGH',
-                                          style: GoogleFonts.montserrat(
-                                            fontSize: 14,
-                                            fontWeight: _btnPicQuality == 2
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
-                                            color: _btnPicQuality == 2
-                                                ? Theme.of(context).colorScheme.onPrimary
-                                                : Theme.of(context).colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                ButtonSegment<int>(
+                                  value: 2,
+                                  label: Text('High', style: GoogleFonts.montserrat(fontSize: 13)),
+                                  icon: const Icon(Icons.high_quality, size: 18),
                                 ),
                               ],
+                              selected: {_btnPicQuality},
+                              onSelectionChanged: (Set<int> newSelection) {
+                                FocusScope.of(context).unfocus();
+                                setState(() => _btnPicQuality = newSelection.first);
+                              },
+                              showSelectedIcon: false,
+                              style: ButtonStyle(
+                                visualDensity: VisualDensity.comfortable,
+                              ),
                             ),
                           ),
                         ],
@@ -924,7 +589,12 @@ class _SiteInfoState extends State<SiteInfo> {
                     const SizedBox(height: 16),
                     
                     // Share with Colleagues Section
-                    Container(
+                    Builder(
+                      builder: (context) {
+                        final colleagueCount = Provider.of<CP>(context).getListOFColleagues().length;
+                        final isAtLimit = colleagueCount >= MAX_COLLEAGUES;
+
+                        return Container(
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.surfaceContainer,
                         borderRadius: BorderRadius.circular(16),
@@ -937,7 +607,7 @@ class _SiteInfoState extends State<SiteInfo> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
                                 Icon(
@@ -952,6 +622,27 @@ class _SiteInfoState extends State<SiteInfo> {
                                     fontSize: 18,
                                     fontWeight: FontWeight.w600,
                                     color: Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                ),
+                                const Spacer(),
+                                // Counter badge
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isAtLimit
+                                        ? Colors.orange.withOpacity(0.2)
+                                        : Theme.of(context).colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '$colleagueCount/$MAX_COLLEAGUES',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isAtLimit
+                                          ? Colors.orange.shade800
+                                          : Theme.of(context).colorScheme.onPrimaryContainer,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -985,10 +676,22 @@ class _SiteInfoState extends State<SiteInfo> {
                                           ),
                                           const SizedBox(height: 8),
                                           TextButton.icon(
-                                            onPressed: () => Navigator.pushNamed(context, '/profile'),
+                                            onPressed: () {
+                                              // Show AddColleagueDialog directly
+                                              showDialog(
+                                                context: context,
+                                                builder: (dialogContext) => AddColleagueDialog(
+                                                  onAdd: (colleague) {
+                                                    Provider.of<CP>(context, listen: false).addColleague(colleague);
+                                                    setState(() {}); // Refresh UI
+                                                  },
+                                                  existingColleagues: Provider.of<CP>(context, listen: false).getListOFColleagues(),
+                                                ),
+                                              );
+                                            },
                                             icon: const Icon(Icons.add),
                                             label: Text(
-                                              'Add Colleagues',
+                                              'Add Colleague',
                                               style: GoogleFonts.montserrat(
                                                 fontSize: 14,
                                                 fontWeight: FontWeight.w600,
@@ -1006,7 +709,7 @@ class _SiteInfoState extends State<SiteInfo> {
                                     ),
                                     child: ListView.builder(
                                       shrinkWrap: true,
-                                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                                       itemCount: Provider.of<CP>(context).getListOFColleagues().length,
                                       itemBuilder: (BuildContext context, int position) {
                                         return Padding(
@@ -1049,66 +752,30 @@ class _SiteInfoState extends State<SiteInfo> {
                           ),
                           if (Provider.of<CP>(context).getListOFColleagues().isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.all(20),
+                              padding: const EdgeInsets.all(16),
                               child: Center(
                                 child: TextButton.icon(
-                                  onPressed: () {
-                                    // Show confirmation dialog before navigating
-                                    showDialog(
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        return AlertDialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Icon(Icons.person_add, 
-                                                color: Theme.of(context).colorScheme.primary,
-                                                size: 24,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text('Add Colleagues',
-                                                style: GoogleFonts.montserrat(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          content: Text(
-                                            'To add more colleagues, you need to go to your Profile settings. Your current site information will be saved as draft.\n\nWould you like to go to Profile now?',
-                                            style: GoogleFonts.montserrat(fontSize: 14),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.of(context).pop(),
-                                              child: Text('Cancel',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                                ),
-                                              ),
-                                            ),
-                                            TextButton(
-                                              onPressed: () {
-                                                Navigator.of(context).pop(); // Close dialog
-                                                Navigator.pushNamed(context, '/profile');
+                                  onPressed: isAtLimit
+                                      ? null // Disabled when limit reached
+                                      : () {
+                                          // Show AddColleagueDialog directly
+                                          showDialog(
+                                            context: context,
+                                            builder: (dialogContext) => AddColleagueDialog(
+                                              onAdd: (colleague) {
+                                                Provider.of<CP>(context, listen: false).addColleague(colleague);
+                                                setState(() {}); // Refresh UI
                                               },
-                                              child: Text('Go to Profile',
-                                                style: GoogleFonts.montserrat(
-                                                  color: Theme.of(context).colorScheme.primary,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
+                                              existingColleagues: Provider.of<CP>(context, listen: false).getListOFColleagues(),
                                             ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                  },
-                                  icon: const Icon(Icons.person_add, size: 18),
+                                          );
+                                        },
+                                  icon: Icon(
+                                    isAtLimit ? Icons.block : Icons.person_add,
+                                    size: 18,
+                                  ),
                                   label: Text(
-                                    'Add more colleagues',
+                                    isAtLimit ? 'Limit Reached ($MAX_COLLEAGUES)' : 'Add Colleague',
                                     style: GoogleFonts.montserrat(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
@@ -1119,140 +786,10 @@ class _SiteInfoState extends State<SiteInfo> {
                             ),
                         ],
                       ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
-                    
-                    // Save Button
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: ElevatedButton(
-                        onPressed: busy ? null : () async {
-                          FocusScope.of(context).unfocus();
-                          if (_formKey.currentState!.validate()) {
-                            _formKey.currentState!.save();
-                            if (kDebugMode) print('Site - Form validated');
-                            if (newSite || _siteImage != site!.image ||
-                                _siteName != site!.name ||
-                                _siteCompanyName != site!.companyName ||
-                                _siteAddress != site!.location ||
-                                _siteDate != site!.date ||
-                                _btnPicQuality != site!.pictureQuality ||
-                                !mapEquals(_assignedEmails, site!.sharedWith)) {
-                              setState(() => busy = true);
-                              if (kDebugMode) print('Site - Create Update initiated');
-                              
-                              // Use new database service for creating/updating sites
-                              try {
-                                final database = AppDatabase.instance;
-                                final siteService = SiteService(
-                                  database: database,
-                                  userEmail: _firebaseUser.email!,
-                                  userUID: _firebaseUser.uid,
-                                );
-                                
-                                if (newSite) {
-                                  // Create new site using the service
-                                  final siteId = await siteService.createSite(
-                                    name: _siteName,
-                                    companyName: _siteCompanyName.isNotEmpty ? _siteCompanyName : null,
-                                    address: _siteAddress.isNotEmpty ? _siteAddress : null,
-                                    contactPerson: _siteContactPerson.isNotEmpty ? _siteContactPerson : null,
-                                    contactPhone: _siteContactPhone.isNotEmpty ? _siteContactPhone : null,
-                                    expectedCompletion: _siteExpectedCompletion,
-                                    pictureQuality: _btnPicQuality,
-                                  );
-                                  
-                                  // Add shared users if any
-                                  for (final entry in _assignedEmails.entries) {
-                                    if (entry.key != _firebaseUser.email!.toLowerCase()) {
-                                      await siteService.shareSiteWithUser(
-                                        siteId: siteId,
-                                        userEmail: entry.key,
-                                        permission: entry.value,
-                                      );
-                                    }
-                                  }
-                                  
-                                  // TODO: Handle image upload separately
-                                  // if (_siteImage.isNotEmpty) {
-                                  //   // Upload image and update site
-                                  // }
-                                  
-                                  if (kDebugMode) print('Site created successfully: $siteId');
-                                } else {
-                                  // For now, still use old update method until we migrate fully
-                                  // TODO: Implement update using new model
-                                  Site nSite = Site(
-                                    image: _siteImage,
-                                    name: _siteName,
-                                    companyName: _siteCompanyName,
-                                    location: _siteAddress,
-                                    date: _siteDate,
-                                    pictureQuality: _btnPicQuality,
-                                    sharedWith: _assignedEmails,
-                                    archive: site!.archive,
-                                    uID: site!.uID,
-                                    ownerEmail: site!.ownerEmail,
-                                    ownerName: Provider.of<CP>(context, listen: false).getAppUser()!.name,
-                                  );
-                                  await Provider.of<CP>(context, listen: false).updateSite(nSite);
-                                }
-                                Navigator.pop(context, site);
-                              } catch (e) {
-                                if (mounted) {
-                                  showFlushbar(
-                                    context: context,
-                                    flushbar: Flushbar(
-                                      boxShadows: const [
-                                        BoxShadow(color: Colors.black, offset: Offset(0, 1), blurRadius: 3, spreadRadius: 4),
-                                      ],
-                                      duration: const Duration(seconds: 6),
-                                      flushbarPosition: FlushbarPosition.TOP,
-                                      title: 'Error',
-                                      message: 'Error updating Site, please try again',
-                                      icon: const Icon(Icons.error, size: 35.0),
-                                      shouldIconPulse: true,
-                                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-                                      backgroundColor: Colors.red,
-                                    )..show(context),
-                                  );
-                                  setState(() => busy = false);
-                                }
-                              }
-                              setState(() => busy = false);
-                            }
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                          minimumSize: const Size(double.infinity, 56),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: busy ? 0 : 2,
-                        ),
-                        child: busy
-                            ? SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).colorScheme.onPrimary,
-                                  ),
-                                ),
-                              )
-                            : Text(
-                                newSite ? 'CREATE SITE' : 'SAVE CHANGES',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1263,9 +800,25 @@ class _SiteInfoState extends State<SiteInfo> {
     );
   }
 
+  /// Handle back button press with cleanup for unsaved new sites
+  Future<void> _handleBackPressed() async {
+    // Clean up orphaned image for unsaved new site
+    if (newSite && _siteImagePath.isNotEmpty) {
+      final imageStorageService = ImageStorageService.instance;
+      await imageStorageService.deleteSiteImage(_firebaseUser.uid, _siteId);
+      // Also delete the empty directory
+      await imageStorageService.deleteSiteDirectory(_firebaseUser.uid, _siteId);
+      if (kDebugMode) {
+        print('Cleaned up orphaned image for unsaved new site: $_siteId');
+      }
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
   void _loadDefaults() {
     newSite = true;
-    _siteImage = '';
+    _siteImagePath = '';
+    _siteId = getuID(); // Generate real UUID upfront for consistent image paths
     _siteName = '';
     _siteCompanyName = '';
     _siteAddress = '';
@@ -1276,9 +829,10 @@ class _SiteInfoState extends State<SiteInfo> {
     _btnPicQuality = 1; // Default to medium
     _assignedEmails = {};
   }
-  
+
   void _loadValuesFromSite(Site site) {
-    _siteImage = site.image;
+    _siteImagePath = site.image; // Now stores file path instead of base64
+    _siteId = site.uID;
     _siteName = site.name;
     _siteCompanyName = site.companyName;
     _siteAddress = site.location;
@@ -1288,6 +842,223 @@ class _SiteInfoState extends State<SiteInfo> {
     _siteDate = site.date; // Temporary for old Site model
     _btnPicQuality = site.pictureQuality;
     _assignedEmails = site.sharedWith;
+  }
+
+  /// Handle site image selection using ReusableImagePicker
+  Future<void> _pickSiteImage() async {
+    ReusableImagePicker.show(
+      context: context,
+      onImageSelected: (ImageSource source) => _processImageFromSource(source),
+      onImageRemoved: _siteImagePath.isNotEmpty ? _removeSiteImage : null,
+      removeItemName: 'Photo',
+      removeItemDescription: 'Delete site photo',
+      hasExistingImage: _siteImagePath.isNotEmpty,
+    );
+  }
+
+  /// Process image from the selected source (camera or gallery)
+  Future<void> _processImageFromSource(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+
+      if (pickedFile == null) return;
+
+      setState(() => busy = true);
+
+      // Read image bytes
+      final bytes = await pickedFile.readAsBytes();
+
+      // Compress image using the compression service
+      // Note: If image is too large, processSiteImageFromBytes throws ImageTooLargeException
+      final compressionService = ImageCompressionService.instance;
+      final result = await compressionService.processSiteImageFromBytes(bytes);
+
+      // Save to local storage
+      final imageStorageService = ImageStorageService.instance;
+      final siteId = site?.uID ?? _siteId;
+      final relativePath = await imageStorageService.saveSiteImageFromBytes(
+        result.data,
+        _firebaseUser.uid,
+        siteId,
+      );
+
+      setState(() {
+        _siteImagePath = relativePath;
+        busy = false;
+      });
+
+      // Instant DB update for existing sites (no waiting for Save button)
+      if (!newSite && site != null) {
+        site!.image = relativePath;
+        await Provider.of<CP>(context, listen: false).updateSite(site!);
+        if (kDebugMode) {
+          print('Instant DB update: site image saved for existing site');
+        }
+      }
+
+      if (kDebugMode) {
+        print('Site image saved: $relativePath');
+        print('Compression: ${result.message}');
+      }
+    } on ImageTooLargeException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => busy = false);
+    } on InvalidImageException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => busy = false);
+    } catch (e) {
+      if (kDebugMode) print('Error processing site image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to process image. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => busy = false);
+    }
+  }
+
+  /// Remove site image
+  Future<void> _removeSiteImage() async {
+    try {
+      final imageStorageService = ImageStorageService.instance;
+      final siteId = site?.uID ?? _siteId;
+      await imageStorageService.deleteSiteImage(_firebaseUser.uid, siteId);
+
+      setState(() {
+        _siteImagePath = '';
+      });
+
+      // Instant DB update for existing sites (no waiting for Save button)
+      if (!newSite && site != null) {
+        site!.image = '';
+        await Provider.of<CP>(context, listen: false).updateSite(site!);
+        if (kDebugMode) {
+          print('Instant DB update: site image removed for existing site');
+        }
+      }
+
+      if (kDebugMode) print('Site image removed');
+    } catch (e) {
+      if (kDebugMode) print('Error removing site image: $e');
+    }
+  }
+
+  Future<void> _saveSite() async {
+    FocusScope.of(context).unfocus();
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      if (kDebugMode) print('Site - Form validated');
+      if (newSite || _siteImagePath != site!.image ||
+          _siteName != site!.name ||
+          _siteCompanyName != site!.companyName ||
+          _siteAddress != site!.location ||
+          _siteDate != site!.date ||
+          _btnPicQuality != site!.pictureQuality ||
+          !mapEquals(_assignedEmails, site!.sharedWith)) {
+        setState(() => busy = true);
+        if (kDebugMode) print('Site - Create Update initiated');
+
+        // Use new database service for creating/updating sites
+        try {
+          final database = AppDatabase.instance;
+          final siteService = SiteService(
+            database: database,
+            userEmail: _firebaseUser.email!,
+            userUID: _firebaseUser.uid,
+          );
+
+          if (newSite) {
+            // Create new site using the service with pre-generated ID
+            // This ensures the image path (saved earlier) matches the site ID
+            await siteService.createSite(
+              siteId: _siteId, // Use pre-generated ID for consistency with image path
+              name: _siteName,
+              companyName: _siteCompanyName.isNotEmpty ? _siteCompanyName : null,
+              address: _siteAddress.isNotEmpty ? _siteAddress : null,
+              contactPerson: _siteContactPerson.isNotEmpty ? _siteContactPerson : null,
+              contactPhone: _siteContactPhone.isNotEmpty ? _siteContactPhone : null,
+              expectedCompletion: _siteExpectedCompletion,
+              pictureQuality: _btnPicQuality,
+              imagePath: _siteImagePath.isNotEmpty ? _siteImagePath : null,
+            );
+
+            // Add shared users if any
+            for (final entry in _assignedEmails.entries) {
+              if (entry.key != _firebaseUser.email!.toLowerCase()) {
+                await siteService.shareSiteWithUser(
+                  siteId: _siteId,
+                  userEmail: entry.key,
+                  permission: entry.value,
+                );
+              }
+            }
+
+            if (kDebugMode) print('Site created successfully: $_siteId');
+          } else {
+            // For now, still use old update method until we migrate fully
+            // TODO: Implement update using new model
+            Site nSite = Site(
+              image: _siteImagePath, // Now stores file path instead of base64
+              name: _siteName,
+              companyName: _siteCompanyName,
+              location: _siteAddress,
+              date: _siteDate,
+              pictureQuality: _btnPicQuality,
+              sharedWith: _assignedEmails,
+              archive: site!.archive,
+              uID: site!.uID,
+              ownerEmail: site!.ownerEmail,
+              ownerName: Provider.of<CP>(context, listen: false).getAppUser()!.name,
+            );
+            await Provider.of<CP>(context, listen: false).updateSite(nSite);
+          }
+          Navigator.pop(context, site);
+        } catch (e) {
+          if (mounted) {
+            showFlushbar(
+              context: context,
+              flushbar: Flushbar(
+                boxShadows: const [
+                  BoxShadow(color: Colors.black, offset: Offset(0, 1), blurRadius: 3, spreadRadius: 4),
+                ],
+                duration: const Duration(seconds: 6),
+                flushbarPosition: FlushbarPosition.TOP,
+                title: 'Error',
+                message: 'Error updating Site, please try again',
+                icon: const Icon(Icons.error, size: 35.0),
+                shouldIconPulse: true,
+                padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+                backgroundColor: Colors.red,
+              )..show(context),
+            );
+            setState(() => busy = false);
+          }
+        }
+        setState(() => busy = false);
+      }
+    }
   }
 
 }
