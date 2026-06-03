@@ -35,6 +35,7 @@ class SiteService {
     String? address,
     String? contactPerson,
     String? contactPhone,
+    String? reportTitle,
     DateTime? expectedCompletion,
     int pictureQuality = 1,
     String? imagePath,
@@ -42,7 +43,7 @@ class SiteService {
     try {
       // Use provided ID or generate a new UUID for the site
       final actualSiteId = siteId ?? const Uuid().v4();
-      
+
       // Create the site using the factory constructor
       final site = Site.create(
         id: actualSiteId,
@@ -53,8 +54,10 @@ class SiteService {
         address: address,
         contactPerson: contactPerson,
         contactPhone: contactPhone,
+        reportTitle: reportTitle,
         expectedCompletion: expectedCompletion,
         pictureQuality: pictureQuality,
+        imageLocalPath: imagePath, // Pass image path - sets needsImageSync if provided
       );
 
       // Insert into database

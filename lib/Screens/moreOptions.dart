@@ -1,5 +1,7 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,9 +9,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
+import 'package:snagsnapper/Data/models/site.dart';
 import 'package:snagsnapper/Helper/auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:snagsnapper/services/image_storage_service.dart';
 import 'package:snagsnapper/services/sync_service.dart';
+import 'package:snagsnapper/services/sync/handlers/site_sync_handler.dart';
 // import 'package:snagsnapper/services/image_preload_service.dart'; // REMOVED - Service is commented out
 
 class MoreOptions extends StatefulWidget {
@@ -355,7 +361,35 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
                         ),
                         onTap: null,
                       ),
-                      
+
+                      // DEBUG section - only visible in debug mode
+                      if (kDebugMode) ...[
+                        const SizedBox(height: 32),
+
+                        Text(
+                          'DEBUG - SITE SYNC',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.error,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _buildSettingTile(
+                          icon: Icons.bug_report_outlined,
+                          title: 'Test SiteSyncHandler',
+                          subtitle: 'Run syncSiteData() tests',
+                          trailing: Icon(
+                            Icons.play_arrow_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                          onTap: () => _runSiteSyncTests(),
+                        ),
+                      ],
+
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -575,7 +609,10 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              // Capture navigator before async operations
+              final navigator = Navigator.of(context);
+
+              navigator.pop();
 
               // Cancel RDB listeners BEFORE signout to prevent permission errors
               SyncService.instance.cleanupBeforeSignout();
@@ -585,8 +622,9 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
               // Reset preload status - DISABLED: Service is deprecated
               // ImagePreloadService().resetPreloadStatus();
               await auth.signOut(context);
-              Navigator.pushNamedAndRemoveUntil(
-                context,
+
+              // Use captured navigator to avoid deactivated widget lookup
+              navigator.pushNamedAndRemoveUntil(
                 '/login',
                 (Route<dynamic> route) => false,
               );
@@ -704,7 +742,7 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
-    
+
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -734,6 +772,217 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
               fontWeight: FontWeight.w500,
               color: theme.colorScheme.onSurface,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============== DEBUG: Site Sync Tests ==============
+
+  Future<void> _runSiteSyncTests() async {
+    final results = <String>[];
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text('Running tests...', style: GoogleFonts.inter()),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Get dependencies
+      final database = AppDatabase.instance;
+      final firestore = FirebaseFirestore.instance;
+      final storage = FirebaseStorage.instance;
+      final imageStorage = ImageStorageService();
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      if (currentUser == null) {
+        results.add('❌ SETUP: No user logged in');
+        _showTestResults(results);
+        return;
+      }
+
+      // Create SiteSyncHandler
+      final handler = SiteSyncHandler(
+        database: database,
+        firestore: firestore,
+        storage: storage,
+        imageStorage: imageStorage,
+      );
+
+      // Get a real site from database
+      final sites = await database.siteDao.getOwnedSites(currentUser.email!);
+
+      if (sites.isEmpty) {
+        results.add('❌ SETUP: No sites found. Create a site first.');
+        _showTestResults(results);
+        return;
+      }
+
+      final testSite = sites.first;
+      results.add('📍 Using site: "${testSite.name}" (${testSite.id.substring(0, 8)}...)');
+      results.add('');
+
+      // ========== TEST 1: Happy Path ==========
+      results.add('TEST 1: Happy Path (sync real site)');
+
+      // First, ensure the site needs sync by updating it
+      final siteNeedingSync = testSite.copyWith(
+        needsSiteSync: true,
+        updatedAt: DateTime.now(),
+      );
+
+      // Directly set the flag in DB (bypass auto-increment of updateSite)
+      await database.siteDao.updateSite(siteNeedingSync);
+
+      // Verify flag is set
+      final beforeSync = await database.siteDao.getSiteById(testSite.id);
+      results.add('   needsSiteSync before: ${beforeSync?.needsSiteSync}');
+
+      // Run sync
+      final test1Result = await handler.syncSiteData(testSite.id);
+
+      // Check result
+      final afterSync = await database.siteDao.getSiteById(testSite.id);
+      results.add('   syncSiteData() returned: $test1Result');
+      results.add('   needsSiteSync after: ${afterSync?.needsSiteSync}');
+
+      if (test1Result && afterSync?.needsSiteSync == false) {
+        results.add('   ✅ PASSED');
+      } else {
+        results.add('   ❌ FAILED');
+      }
+      results.add('');
+
+      // ========== TEST 2: Sync Not Needed ==========
+      results.add('TEST 2: Sync Not Needed (run again)');
+
+      // Run sync again - should return true but skip upload
+      final test2Result = await handler.syncSiteData(testSite.id);
+
+      results.add('   syncSiteData() returned: $test2Result');
+      results.add('   (Check console for "sync not needed" message)');
+
+      if (test2Result) {
+        results.add('   ✅ PASSED');
+      } else {
+        results.add('   ❌ FAILED');
+      }
+      results.add('');
+
+      // ========== TEST 3: Image Sync (if site has image) ==========
+      final siteWithImage = await database.siteDao.getSiteById(testSite.id);
+      if (siteWithImage?.imageLocalPath != null && siteWithImage!.imageLocalPath!.isNotEmpty) {
+        results.add('TEST 3: Image Sync (upload site image)');
+
+        // Set needsImageSync flag
+        await database.siteDao.clearImageSyncFlag(testSite.id); // Reset first
+        final siteForImageSync = siteWithImage.copyWith(
+          needsImageSync: true,
+        );
+        await database.siteDao.updateSite(siteForImageSync);
+
+        // Run image sync
+        final test3Result = await handler.syncSiteImage(testSite.id);
+
+        final afterImageSync = await database.siteDao.getSiteById(testSite.id);
+        results.add('   syncSiteImage() returned: $test3Result');
+        results.add('   needsImageSync after: ${afterImageSync?.needsImageSync}');
+        results.add('   imageFirebasePath: ${afterImageSync?.imageFirebasePath}');
+
+        if (test3Result && afterImageSync?.needsImageSync == false) {
+          results.add('   ✅ PASSED');
+        } else {
+          results.add('   ❌ FAILED');
+        }
+      } else {
+        results.add('TEST 3: Image Sync');
+        results.add('   ⚠️ SKIPPED: No image on site');
+        results.add('   Create a site with an image to test');
+      }
+      results.add('');
+
+      // ========== TEST 4: Image Sync Not Needed ==========
+      results.add('TEST 4: Image Sync Not Needed');
+      final test4Result = await handler.syncSiteImage(testSite.id);
+      results.add('   syncSiteImage() returned: $test4Result');
+      results.add('   (Check console for "sync not needed" message)');
+      if (test4Result) {
+        results.add('   ✅ PASSED');
+      } else {
+        results.add('   ❌ FAILED');
+      }
+      results.add('');
+
+      // Verification instructions
+      results.add('─────────────────────────────');
+      results.add('VERIFY IN FIREBASE CONSOLE:');
+      results.add('Firestore: Profile/${currentUser.uid}/Sites/${testSite.id}');
+      results.add('Storage: sites/${currentUser.uid}/${testSite.id}/site.jpg');
+
+    } catch (e) {
+      results.add('❌ ERROR: $e');
+    }
+
+    // Close loading dialog and show results
+    if (mounted) {
+      Navigator.of(context).pop();
+      _showTestResults(results);
+    }
+  }
+
+  void _showTestResults(List<String> results) {
+    final theme = Theme.of(context);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.bug_report, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Text('Site Sync Test Results', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: results.map((line) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  line,
+                  style: GoogleFonts.sourceCodePro(
+                    fontSize: 12,
+                    color: line.startsWith('✅')
+                        ? Colors.green
+                        : line.startsWith('❌')
+                            ? Colors.red
+                            : theme.colorScheme.onSurface,
+                  ),
+                ),
+              )).toList(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
           ),
         ],
       ),

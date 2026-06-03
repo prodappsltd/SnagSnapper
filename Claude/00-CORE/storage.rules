@@ -1,0 +1,94 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the file
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function to check if email is verified
+    function isEmailVerified() {
+      return isAuthenticated() && request.auth.token.email_verified == true;
+    }
+
+    // Helper function to validate image files
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < 2 * 1024 * 1024; // 2MB max
+    }
+
+    // ============== Profile Images ==============
+    // Path: users/{userId}/profile.jpg
+    match /users/{userId}/profile.jpg {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(userId) && isEmailVerified();
+    }
+
+    // ============== Profile Signatures ==============
+    // Path: users/{userId}/signature.jpg
+    match /users/{userId}/signature.jpg {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(userId) && isEmailVerified();
+    }
+
+    // Legacy signature path (png)
+    match /users/{userId}/signature.png {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(userId) && isEmailVerified();
+    }
+
+    // ============== Site Images ==============
+    // Path: sites/{ownerUID}/{siteId}/site.jpg
+    match /sites/{ownerUID}/{siteId}/site.jpg {
+      // Only owner can read/write their site images
+      allow read: if isOwner(ownerUID);
+      allow write: if isOwner(ownerUID) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(ownerUID) && isEmailVerified();
+
+      // TODO: Add shared user read access
+      // - Check Firestore for sharedWith permissions
+      // - VIEW, FIXER, CONTRIBUTOR can read
+    }
+
+    // ============== Snag Images ==============
+    // Path: snags/{ownerUID}/{siteId}/{snagId}/{fileName}
+    match /snags/{ownerUID}/{siteId}/{snagId}/{fileName} {
+      // Only owner can read/write snag images
+      allow read: if isOwner(ownerUID);
+      allow write: if isOwner(ownerUID) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(ownerUID) && isEmailVerified();
+
+      // TODO: Add shared user access
+      // - FIXER can read/write assigned snags
+      // - CONTRIBUTOR can read/write all snags
+      // - VIEW can only read
+    }
+
+    // ============== Legacy Paths (backward compatibility) ==============
+    match /Profile/{userId}/ProfileImage/{fileName} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(userId) && isEmailVerified();
+    }
+
+    match /Profile/{userId}/Signature/{fileName} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(userId) && isEmailVerified();
+    }
+
+    // ============== Block all other access ==============
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

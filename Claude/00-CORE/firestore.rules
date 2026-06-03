@@ -16,7 +16,19 @@ service cloud.firestore {
     function isEmailVerified() {
       return isAuthenticated() && request.auth.token.email_verified == true;
     }
-    
+
+    // Helper function to validate site data
+    function isValidSiteData() {
+      let data = request.resource.data;
+      return data.name is string
+          && data.name.size() > 0
+          && data.name.size() <= 200                      // Max 200 chars
+          && data.ownerUID == request.auth.uid            // Must match authenticated user
+          && data.ownerEmail == request.auth.token.email  // Must match authenticated email
+          && data.ownerEmail is string
+          && data.ownerEmail.size() > 0;
+    }
+
     // Profile collection rules
     match /Profile/{userId} {
       // Users can read their own profile (even if it doesn't exist yet)
@@ -33,14 +45,33 @@ service cloud.firestore {
       
       // Sites subcollection
       match /Sites/{siteId} {
-        // Owner can read, write their own sites
+        // Owner can read their own sites
         allow read: if isOwner(userId);
-        allow write: if isOwner(userId) && isEmailVerified();
-        
+
+        // Owner can create sites with valid data
+        allow create: if isOwner(userId)
+                      && isEmailVerified()
+                      && isValidSiteData();
+
+        // Owner can update their own sites
+        allow update: if isOwner(userId)
+                      && isEmailVerified()
+                      && isValidSiteData();
+
+        // Owner can delete their own sites
+        allow delete: if isOwner(userId) && isEmailVerified();
+
+        // TODO: Add shared user access logic
+        // - Check sharedWith map for user's email
+        // - VIEW: read only
+        // - FIXER: read + update assigned snags
+        // - CONTRIBUTOR: read + write sites and snags
+
         // Snags subcollection
         match /Snags/{snagId} {
           allow read: if isOwner(userId);
           allow write: if isOwner(userId) && isEmailVerified();
+          // TODO: Add shared user access for snags
         }
       }
     }

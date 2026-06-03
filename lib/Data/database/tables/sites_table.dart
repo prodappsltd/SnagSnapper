@@ -38,7 +38,11 @@ class Sites extends Table {
   
   /// Expected completion date (Optional)
   DateTimeColumn get expectedCompletion => dateTime().named('expected_completion').nullable()();
-  
+
+  /// Custom title for PDF reports (Optional)
+  /// If not set, reports will use the site name as the title
+  TextColumn get reportTitle => text().named('report_title').nullable()();
+
   // ============== Media Storage ==============
   /// Local file path for site image (Relative path)
   TextColumn get imageLocalPath => text().named('image_local_path').nullable()();
@@ -79,7 +83,10 @@ class Sites extends Table {
   
   /// Flag indicating site image has changed and needs sync
   BoolColumn get needsImageSync => boolean().named('needs_image_sync').withDefault(const Constant(false))();
-  
+
+  /// Flag indicating image should be deleted from Firebase before uploading new
+  BoolColumn get imageMarkedForDeletion => boolean().named('image_marked_for_deletion').withDefault(const Constant(false))();
+
   /// Flag indicating snags under this site need sync
   BoolColumn get needsSnagsSync => boolean().named('needs_snags_sync').withDefault(const Constant(false))();
   

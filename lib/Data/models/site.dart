@@ -46,7 +46,11 @@ class Site {
   
   /// Expected completion date (Optional, UI visible)
   final DateTime? expectedCompletion;
-  
+
+  /// Custom title for PDF reports (Optional, UI visible)
+  /// If not set, reports will use the site name as the title
+  final String? reportTitle;
+
   // ============== Media Storage ==============
   /// Local file path for site image (System-managed)
   final String? imageLocalPath;
@@ -87,9 +91,12 @@ class Site {
   // ============== Sync Management ==============
   /// Flag indicating site data has changed and needs sync
   final bool needsSiteSync;
-  
+
   /// Flag indicating site image has changed and needs sync
   final bool needsImageSync;
+
+  /// Flag indicating image should be deleted from Firebase before uploading new
+  final bool imageMarkedForDeletion;
   
   /// Flag indicating snags under this site need sync
   final bool needsSnagsSync;
@@ -139,6 +146,7 @@ class Site {
     this.contactPhone,
     required this.date,
     this.expectedCompletion,
+    this.reportTitle,
     this.imageLocalPath,
     this.imageFirebasePath,
     this.pictureQuality = 1, // Default to medium quality
@@ -150,6 +158,7 @@ class Site {
     Map<int, String>? snagCategories,
     this.needsSiteSync = false,
     this.needsImageSync = false,
+    this.imageMarkedForDeletion = false,
     this.needsSnagsSync = false,
     this.lastSyncTime,
     this.lastSnagUpdate,
@@ -184,9 +193,13 @@ class Site {
     String? contactPerson,
     String? contactPhone,
     DateTime? expectedCompletion,
+    String? reportTitle,
     int pictureQuality = 1,
+    String? imageLocalPath,
   }) {
     final now = DateTime.now();
+    final hasImage = imageLocalPath != null && imageLocalPath.isNotEmpty;
+
     return Site(
       id: id,
       ownerUID: ownerUID,
@@ -198,10 +211,15 @@ class Site {
       contactPhone: contactPhone,
       date: now,
       expectedCompletion: expectedCompletion,
+      reportTitle: reportTitle,
       pictureQuality: pictureQuality,
+      imageLocalPath: imageLocalPath,
+      // Set Firebase path deterministically if image exists
+      imageFirebasePath: hasImage ? 'sites/$ownerUID/$id/site.jpg' : null,
       snagCategories: const {}, // Start with empty categories
       updatedAt: now,
       needsSiteSync: true, // Mark for initial sync
+      needsImageSync: hasImage, // Mark for image sync if image provided
       sharedWith: const {}, // No sharing initially (owner is not a permission)
     );
   }
@@ -218,6 +236,7 @@ class Site {
     String? contactPhone,
     DateTime? date,
     DateTime? expectedCompletion,
+    String? reportTitle,
     String? imageLocalPath,
     String? imageFirebasePath,
     int? pictureQuality,
@@ -229,6 +248,7 @@ class Site {
     Map<int, String>? snagCategories,
     bool? needsSiteSync,
     bool? needsImageSync,
+    bool? imageMarkedForDeletion,
     bool? needsSnagsSync,
     DateTime? lastSyncTime,
     DateTime? lastSnagUpdate,
@@ -252,6 +272,7 @@ class Site {
       contactPhone: contactPhone ?? this.contactPhone,
       date: date ?? this.date,
       expectedCompletion: expectedCompletion ?? this.expectedCompletion,
+      reportTitle: reportTitle ?? this.reportTitle,
       imageLocalPath: imageLocalPath ?? this.imageLocalPath,
       imageFirebasePath: imageFirebasePath ?? this.imageFirebasePath,
       pictureQuality: pictureQuality ?? this.pictureQuality,
@@ -263,6 +284,7 @@ class Site {
       snagCategories: snagCategories ?? this.snagCategories,
       needsSiteSync: needsSiteSync ?? this.needsSiteSync,
       needsImageSync: needsImageSync ?? this.needsImageSync,
+      imageMarkedForDeletion: imageMarkedForDeletion ?? this.imageMarkedForDeletion,
       needsSnagsSync: needsSnagsSync ?? this.needsSnagsSync,
       lastSyncTime: lastSyncTime ?? this.lastSyncTime,
       lastSnagUpdate: lastSnagUpdate ?? this.lastSnagUpdate,
@@ -290,6 +312,7 @@ class Site {
       'contactPhone': contactPhone,
       'date': date.millisecondsSinceEpoch,
       'expectedCompletion': expectedCompletion?.millisecondsSinceEpoch,
+      'reportTitle': reportTitle,
       'imageLocalPath': imageLocalPath,
       'imageFirebasePath': imageFirebasePath,
       'pictureQuality': pictureQuality,
@@ -301,6 +324,7 @@ class Site {
       'snagCategories': snagCategories.map((key, value) => MapEntry(key.toString(), value)), // Convert int keys to string for JSON
       'needsSiteSync': needsSiteSync,
       'needsImageSync': needsImageSync,
+      'imageMarkedForDeletion': imageMarkedForDeletion,
       'needsSnagsSync': needsSnagsSync,
       'lastSyncTime': lastSyncTime?.millisecondsSinceEpoch,
       'lastSnagUpdate': lastSnagUpdate?.millisecondsSinceEpoch,
@@ -338,6 +362,7 @@ class Site {
       expectedCompletion: json['expectedCompletion'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['expectedCompletion'] as int)
           : null,
+      reportTitle: json['reportTitle'] as String?,
       imageLocalPath: json['imageLocalPath'] as String?,
       imageFirebasePath: json['imageFirebasePath'] as String?,
       pictureQuality: json['pictureQuality'] as int? ?? 1,
@@ -349,6 +374,7 @@ class Site {
       snagCategories: snagCategories,
       needsSiteSync: json['needsSiteSync'] as bool? ?? false,
       needsImageSync: json['needsImageSync'] as bool? ?? false,
+      imageMarkedForDeletion: json['imageMarkedForDeletion'] as bool? ?? false,
       needsSnagsSync: json['needsSnagsSync'] as bool? ?? false,
       lastSyncTime: json['lastSyncTime'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['lastSyncTime'] as int)
@@ -382,9 +408,10 @@ class Site {
       'contactPerson': contactPerson,
       'contactPhone': contactPhone,
       'date': Timestamp.fromDate(date),
-      'expectedCompletion': expectedCompletion != null 
-          ? Timestamp.fromDate(expectedCompletion!) 
+      'expectedCompletion': expectedCompletion != null
+          ? Timestamp.fromDate(expectedCompletion!)
           : null,
+      'reportTitle': reportTitle,
       'imageFirebasePath': imageFirebasePath,
       'pictureQuality': pictureQuality,
       'archive': archive,
@@ -433,6 +460,7 @@ class Site {
       expectedCompletion: data['expectedCompletion'] != null
           ? (data['expectedCompletion'] as Timestamp).toDate()
           : null,
+      reportTitle: data['reportTitle'] as String?,
       imageFirebasePath: data['imageFirebasePath'] as String?,
       pictureQuality: data['pictureQuality'] as int? ?? 1,
       archive: data['archive'] as bool? ?? false,

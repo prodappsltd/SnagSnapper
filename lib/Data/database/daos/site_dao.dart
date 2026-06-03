@@ -123,13 +123,20 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
   // ============== UPDATE Operations ==============
   
   /// Update an existing site
+  ///
+  /// Preserves image-related flags (needsImageSync, imageMarkedForDeletion)
+  /// from the input site. Caller is responsible for setting these flags
+  /// when image changes occur.
   Future<bool> updateSite(Site site) async {
     try {
       // Increment local version for tracking
+      // Preserve image-related flags from input (caller sets these when image changes)
       final updatedSite = site.copyWith(
         localVersion: site.localVersion + 1,
         updatedAt: DateTime.now(),
-        needsSiteSync: true, // Mark for sync
+        needsSiteSync: true,                                  // Always mark site data for sync
+        needsImageSync: site.needsImageSync,                  // Preserve - caller sets when image changes
+        imageMarkedForDeletion: site.imageMarkedForDeletion,  // Preserve - caller sets when image deleted
       );
       
       final entry = _siteToEntry(updatedSite);
@@ -204,6 +211,87 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
         lastSyncTime: Value(DateTime.now()),
       ),
     );
+  }
+
+  /// Clear only the site data sync flag
+  Future<void> clearSiteSyncFlag(String siteId) async {
+    await (update(sites)..where((t) => t.id.equals(siteId))).write(
+      SitesCompanion(
+        needsSiteSync: const Value(false),
+        lastSyncTime: Value(DateTime.now()),
+      ),
+    );
+
+    if (kDebugMode) {
+      print('SiteDao: Cleared site sync flag for $siteId');
+    }
+  }
+
+  /// Clear only the image sync flag
+  Future<void> clearImageSyncFlag(String siteId) async {
+    await (update(sites)..where((t) => t.id.equals(siteId))).write(
+      SitesCompanion(
+        needsImageSync: const Value(false),
+        lastSyncTime: Value(DateTime.now()),
+      ),
+    );
+
+    if (kDebugMode) {
+      print('SiteDao: Cleared image sync flag for $siteId');
+    }
+  }
+
+  /// Update image Firebase path after successful upload
+  Future<void> updateImageFirebasePath(String siteId, String? firebasePath) async {
+    await (update(sites)..where((t) => t.id.equals(siteId))).write(
+      SitesCompanion(
+        imageFirebasePath: Value(firebasePath),
+      ),
+    );
+
+    if (kDebugMode) {
+      print('SiteDao: Updated imageFirebasePath for $siteId to $firebasePath');
+    }
+  }
+
+  /// Update image local path after successful download
+  Future<void> updateImageLocalPath(String siteId, String? localPath) async {
+    await (update(sites)..where((t) => t.id.equals(siteId))).write(
+      SitesCompanion(
+        imageLocalPath: Value(localPath),
+      ),
+    );
+
+    if (kDebugMode) {
+      print('SiteDao: Updated imageLocalPath for $siteId to $localPath');
+    }
+  }
+
+  /// Clear the image deletion flag after successful deletion from Firebase
+  Future<void> clearImageDeletionFlag(String siteId) async {
+    await (update(sites)..where((t) => t.id.equals(siteId))).write(
+      const SitesCompanion(
+        imageMarkedForDeletion: Value(false),
+      ),
+    );
+
+    if (kDebugMode) {
+      print('SiteDao: Cleared image deletion flag for $siteId');
+    }
+  }
+
+  /// Mark image for deletion (used when user removes image)
+  Future<void> markImageForDeletion(String siteId) async {
+    await (update(sites)..where((t) => t.id.equals(siteId))).write(
+      const SitesCompanion(
+        imageMarkedForDeletion: Value(true),
+        needsImageSync: Value(true),
+      ),
+    );
+
+    if (kDebugMode) {
+      print('SiteDao: Marked image for deletion for $siteId');
+    }
   }
   
   /// Mark site for deletion (soft delete)
@@ -332,6 +420,7 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
       contactPhone: Value(site.contactPhone),
       date: Value(site.date),
       expectedCompletion: Value(site.expectedCompletion),
+      reportTitle: Value(site.reportTitle),
       imageLocalPath: Value(site.imageLocalPath),
       imageFirebasePath: Value(site.imageFirebasePath),
       pictureQuality: Value(site.pictureQuality),
@@ -345,6 +434,7 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
       )),
       needsSiteSync: Value(site.needsSiteSync),
       needsImageSync: Value(site.needsImageSync),
+      imageMarkedForDeletion: Value(site.imageMarkedForDeletion),
       needsSnagsSync: Value(site.needsSnagsSync),
       lastSyncTime: Value(site.lastSyncTime),
       lastSnagUpdate: Value(site.lastSnagUpdate),
@@ -384,6 +474,7 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
       contactPhone: entry.contactPhone,
       date: entry.date,
       expectedCompletion: entry.expectedCompletion,
+      reportTitle: entry.reportTitle,
       imageLocalPath: entry.imageLocalPath,
       imageFirebasePath: entry.imageFirebasePath,
       pictureQuality: entry.pictureQuality,
@@ -395,6 +486,7 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
       snagCategories: categories,
       needsSiteSync: entry.needsSiteSync,
       needsImageSync: entry.needsImageSync,
+      imageMarkedForDeletion: entry.imageMarkedForDeletion,
       needsSnagsSync: entry.needsSnagsSync,
       lastSyncTime: entry.lastSyncTime,
       lastSnagUpdate: entry.lastSnagUpdate,
