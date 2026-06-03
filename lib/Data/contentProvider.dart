@@ -45,6 +45,9 @@ class CP extends ChangeNotifier {
   final Map<String, String> _sharedSitedata = {}; //SiteUID, Site
   final Map<String, Map<String, Snag>> _snags = {}; //SiteUID > Map<SnagUID, Snag>
 
+  /// Device session listener subscription (cancelled on signout)
+  StreamSubscription<DatabaseEvent>? _deviceSessionSubscription;
+
   /// More than 5 days left, show it as green
   int greenCondition = 5;
 
@@ -359,10 +362,14 @@ class CP extends ChangeNotifier {
     if (kDebugMode) print('DATA-L_CDF: END Final format:${_appUser!.dateFormat}');
   }
 
-  void resetVariables() async {
+  void resetVariables() {
     if (kDebugMode) print('DATA-F_RV: Reset Variables');
-    await FirebaseAuth.instance.signOut();
-    assert(FirebaseAuth.instance.currentUser == null);
+
+    // Cancel device session listener to prevent permission errors
+    _deviceSessionSubscription?.cancel();
+    _deviceSessionSubscription = null;
+
+    // Note: Firebase signOut is handled by Auth.signOut(), not here
     _appUser = null;
     _allSites.clear();
     _ownedSites.clear();
@@ -826,6 +833,10 @@ class CP extends ChangeNotifier {
         }
         
         if (kDebugMode) print('DATA_LP: 3.6 - Using LOCAL profile, app works offline!');
+
+        // Register device in Realtime Database even when using local profile
+        // This ensures device session is tracked for single-device enforcement
+        await _registerDeviceSession(userId, currentDeviceId);
       } else {
         // STEP 3: Not in local database, try Firebase (new user or reinstall)
         if (kDebugMode) print('DATA_LP: 3.7 - No local profile, checking Firebase...');
@@ -1223,8 +1234,11 @@ class CP extends ChangeNotifier {
       final sessionRef = database
           .ref('device_sessions/$userId/current_device');
       
+      // Cancel any existing subscription before creating new one
+      _deviceSessionSubscription?.cancel();
+
       // Listen for force_logout changes
-      sessionRef.child('force_logout').onValue.listen((event) async {
+      _deviceSessionSubscription = sessionRef.child('force_logout').onValue.listen((event) async {
         final forceLogout = event.snapshot.value as bool? ?? false;
         
         if (forceLogout) {

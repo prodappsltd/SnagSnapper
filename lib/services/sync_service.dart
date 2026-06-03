@@ -384,6 +384,10 @@ class SyncService {
     _deviceManager.onForceLogout(() {
       _forceLogoutCallback?.call();
     });
+    // Start the Firebase listener for force logout flag
+    if (_userId != null) {
+      _deviceManager.setupForceLogoutListener(_userId!);
+    }
   }
 
   void onSyncComplete(Function callback) {
@@ -499,15 +503,35 @@ class SyncService {
     await _queueManager.processQueue();
   }
 
+  /// Call this BEFORE signing out to cancel RDB listeners
+  /// This prevents permission errors when auth state changes
+  void cleanupBeforeSignout() {
+    if (kDebugMode) print('SyncService: Cleaning up before signout');
+
+    // Cancel any ongoing sync
+    cancelSync();
+
+    // Cancel device manager listeners
+    if (_isInitialized) {
+      _deviceManager.dispose();
+    }
+
+    // Mark as not initialized so it re-initializes on next login
+    _isInitialized = false;
+    _userId = null;
+
+    if (kDebugMode) print('SyncService: Cleanup complete');
+  }
+
   void dispose() {
     // Check if initialized before clearing the flag
     final wasInitialized = _isInitialized;
-    
+
     _isInitialized = false;
     _userId = null;
     _debounceTimer?.cancel();
     _connectivitySubscription?.cancel();
-    
+
     if (!_statusController.isClosed) {
       _statusController.close();
     }
@@ -517,7 +541,7 @@ class SyncService {
     if (!_errorController.isClosed) {
       _errorController.close();
     }
-    
+
     // Only dispose if they were initialized
     if (wasInitialized) {
       _networkMonitor.dispose();

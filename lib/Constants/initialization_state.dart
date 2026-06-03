@@ -40,7 +40,10 @@ enum InitializationState {
   initializationError,
   
   /// Unknown error state (fallback)
-  unknownError;
+  unknownError,
+
+  /// Device was replaced while offline - data cleared, go to login
+  deviceReplaced;
   
   /// Returns user-friendly error message for error states
   /// Returns null for non-error states
@@ -72,7 +75,8 @@ enum InitializationState {
     return this == InitializationState.goToLogin ||
            this == InitializationState.emailNotVerified ||
            this == InitializationState.profileFound ||
-           this == InitializationState.profileNotFound;
+           this == InitializationState.profileNotFound ||
+           this == InitializationState.deviceReplaced;
   }
   
   /// Indicates if this state represents an error
@@ -86,6 +90,7 @@ enum InitializationState {
     switch (this) {
       case InitializationState.goToLogin:
       case InitializationState.emailNotVerified:
+      case InitializationState.deviceReplaced:
         return '/login';
       case InitializationState.profileFound:
         return '/mainMenu';
@@ -124,6 +129,8 @@ extension InitializationStateParser on String {
         return InitializationState.firebaseErrorSharedSites;
       case 'Initialization Error':
         return InitializationState.initializationError;
+      case 'Device Replaced':
+        return InitializationState.deviceReplaced;
       default:
         return InitializationState.unknownError;
     }

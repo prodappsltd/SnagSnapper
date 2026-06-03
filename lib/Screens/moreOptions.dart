@@ -9,6 +9,7 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Helper/auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:snagsnapper/services/sync_service.dart';
 // import 'package:snagsnapper/services/image_preload_service.dart'; // REMOVED - Service is commented out
 
 class MoreOptions extends StatefulWidget {
@@ -575,6 +576,10 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
+
+              // Cancel RDB listeners BEFORE signout to prevent permission errors
+              SyncService.instance.cleanupBeforeSignout();
+
               Auth auth = Auth();
               Provider.of<CP>(context, listen: false).resetVariables();
               // Reset preload status - DISABLED: Service is deprecated

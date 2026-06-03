@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:snagsnapper/Helper/baseAuth.dart';
 import 'package:snagsnapper/Helper/error.dart';
+import 'package:snagsnapper/services/sync/device_manager.dart';
 // import 'package:snagsnapper/services/image_service.dart'; // REMOVED - Service is commented out
 
 
@@ -212,13 +213,32 @@ class Auth extends BaseAuth {
   @override
   Future<void> signOut(BuildContext? context) async {
     try {
+      // Get user ID before signing out (needed for device session cleanup)
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (kDebugMode) print('Auth.signOut: User ID = $userId');
+
+      // Clear device session from Realtime Database
+      if (userId != null) {
+        try {
+          if (kDebugMode) print('Auth.signOut: Calling endSession...');
+          final deviceManager = DeviceManager();
+          await deviceManager.endSession(userId);
+          if (kDebugMode) print('Auth.signOut: Device session cleared from Realtime DB');
+        } catch (e) {
+          if (kDebugMode) print('Auth.signOut: Error clearing device session: $e');
+          // Continue with signout even if session cleanup fails
+        }
+      } else {
+        if (kDebugMode) print('Auth.signOut: No user ID, skipping session cleanup');
+      }
+
       // Clear all cached images - DISABLED: ImageService is deprecated
       // TODO: Implement cache clearing with new ImageStorageService if needed
       if (kDebugMode) print('Auth.signOut: Image cache clearing disabled (service deprecated)');
-      
+
       // Sign out from Firebase
       await FirebaseAuth.instance.signOut();
-      
+
       if (kDebugMode) print('Auth.signOut: Successfully signed out');
     } catch (e) {
       if (kDebugMode) print('Auth.signOut: Error during signout: $e');

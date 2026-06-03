@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -34,6 +36,7 @@ import 'package:snagsnapper/Screens/splash_screen.dart';
 import 'package:snagsnapper/Screens/custom_theme_selector.dart';
 import 'package:snagsnapper/Constants/initialization_state.dart';
 import 'package:snagsnapper/Constants/custom_color_schemes.dart';
+import 'package:snagsnapper/services/sync/device_manager.dart';
 
 import 'firebase_options.dart';
 
@@ -418,7 +421,81 @@ class HomePageState extends State<HomePage> {
       await FirebaseAuth.instance.signOut();
       return InitializationState.goToLogin;
     }
-    
+
+    // Phase 5: Validate device for single-device enforcement
+    if (mounted) {
+      setState(() => message = 'Validating device...');
+    }
+
+    try {
+      final deviceManager = DeviceManager();
+      final isValidDevice = await deviceManager.validateDevice(userId);
+
+      if (kDebugMode) {
+        print('Device validation result: $isValidDevice');
+        print('User ID: $userId');
+      }
+
+      if (!isValidDevice) {
+        if (kDebugMode) {
+          print('Device validation failed - device was replaced while offline');
+        }
+
+        // PATH 2: Device was replaced while offline
+        // Clean up all local data and navigate to login
+        if (mounted) {
+          setState(() => message = 'Session expired...');
+        }
+
+        // 1. Clear database
+        try {
+          await AppDatabase.instance.clearAllData();
+          if (kDebugMode) print('Database cleared for device replacement');
+        } catch (e) {
+          if (kDebugMode) print('Error clearing database: $e');
+        }
+
+        // 2. Clear local images
+        try {
+          final appDir = await getApplicationDocumentsDirectory();
+          final userDir = Directory('${appDir.path}/SnagSnapper/$userId');
+          if (await userDir.exists()) {
+            await userDir.delete(recursive: true);
+            if (kDebugMode) print('Local images cleared for device replacement');
+          }
+        } catch (e) {
+          if (kDebugMode) print('Error clearing local images: $e');
+        }
+
+        // 3. Clear SharedPreferences
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('device_id');
+          await prefs.remove('session_start_time');
+          await prefs.remove('device_model');
+          await prefs.remove('device_os');
+          if (kDebugMode) print('SharedPreferences cleared for device replacement');
+        } catch (e) {
+          if (kDebugMode) print('Error clearing SharedPreferences: $e');
+        }
+
+        // 4. Reset ContentProvider
+        if (mounted) {
+          Provider.of<CP>(context, listen: false).resetVariables();
+        }
+
+        // 5. Sign out
+        await FirebaseAuth.instance.signOut();
+
+        return InitializationState.deviceReplaced;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Device validation error (non-blocking): $e');
+      }
+      // Device validation errors don't block app startup (offline-first)
+    }
+
     // Verify widget is still mounted
     if (!mounted) return InitializationState.contextError;
     
@@ -514,10 +591,26 @@ class HomePageState extends State<HomePage> {
         break;
       case InitializationState.profileFound:
         Navigator.pushReplacementNamed(
-          context, 
-          routeName, 
+          context,
+          routeName,
           arguments: _userDataForNavigation
         );
+        break;
+      case InitializationState.deviceReplaced:
+        Navigator.pushReplacementNamed(context, routeName);
+        // Show notification after navigation using global navigator key
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) {
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              const SnackBar(
+                content: Text('Your account is now active on another device'),
+                duration: Duration(seconds: 4),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        });
         break;
       default:
         // Other states don't navigate

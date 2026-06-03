@@ -198,13 +198,22 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Clear all data (for testing or reset)
+  /// Clear all data (for force logout, testing, or reset)
   Future<void> clearAllData() async {
+    if (kDebugMode) print('AppDatabase.clearAllData: Starting...');
+
+    // Clear all tables
+    await delete(sites).go();
+    if (kDebugMode) print('AppDatabase.clearAllData: Sites cleared');
+
+    await delete(syncQueueTable).go();
+    if (kDebugMode) print('AppDatabase.clearAllData: SyncQueue cleared');
+
     await delete(profiles).go();
-    // Add other tables when implemented
-    
+    if (kDebugMode) print('AppDatabase.clearAllData: Profiles cleared');
+
     if (kDebugMode) {
-      print('All data cleared from database');
+      print('AppDatabase.clearAllData: All data cleared from database');
     }
   }
 

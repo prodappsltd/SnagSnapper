@@ -295,13 +295,19 @@ class DeviceManager {
 
   Future<bool> forceLogoutOtherDevice(String userId) async {
     try {
+      await _ensureInitialized();
       final deviceId = await getDeviceId();
       final deviceModel = prefs.getString('device_model') ?? 'Unknown Device';
-      
-      // Set force logout flag
+
+      // Store session start time locally for this device
+      final sessionStartTime = DateTime.now().millisecondsSinceEpoch;
+      await prefs.setInt('session_start_time', sessionStartTime);
+
+      // Set force_logout_before to current timestamp
+      // Any device with session_start_time BEFORE this should logout
       await database
-          .ref('device_sessions/$userId/force_logout')
-          .set(true);
+          .ref('device_sessions/$userId/force_logout_before')
+          .set(sessionStartTime);
 
       // Register this device as current
       await database
@@ -310,11 +316,17 @@ class DeviceManager {
         'device_id': deviceId,
         'device_name': deviceModel,
         'last_active': ServerValue.timestamp,
-        'force_logout': false,
       });
+
+      if (kDebugMode) {
+        print('DeviceManager: Force logout set - sessions before $sessionStartTime should logout');
+      }
 
       return true;
     } catch (e) {
+      if (kDebugMode) {
+        print('DeviceManager: Error in forceLogoutOtherDevice: $e');
+      }
       return false;
     }
   }
@@ -323,7 +335,11 @@ class DeviceManager {
     try {
       final deviceId = await getDeviceId();
       final deviceModel = prefs.getString('device_model') ?? 'Unknown Device';
-      
+
+      // Store session start time locally
+      final sessionStartTime = DateTime.now().millisecondsSinceEpoch;
+      await prefs.setInt('session_start_time', sessionStartTime);
+
       await database
           .ref('device_sessions/$userId/current_device')
           .set({
@@ -331,8 +347,11 @@ class DeviceManager {
         'device_name': deviceModel,
         'last_active': ServerValue.timestamp,
         'session_start': ServerValue.timestamp,
-        'force_logout': false,
       });
+
+      if (kDebugMode) {
+        print('DeviceManager: Device registered with session start time: $sessionStartTime');
+      }
 
       return true;
     } catch (e) {
@@ -342,17 +361,39 @@ class DeviceManager {
 
   Stream<bool> setupForceLogoutListener(String userId) {
     final controller = StreamController<bool>.broadcast();
-    
+
     _forceLogoutSubscription?.cancel();
     _forceLogoutSubscription = database
-        .ref('device_sessions/$userId/force_logout')
+        .ref('device_sessions/$userId/force_logout_before')
         .onValue
-        .listen((event) {
-      final forceLogout = event.snapshot.value as bool? ?? false;
-      if (forceLogout) {
-        controller.add(true);
-        _forceLogoutController.add(true);
-        _forceLogoutCallback?.call();
+        .listen((event) async {
+      // Ensure prefs is initialized before accessing it
+      await _ensureInitialized();
+
+      final forceLogoutBefore = event.snapshot.value as int?;
+      if (forceLogoutBefore != null) {
+        // Get this device's session start time from local storage
+        final localSessionStart = prefs.getInt('session_start_time') ?? 0;
+
+        if (kDebugMode) {
+          print('DeviceManager: Force logout check - local session: $localSessionStart, force_logout_before: $forceLogoutBefore');
+        }
+
+        // Logout if:
+        // 1. Session start time is 0 (old/unknown session - should be logged out)
+        // 2. OR session started BEFORE the force_logout_before timestamp
+        if (localSessionStart == 0 || localSessionStart < forceLogoutBefore) {
+          if (kDebugMode) {
+            print('DeviceManager: This session is old or unknown - triggering force logout');
+          }
+          controller.add(true);
+          _forceLogoutController.add(true);
+          _forceLogoutCallback?.call();
+        } else {
+          if (kDebugMode) {
+            print('DeviceManager: This session is current (started after force_logout_before) - ignoring');
+          }
+        }
       }
     });
 
@@ -379,9 +420,10 @@ class DeviceManager {
           .ref('device_sessions/$userId/current_device')
           .remove();
       await database
-          .ref('device_sessions/$userId/force_logout')
+          .ref('device_sessions/$userId/force_logout_before')
           .remove();
       await prefs.remove('device_id');
+      await prefs.remove('session_start_time');
     } catch (e) {
       // Ignore errors
     }
@@ -390,7 +432,11 @@ class DeviceManager {
   Future<void> createSession(String userId) async {
     final deviceId = await getDeviceId();
     final deviceModel = prefs.getString('device_model') ?? 'Unknown Device';
-    
+
+    // Store session start time locally
+    final sessionStartTime = DateTime.now().millisecondsSinceEpoch;
+    await prefs.setInt('session_start_time', sessionStartTime);
+
     // Register current session
     await database
         .ref('device_sessions/$userId/current_device')
@@ -399,19 +445,11 @@ class DeviceManager {
       'device_name': deviceModel,
       'session_start': ServerValue.timestamp,
       'last_active': ServerValue.timestamp,
-      'force_logout': false,
     });
 
-    // Add to history
-    await database
-        .ref('device_sessions/$userId/history')
-        .push()
-        .set({
-      'device_id': deviceId,
-      'device_name': deviceModel,
-      'session_start': ServerValue.timestamp,
-      'event': 'login',
-    });
+    if (kDebugMode) {
+      print('DeviceManager: Session created with start time: $sessionStartTime');
+    }
   }
 
   Future<void> updateSessionActivity(String userId) async {
@@ -424,45 +462,39 @@ class DeviceManager {
 
   Future<void> endSession(String userId) async {
     try {
+      if (kDebugMode) {
+        print('DeviceManager.endSession: Starting for user $userId');
+      }
+
       // Get current session
       final snapshot = await database
           .ref('device_sessions/$userId/current_device')
           .get();
 
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        
-        // Add to history
-        await database
-            .ref('device_sessions/$userId/history')
-            .push()
-            .set({
-          ...data,
-          'session_end': ServerValue.timestamp,
-          'event': 'logout',
-        });
+        if (kDebugMode) {
+          print('DeviceManager.endSession: Found existing session');
+        }
       }
 
       // Remove current session
       await database
           .ref('device_sessions/$userId/current_device')
           .remove();
-    } catch (e) {
-      // Ignore errors
-    }
-  }
 
-  Future<void> logSessionEvent(String userId, String event) async {
-    final deviceId = await getDeviceId();
-    
-    await database
-        .ref('device_sessions/$userId/history')
-        .push()
-        .set({
-      'device_id': deviceId,
-      'event': event,
-      'timestamp': ServerValue.timestamp,
-    });
+      // Clear force_logout_before timestamp for clean state
+      await database
+          .ref('device_sessions/$userId/force_logout_before')
+          .remove();
+
+      if (kDebugMode) {
+        print('DeviceManager.endSession: Removed current_device and force_logout_before from Realtime DB');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('DeviceManager.endSession: ERROR - $e');
+      }
+    }
   }
 
   Future<bool> handleDeviceSwitch(String userId) async {

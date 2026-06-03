@@ -20,6 +20,9 @@ import 'package:snagsnapper/services/sync_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:snagsnapper/services/sync/device_manager.dart';
 
 class MainMenu extends StatefulWidget {
   const MainMenu({super.key});
@@ -450,16 +453,60 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   }
   
   /// Handle force logout when another device logs in with same account
+  /// Deletes ALL local data as per PRD warning message to user
   Future<void> _handleForceLogout() async {
-    if (kDebugMode) print('MainMenu: Handling force logout');
-    
-    // Cancel any ongoing sync immediately
-    _syncService.cancelSync();
-    
-    // Sign out the user
+    if (kDebugMode) print('MainMenu: Handling force logout - deleting all local data');
+
+    // Get user ID before signing out (needed for image cleanup)
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
+    // Cancel sync AND dispose RDB listeners to prevent permission errors on signout
+    _syncService.cleanupBeforeSignout();
+
+    try {
+      // 1. Clear all database data (profiles, sites, sync queue)
+      if (kDebugMode) print('MainMenu: Clearing database...');
+      await AppDatabase.instance.clearAllData();
+
+      // 2. Clear local images
+      if (userId != null) {
+        if (kDebugMode) print('MainMenu: Clearing local images for user $userId...');
+        try {
+          final appDir = await getApplicationDocumentsDirectory();
+          final userDir = Directory('${appDir.path}/SnagSnapper/$userId');
+          if (await userDir.exists()) {
+            await userDir.delete(recursive: true);
+            if (kDebugMode) print('MainMenu: Local images cleared');
+          }
+        } catch (e) {
+          if (kDebugMode) print('MainMenu: Error clearing local images: $e');
+        }
+      }
+
+      // 3. Clear SharedPreferences (device session data)
+      if (kDebugMode) print('MainMenu: Clearing SharedPreferences...');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('device_id');
+      await prefs.remove('session_start_time');
+      await prefs.remove('device_model');
+      await prefs.remove('device_os');
+      if (kDebugMode) print('MainMenu: SharedPreferences cleared');
+
+      // 4. Reset ContentProvider state
+      if (kDebugMode) print('MainMenu: Resetting ContentProvider...');
+      Provider.of<CP>(context, listen: false).resetVariables();
+
+    } catch (e) {
+      if (kDebugMode) print('MainMenu: Error during force logout cleanup: $e');
+    }
+
+    // 5. Sign out the user
+    if (kDebugMode) print('MainMenu: Signing out...');
     await FirebaseAuth.instance.signOut();
-    
-    // Navigate to login screen
+
+    if (kDebugMode) print('MainMenu: Force logout complete - navigating to login');
+
+    // 6. Navigate to login screen
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const UnifiedAuthScreen()),
@@ -471,11 +518,27 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
-    // When app comes to foreground, check for pending syncs
+
+    // When app comes to foreground, check for pending syncs and update device activity
     if (state == AppLifecycleState.resumed) {
-      if (kDebugMode) print('MainMenu: App resumed, checking for pending syncs...');
+      if (kDebugMode) print('MainMenu: App resumed');
       _checkForPendingSync();
+      _updateDeviceActivity();
+    }
+  }
+
+  /// Update device last_active timestamp in Realtime Database
+  Future<void> _updateDeviceActivity() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      final deviceManager = DeviceManager();
+      await deviceManager.updateDeviceActivity(userId);
+      if (kDebugMode) print('MainMenu: Device activity updated');
+    } catch (e) {
+      // Ignore errors - non-critical operation
+      if (kDebugMode) print('MainMenu: Error updating device activity: $e');
     }
   }
 

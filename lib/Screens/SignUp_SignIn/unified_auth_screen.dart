@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:another_flushbar/flushbar.dart';
 import '../../Data/contentProvider.dart';
 import '../../Helper/auth.dart';
 import '../../Helper/error.dart';
+import '../../services/sync/device_manager.dart';
 // import '../../services/image_service.dart'; // REMOVED - Service is commented out
 // import '../../services/image_preload_service.dart'; // REMOVED - Service is commented out
 
@@ -124,7 +126,50 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
         if (!result.error) {
           // Success - load user profile before navigating
           if (kDebugMode) print('Login successful, loading profile...');
-          
+
+          // Check for device conflict before loading profile
+          try {
+            final userId = FirebaseAuth.instance.currentUser?.uid;
+            if (userId != null) {
+              final deviceManager = DeviceManager();
+              final conflict = await deviceManager.checkForDeviceConflict(userId);
+
+              if (kDebugMode) {
+                print('Device conflict check - hasConflict: ${conflict.hasConflict}');
+              }
+
+              if (conflict.hasConflict) {
+                if (kDebugMode) {
+                  print('Other device: ${conflict.otherDeviceName}');
+                  print('Last active: ${conflict.lastActiveTime}');
+                }
+
+                // Show warning dialog
+                final shouldContinue = await _showDeviceConflictDialog(conflict);
+
+                if (!shouldContinue) {
+                  // User cancelled - sign out and return to login
+                  if (kDebugMode) print('User cancelled device switch');
+                  await FirebaseAuth.instance.signOut();
+                  if (mounted) setState(() => _isLoading = false);
+                  return; // Exit login flow
+                }
+
+                // User chose to continue - force logout other device
+                if (kDebugMode) print('User confirmed device switch, forcing logout on other device');
+                await deviceManager.forceLogoutOtherDevice(userId);
+                if (kDebugMode) {
+                  print('Force logout triggered for other device');
+                }
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('Device conflict check error (non-blocking): $e');
+            }
+            // Continue with login even if conflict check fails (offline-first)
+          }
+
           // Load user profile
           final cp = Provider.of<CP>(context, listen: false);
           if (kDebugMode) print('UnifiedAuthScreen: Calling loadProfileOfUser...');
@@ -225,7 +270,7 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
   /// Shows error message using Flushbar
   void _showErrorMessage(String message) {
     if (!mounted) return;
-    
+
     Flushbar(
       message: message,
       duration: const Duration(seconds: 4),
@@ -238,7 +283,70 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
       borderRadius: BorderRadius.circular(8),
     ).show(context);
   }
-  
+
+  /// Shows device conflict warning dialog per PRD spec (Section 5.3.2)
+  /// Returns true if user wants to continue, false if cancelled
+  Future<bool> _showDeviceConflictDialog(DeviceConflictResult conflict) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Expanded(child: Text('Active Session Detected')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('You are already logged in on another device.'),
+              const SizedBox(height: 12),
+              Text('Device: ${conflict.otherDeviceName ?? "Unknown"}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('Last active: ${_formatDateTime(conflict.lastActiveTime)}'),
+              const SizedBox(height: 16),
+              const Text('Continuing will:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text('• Log out the other device'),
+              const Text('• DELETE all local data on that device'),
+              const Text('• Any pending updates from that device will be lost'),
+              const Text('• Transfer your account to this device'),
+              const SizedBox(height: 16),
+              const Text('This action cannot be undone.',
+                  style: TextStyle(color: Colors.red, fontStyle: FontStyle.italic)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text(
+              'Continue on This Device',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Formats DateTime for display in conflict dialog
+  String _formatDateTime(DateTime? dateTime) {
+    if (dateTime == null) return 'Unknown';
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
   /// Handles Google sign-in
   Future<void> _handleGoogleSignIn() async {
     // Prevent double submission
@@ -263,7 +371,50 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
       if (!result.error) {
         // Success - load user profile before navigating
         if (kDebugMode) print('Google sign-in successful, loading profile...');
-        
+
+        // Check for device conflict before loading profile
+        try {
+          final userId = FirebaseAuth.instance.currentUser?.uid;
+          if (userId != null) {
+            final deviceManager = DeviceManager();
+            final conflict = await deviceManager.checkForDeviceConflict(userId);
+
+            if (kDebugMode) {
+              print('Device conflict check - hasConflict: ${conflict.hasConflict}');
+            }
+
+            if (conflict.hasConflict) {
+              if (kDebugMode) {
+                print('Other device: ${conflict.otherDeviceName}');
+                print('Last active: ${conflict.lastActiveTime}');
+              }
+
+              // Show warning dialog
+              final shouldContinue = await _showDeviceConflictDialog(conflict);
+
+              if (!shouldContinue) {
+                // User cancelled - sign out and return to login
+                if (kDebugMode) print('User cancelled device switch');
+                await FirebaseAuth.instance.signOut();
+                if (mounted) setState(() => _isLoading = false);
+                return; // Exit login flow
+              }
+
+              // User chose to continue - force logout other device
+              if (kDebugMode) print('User confirmed device switch, forcing logout on other device');
+              await deviceManager.forceLogoutOtherDevice(userId);
+              if (kDebugMode) {
+                print('Force logout triggered for other device');
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Device conflict check error (non-blocking): $e');
+          }
+          // Continue with login even if conflict check fails (offline-first)
+        }
+
         // Load user profile
         final cp = Provider.of<CP>(context, listen: false);
         final profileResult = await cp.loadProfileOfUser();
