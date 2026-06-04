@@ -1,3 +1,23 @@
+// TODO: DELETE THIS FILE - Old Site model replaced by lib/Data/models/site.dart
+//
+// Migration notes:
+// - uID → id
+// - location → address
+// - image (base64) → imageLocalPath (file path)
+// - ownerName → look up from Profile using ownerEmail/ownerUID
+//
+// Files still using this old model (need migration):
+// - lib/Screens/Sites/SiteInfo/siteStatus.dart (Phase 5)
+// - lib/Screens/Sites/SiteInfo/siteInfo.dart (Phase 5)
+// - lib/Widgets/siteGridView.dart (replaced by site_grid_tile.dart)
+// - lib/Data/contentProvider.dart (Phase 4)
+// - lib/Screens/Snags/CreateEditSnag.dart
+// - lib/Data/createPDF.dart
+//
+// Files ALREADY migrated to new model:
+// - lib/Screens/Sites/mySites.dart (Feature 1.35)
+// - lib/Screens/Sites/Tabs/ownedSites.dart (Feature 1.35)
+// - lib/Screens/Sites/Tabs/sharedSites.dart (Feature 1.35)
 
 import 'package:json_annotation/json_annotation.dart';
 import 'package:snagsnapper/Constants/constants.dart';
@@ -18,7 +38,8 @@ class Site {
   required this.uID,
   required this.sharedWith,
   required this.ownerName,
-  required this.archive
+  required this.archive,
+  this.reportTitle,
   });
 
   @JsonKey(name: NAME)
@@ -43,6 +64,8 @@ class Site {
   Map<String, String> sharedWith;
   @JsonKey(name: PICTURE_QUALITY, defaultValue: 0)
   int pictureQuality;
+  @JsonKey(name: 'REPORT_TITLE')
+  String? reportTitle;
 
   /// A necessary factory constructor for creating a new User instance
   /// from a map. Pass the map to the generated `_$UserFromJson()` constructor.

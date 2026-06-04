@@ -27,6 +27,7 @@ import 'package:snagsnapper/Data/site.dart';
 import 'package:snagsnapper/Data/snag.dart';
 import 'package:snagsnapper/services/sync_service.dart';
 import 'package:snagsnapper/services/sync/handlers/profile_sync_handler.dart';
+import 'package:snagsnapper/services/sync/device_manager.dart';
 import 'package:snagsnapper/services/image_storage_service.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as p;
@@ -587,14 +588,15 @@ class CP extends ChangeNotifier {
 
   List<Colleague> getListOFColleagues() {
     //if (kDebugMode) print('DATA-F-L_GLC: Get List of Colleagues');
-    return _appUser!.listOfALLColleagues!;
+    return _appUser?.listOfALLColleagues ?? [];
   }
 
   Future<bool> addColleague(Colleague colleague2BAdded) async {
     if (kDebugMode) print('DATA-F_AC: Add Colleague');
     bool result = false;
     bool alreadyExists = false;
-    for (var colleague in _appUser!.listOfALLColleagues!) {
+    final colleagues = _appUser?.listOfALLColleagues ?? [];
+    for (var colleague in colleagues) {
       colleague.email == colleague2BAdded.email ? alreadyExists = true : false;
     }
     if (alreadyExists && kDebugMode) print('DATA-L_AC: --Colleague ALREADY exists--');
@@ -606,7 +608,7 @@ class CP extends ChangeNotifier {
         LIST_OF_COLLEAGUES: FieldValue.arrayUnion([colleague2BAdded.toJson()])
       }).then((onValue) {
         if (kDebugMode) print('DATA_AC: Colleague Added');
-        _appUser!.listOfALLColleagues!.add(colleague2BAdded);
+        _appUser?.listOfALLColleagues?.add(colleague2BAdded);
         if (kDebugMode) print('DATA_AC: Notifying Listeners');
         notifyListeners();
         result = true;
@@ -759,8 +761,9 @@ class CP extends ChangeNotifier {
     final userId = FirebaseAuth.instance.currentUser!.uid;
     
     try {
-      // STEP 1: Generate device ID for this device (PRD 4.3.1 step 4)
-      final currentDeviceId = await _generateDeviceId();
+      // STEP 1: Get device ID using DeviceManager (single source of truth)
+      final deviceManager = DeviceManager();
+      final currentDeviceId = await deviceManager.getDeviceId();
       if (kDebugMode) print('DATA_LP: 3.1 - Current device ID: $currentDeviceId');
       
       // STEP 2: Check LOCAL database FIRST (PRD 4.3.1 step 5)
@@ -768,7 +771,20 @@ class CP extends ChangeNotifier {
       
       final db = await AppDatabase.getInstance();
       final profileDao = db.profileDao;
-      
+
+      // DATA INTEGRITY CHECK: Ensure only one user's data exists in database
+      // This protects previous user's data by clearing it when a different user logs in
+      final anyProfile = await profileDao.getSavedProfile();
+      if (anyProfile != null && anyProfile.id != userId) {
+        if (kDebugMode) {
+          print('DATA_LP: 3.2 - DIFFERENT USER DETECTED! Clearing stale data...');
+          print('  Existing profile: ${anyProfile.id}');
+          print('  Current user: $userId');
+        }
+        await db.clearAllData();
+        if (kDebugMode) print('DATA_LP: 3.2 - Stale data cleared, proceeding with fresh start');
+      }
+
       // Try to load from local database
       final localProfile = await profileDao.getProfile(userId);
       
@@ -834,9 +850,8 @@ class CP extends ChangeNotifier {
         
         if (kDebugMode) print('DATA_LP: 3.6 - Using LOCAL profile, app works offline!');
 
-        // Register device in Realtime Database even when using local profile
-        // This ensures device session is tracked for single-device enforcement
-        await _registerDeviceSession(userId, currentDeviceId);
+        // Register device using DeviceManager
+        await deviceManager.registerDevice(userId);
       } else {
         // STEP 3: Not in local database, try Firebase (new user or reinstall)
         if (kDebugMode) print('DATA_LP: 3.7 - No local profile, checking Firebase...');
@@ -859,21 +874,10 @@ class CP extends ChangeNotifier {
                 if (kDebugMode) print('DATA_LP: 3.8 - Same device reinstall, downloading profile');
               } else {
                 // DIFFERENT device - PRD 4.3.1 step 6a (device switch)
-                if (kDebugMode) print('DATA_LP: 3.9 - Different device detected, following switch flow');
-                
-                // Show device switch warning dialog
-                final shouldContinue = await _showDeviceSwitchWarning(firebaseDeviceId);
-                
-                if (!shouldContinue) {
-                  // User cancelled - sign out and return
-                  await FirebaseAuth.instance.signOut();
-                  resetVariables();
-                  return false;
-                }
-                
-                // User confirmed - set force_logout for old device
-                await _forceLogoutOldDevice(userId, firebaseDeviceId);
-                
+                // Note: Device conflict warning already shown in unified_auth_screen.dart
+                // Just proceed with profile download - force logout already triggered
+                if (kDebugMode) print('DATA_LP: 3.9 - Different device detected, proceeding with download');
+
                 // Update device_id in Firebase profile
                 await FirebaseFirestore.instance
                     .collection('Profile')
@@ -918,9 +922,9 @@ class CP extends ChangeNotifier {
             
             // Clear sync flags since we just downloaded from Firebase
             await profileDao.clearSyncFlags(userId);
-            
-            // Register device in Realtime Database (PRD 4.3.1 step 6c)
-            await _registerDeviceSession(userId, currentDeviceId);
+
+            // Register device using DeviceManager
+            await deviceManager.registerDevice(userId);
             
             // Download images and signatures if they exist in Firebase
             if (kDebugMode) print('DATA_LP: 3.11a - Checking for images to download...');
@@ -969,13 +973,10 @@ class CP extends ChangeNotifier {
             if (kDebugMode) print('DATA_LP: 3.12 - Firebase profile saved locally for offline use');
           } else {
             if (kDebugMode) print('DATA_LP: 3.13 - No profile exists (new user)');
-            
-            // New user - create profile with device ID
-            // This will be handled by ProfileSetupScreen
-            // Just register the device session
-            if (kDebugMode) print('DATA_LP: 3.13a - About to register device session...');
-            await _registerDeviceSession(userId, currentDeviceId);
-            if (kDebugMode) print('DATA_LP: 3.13b - Device session registered');
+
+            // Register device using DeviceManager
+            await deviceManager.registerDevice(userId);
+            if (kDebugMode) print('DATA_LP: 3.13a - Device registered');
           }
         } catch (firebaseError) {
           // Firebase error - but app should still work offline
@@ -985,12 +986,8 @@ class CP extends ChangeNotifier {
           // Don't rethrow - allow offline operation
         }
       }
-      
-      // STEP 4: Set up device session listener (PRD 4.3.1 step 7)
-      if (result && await getNetworkStatus()) {
-        await _setupDeviceSessionListener(userId, currentDeviceId);
-      }
-      
+
+      // Note: Device session listener is set up by SyncService.onForceLogout()
       if (kDebugMode) print('DATA_LP: 4 - Profile loading complete. Found: $result');
     } catch (e) {
       if (kDebugMode) {
@@ -1143,123 +1140,38 @@ class CP extends ChangeNotifier {
     }
   }
 
-  /// Generate unique device ID for this device (PRD 4.3.1 step 4)
-  Future<String> _generateDeviceId() async {
-    final deviceInfo = DeviceInfoPlugin();
-    String deviceId = '';
-    
-    try {
-      if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        deviceId = iosInfo.identifierForVendor ?? 'ios_${DateTime.now().millisecondsSinceEpoch}';
-      } else if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        deviceId = androidInfo.id ?? 'android_${DateTime.now().millisecondsSinceEpoch}';
-      } else {
-        deviceId = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
-      }
-    } catch (e) {
-      if (kDebugMode) print('Error generating device ID: $e');
-      deviceId = 'fallback_${DateTime.now().millisecondsSinceEpoch}';
-    }
-    
-    return deviceId;
-  }
+  // DEPRECATED: Use DeviceManager.getDeviceId() instead
+  // Future<String> _generateDeviceId() async {
+  //   final deviceInfo = DeviceInfoPlugin();
+  //   String deviceId = '';
+  //
+  //   try {
+  //     if (Platform.isIOS) {
+  //       final iosInfo = await deviceInfo.iosInfo;
+  //       deviceId = iosInfo.identifierForVendor ?? 'ios_${DateTime.now().millisecondsSinceEpoch}';
+  //     } else if (Platform.isAndroid) {
+  //       final androidInfo = await deviceInfo.androidInfo;
+  //       deviceId = androidInfo.id ?? 'android_${DateTime.now().millisecondsSinceEpoch}';
+  //     } else {
+  //       deviceId = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
+  //     }
+  //   } catch (e) {
+  //     if (kDebugMode) print('Error generating device ID: $e');
+  //     deviceId = 'fallback_${DateTime.now().millisecondsSinceEpoch}';
+  //   }
+  //
+  //   return deviceId;
+  // }
 
-  /// Register device session in Realtime Database (PRD 4.3.1 step 6c)
-  Future<void> _registerDeviceSession(String userId, String deviceId) async {
-    if (kDebugMode) print('_registerDeviceSession: Starting for user: $userId, device: $deviceId');
-    
-    try {
-      String deviceName = 'Unknown Device';
-      
-      if (kDebugMode) print('_registerDeviceSession: Getting device info...');
-      final deviceInfo = DeviceInfoPlugin();
-      if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        deviceName = '${iosInfo.name} (${iosInfo.model})';
-        if (kDebugMode) print('_registerDeviceSession: iOS device name: $deviceName');
-      } else if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        deviceName = '${androidInfo.brand} ${androidInfo.model}';
-        if (kDebugMode) print('_registerDeviceSession: Android device name: $deviceName');
-      }
-      
-      if (kDebugMode) print('_registerDeviceSession: Writing to Realtime Database...');
-      
-      // Explicitly set the database URL for Europe region
-      final database = FirebaseDatabase.instanceFor(
-        app: Firebase.app(),
-        databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
-      );
-      
-      if (kDebugMode) print('_registerDeviceSession: Using database URL: https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app');
-      
-      // Create reference with the correct database instance
-      final ref = database.ref('device_sessions/$userId/current_device');
-      if (kDebugMode) print('_registerDeviceSession: Reference created: ${ref.path}');
-      
-      // Try to write with timeout to prevent hanging
-      await ref.set({
-        'device_id': deviceId,
-        'device_name': deviceName,
-        'last_active': ServerValue.timestamp,
-        'force_logout': false,
-      }).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          if (kDebugMode) print('_registerDeviceSession: TIMEOUT after 10 seconds');
-          throw TimeoutException('Realtime Database write timeout');
-        }
-      );
-      
-      if (kDebugMode) print('_registerDeviceSession: SUCCESS - Device registered in Realtime Database: $deviceId');
-    } catch (e) {
-      if (kDebugMode) print('_registerDeviceSession: ERROR - $e');
-      if (kDebugMode) print('_registerDeviceSession: Error type: ${e.runtimeType}');
-      // Don't throw - this is a non-critical operation
-    }
-    if (kDebugMode) print('_registerDeviceSession: Completed');
-  }
+  // DEPRECATED: Use DeviceManager.registerDevice() instead
+  // Future<void> _registerDeviceSession(String userId, String deviceId) async {
+  //   ... (see DeviceManager for implementation)
+  // }
 
-  /// Set up listener for force logout (PRD 4.3.2 PATH 1)
-  Future<void> _setupDeviceSessionListener(String userId, String currentDeviceId) async {
-    try {
-      // Use the correct database instance for Europe region
-      final database = FirebaseDatabase.instanceFor(
-        app: Firebase.app(),
-        databaseURL: 'https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app',
-      );
-      
-      final sessionRef = database
-          .ref('device_sessions/$userId/current_device');
-      
-      // Cancel any existing subscription before creating new one
-      _deviceSessionSubscription?.cancel();
-
-      // Listen for force_logout changes
-      _deviceSessionSubscription = sessionRef.child('force_logout').onValue.listen((event) async {
-        final forceLogout = event.snapshot.value as bool? ?? false;
-        
-        if (forceLogout) {
-          if (kDebugMode) print('FORCE LOGOUT detected! Another device has taken over.');
-          
-          // Clear all local data
-          await _handleForceLogout(userId);
-        }
-      });
-      
-      // Update last_active periodically (on app resume)
-      await sessionRef.update({
-        'last_active': ServerValue.timestamp,
-      });
-      
-      if (kDebugMode) print('Device session listener set up');
-    } catch (e) {
-      if (kDebugMode) print('Error setting up device session listener: $e');
-      // Don't throw - app should work without listener
-    }
-  }
+  // DEPRECATED: SyncService.onForceLogout() sets up the listener via DeviceManager
+  // Future<void> _setupDeviceSessionListener(String userId, String currentDeviceId) async {
+  //   ... (see DeviceManager.setupForceLogoutListener for implementation)
+  // }
 
   /// Force logout old device (PRD 4.3.2)
   Future<void> _forceLogoutOldDevice(String userId, String oldDeviceId) async {

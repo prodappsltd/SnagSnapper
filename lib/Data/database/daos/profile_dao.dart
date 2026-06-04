@@ -117,6 +117,34 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
     }
   }
 
+  /// Get any profile in the database (no ID filter)
+  /// Used to detect if a different user's data exists
+  /// Returns first profile found, or null if database is empty
+  Future<AppUser?> getSavedProfile() async {
+    try {
+      final query = select(profiles)..limit(1);
+      final result = await query.getSingleOrNull();
+
+      if (result == null) {
+        if (kDebugMode) {
+          print('ProfileDao: No profiles in database');
+        }
+        return null;
+      }
+
+      if (kDebugMode) {
+        print('ProfileDao: Found profile for user ${result.id}');
+      }
+
+      return _profileEntryToAppUser(result);
+    } catch (e) {
+      if (kDebugMode) {
+        print('ProfileDao: Error getting any profile: $e');
+      }
+      return null;
+    }
+  }
+
   /// Update existing profile
   /// Returns true if successful, false otherwise
   Future<bool> updateProfile(String userId, AppUser updatedUser) async {

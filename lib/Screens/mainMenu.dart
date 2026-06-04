@@ -53,7 +53,9 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   bool _hasPendingSync = false;
   bool _isSyncInitialized = false;
   bool _profileNeedsSync = false;
+  bool _sitesNeedSync = false;
   StreamSubscription? _profileSyncSubscription;
+  StreamSubscription? _siteSyncSubscription;
   
   // Animation controllers
   late AnimationController _fadeController;
@@ -76,6 +78,7 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       await _initializeSyncService();
       _setupConnectivityListener();
       _setupProfileSyncListener();
+      _setupSiteSyncListener();
       // Check for pending sync after listeners are setup
       Future.delayed(const Duration(milliseconds: 500), () {
         _checkForPendingSync();
@@ -358,23 +361,48 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   void _setupProfileSyncListener() {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
-    
+
     final database = AppDatabase.instance;
-    
+
     // Listen to profile sync status changes
     _profileSyncSubscription = database.profileDao.watchProfile(userId).listen((profile) {
       if (profile != null && mounted) {
-        final needsSync = profile.needsProfileSync || 
-                         profile.needsImageSync || 
+        final needsSync = profile.needsProfileSync ||
+                         profile.needsImageSync ||
                          profile.needsSignatureSync;
-        
+
         setState(() {
           _profileNeedsSync = needsSync;
         });
-        
+
         if (kDebugMode) print('MainMenu: Profile sync status changed - needsSync: $needsSync');
-        
+
         // Trigger sync check when status changes to needs sync
+        if (needsSync) {
+          _checkForPendingSync();
+        }
+      }
+    });
+  }
+
+  /// Setup listener for site sync status changes
+  void _setupSiteSyncListener() {
+    final database = AppDatabase.instance;
+
+    // Listen to sites that need syncing (upload to Firebase)
+    _siteSyncSubscription = database.siteDao.watchSitesNeedingSync().listen((sitesNeedingSync) {
+      if (mounted) {
+        final needsSync = sitesNeedingSync.isNotEmpty;
+
+        setState(() {
+          _sitesNeedSync = needsSync;
+        });
+
+        if (kDebugMode) {
+          print('MainMenu: Site sync status changed - ${sitesNeedingSync.length} sites need sync');
+        }
+
+        // Trigger sync when sites need uploading
         if (needsSync) {
           _checkForPendingSync();
         }
@@ -385,68 +413,78 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   /// Check for pending sync items in background
   Future<void> _checkForPendingSync() async {
     if (!_isSyncInitialized) return;
-    
+
     try {
       final database = AppDatabase.instance;
       final userId = FirebaseAuth.instance.currentUser?.uid;
-      
+
       if (userId == null) return;
-      
+
       // Check if profile needs sync
+      bool profileNeedsSync = false;
       final profile = await database.profileDao.getProfile(userId);
       if (profile != null) {
-        final needsSync = profile.needsProfileSync || 
-                         profile.needsImageSync || 
-                         profile.needsSignatureSync;
-        
-        if (needsSync && mounted) {
-          setState(() {
-            _hasPendingSync = true;
-            _profileNeedsSync = true;
-          });
-          
-          if (kDebugMode) print('MainMenu: Found pending sync items, triggering background sync...');
-          
-          // Trigger sync in background (non-blocking)
-          _syncService.syncNow().then((result) {
-            if (result.success && mounted) {
-              setState(() {
-                _hasPendingSync = false;
-              });
-              if (kDebugMode) print('MainMenu: Background sync completed successfully');
-            } else if (!result.success && result.message.isNotEmpty && mounted) {
-              // Check if it's a permanent failure that needs user attention
-              final errorMessage = result.message;
-              if (errorMessage.contains('permission') || 
-                  errorMessage.contains('quota') || 
-                  errorMessage.contains('invalid')) {
-                // Show toast for permanent failures
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Sync failed: $errorMessage'),
-                    duration: const Duration(seconds: 4),
-                    action: SnackBarAction(
-                      label: 'Retry',
-                      onPressed: () => _checkForPendingSync(),
-                    ),
-                  ),
-                );
-              }
-              // Temporary failures will retry automatically
-              if (kDebugMode) print('MainMenu: Sync failed - ${result.message}');
-            }
-          }).catchError((e) {
-            if (kDebugMode) print('MainMenu: Background sync error: $e');
-          });
-        } else if (mounted) {
-          setState(() {
-            _profileNeedsSync = false;
-          });
-        }
+        profileNeedsSync = profile.needsProfileSync ||
+                          profile.needsImageSync ||
+                          profile.needsSignatureSync;
       }
-      
-      // TODO: In future, also check for pending Sites and Snags sync
-      
+
+      // Check if sites need upload
+      final sitesNeedingSync = await database.siteDao.getSitesNeedingSync();
+      final sitesNeedUpload = sitesNeedingSync.isNotEmpty;
+
+      // Check if sites need download (no local owned sites)
+      final localOwnedSites = await database.siteDao.getOwnedSites(userId);
+      final sitesNeedDownload = localOwnedSites.isEmpty;
+
+      // Update state
+      if (mounted) {
+        setState(() {
+          _profileNeedsSync = profileNeedsSync;
+          _sitesNeedSync = sitesNeedUpload;
+          _hasPendingSync = profileNeedsSync || sitesNeedUpload || sitesNeedDownload;
+        });
+      }
+
+      // Trigger sync if upload OR download needed
+      if ((profileNeedsSync || sitesNeedUpload || sitesNeedDownload) && mounted) {
+        if (kDebugMode) {
+          print('MainMenu: Pending sync - profile: $profileNeedsSync, upload: ${sitesNeedingSync.length}, download: $sitesNeedDownload');
+        }
+
+        // Trigger sync in background (non-blocking)
+        _syncService.syncNow().then((result) {
+          if (result.success && mounted) {
+            setState(() {
+              _hasPendingSync = false;
+            });
+            if (kDebugMode) print('MainMenu: Background sync completed successfully');
+          } else if (!result.success && result.message.isNotEmpty && mounted) {
+            // Check if it's a permanent failure that needs user attention
+            final errorMessage = result.message;
+            if (errorMessage.contains('permission') ||
+                errorMessage.contains('quota') ||
+                errorMessage.contains('invalid')) {
+              // Show toast for permanent failures
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Sync failed: $errorMessage'),
+                  duration: const Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: 'Retry',
+                    onPressed: () => _checkForPendingSync(),
+                  ),
+                ),
+              );
+            }
+            // Temporary failures will retry automatically
+            if (kDebugMode) print('MainMenu: Sync failed - ${result.message}');
+          }
+        }).catchError((e) {
+          if (kDebugMode) print('MainMenu: Background sync error: $e');
+        });
+      }
+
     } catch (e) {
       if (kDebugMode) print('MainMenu: Error checking for pending sync: $e');
     }
@@ -547,6 +585,7 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     WidgetsBinding.instance.removeObserver(this);
     _connectivitySubscription?.cancel();
     _profileSyncSubscription?.cancel();
+    _siteSyncSubscription?.cancel();
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
@@ -703,8 +742,6 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   
   @override
   Widget build(BuildContext context) {
-    if (kDebugMode) print ('MAIN-MENU: -----  BUILD SECTION   -----');
-    
     // Dismiss any active keyboard focus to prevent keyboard from showing
     FocusScope.of(context).unfocus();
     

@@ -40,65 +40,36 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
     }
   }
 
-  // ============== READ Operations ==============
-  
-  /// Get all sites for the current user (owned and shared)
-  /// Returns sites ordered by updatedAt descending (newest first)
-  Future<List<Site>> getAllSites(String userEmail) async {
-    final query = select(sites)
-      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
-    
-    final entries = await query.get();
-    
-    // Filter sites where user is owner or in sharedWith
-    return entries
-        .where((entry) => 
-            entry.ownerEmail == userEmail ||
-            _isUserInSharedWith(entry.sharedWith, userEmail))
-        .map((entry) => _entryToSite(entry))
-        .toList();
+  /// Upsert a site (insert if new, update if exists)
+  /// Used when downloading sites from Firebase
+  Future<bool> upsertSite(Site site) async {
+    try {
+      final entry = _siteToEntry(site);
+      await into(sites).insertOnConflictUpdate(entry);
+
+      if (kDebugMode) {
+        print('SiteDao: Upserted site ${site.id}');
+      }
+
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('SiteDao: Error upserting site ${site.id}: $e');
+      }
+      return false;
+    }
   }
-  
-  /// Get only owned sites for the current user
-  Future<List<Site>> getOwnedSites(String userEmail) async {
+
+  // ============== READ Operations ==============
+
+  /// Get only owned sites for the current user by UID
+  Future<List<Site>> getOwnedSites(String ownerUID) async {
     final query = select(sites)
-      ..where((t) => t.ownerEmail.equals(userEmail))
+      ..where((t) => t.ownerUID.equals(ownerUID))
       ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
-    
+
     final entries = await query.get();
     return entries.map((entry) => _entryToSite(entry)).toList();
-  }
-  
-  /// Get only shared sites for the current user
-  Future<List<Site>> getSharedSites(String userEmail) async {
-    final query = select(sites)
-      ..where((t) => t.ownerEmail.equals(userEmail).not())
-      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
-    
-    final entries = await query.get();
-    
-    // Filter sites where user is in sharedWith
-    return entries
-        .where((entry) => _isUserInSharedWith(entry.sharedWith, userEmail))
-        .map((entry) => _entryToSite(entry))
-        .toList();
-  }
-  
-  /// Get sites that are not archived
-  Future<List<Site>> getActiveSites(String userEmail) async {
-    final query = select(sites)
-      ..where((t) => t.archive.equals(false))
-      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
-    
-    final entries = await query.get();
-    
-    // Filter for user access
-    return entries
-        .where((entry) => 
-            entry.ownerEmail == userEmail ||
-            _isUserInSharedWith(entry.sharedWith, userEmail))
-        .map((entry) => _entryToSite(entry))
-        .toList();
   }
   
   /// Get a single site by ID
@@ -540,8 +511,28 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
   /// Watch a single site for real-time updates
   Stream<Site?> watchSite(String siteId) {
     final query = select(sites)..where((t) => t.id.equals(siteId));
-    return query.watchSingleOrNull().map((entry) => 
+    return query.watchSingleOrNull().map((entry) =>
       entry != null ? _entryToSite(entry) : null
+    );
+  }
+
+  /// Watch for sites that need syncing (upload to Firebase)
+  ///
+  /// Returns a stream that emits whenever any site's sync flags change.
+  /// Used by MainMenu to detect when to trigger background upload.
+  ///
+  /// Efficient because:
+  /// - ONE stream subscription (not one per site)
+  /// - Filters at database level (WHERE clause)
+  /// - Only re-queries when Sites table changes
+  Stream<List<Site>> watchSitesNeedingSync() {
+    final query = select(sites)
+      ..where((t) =>
+          t.needsSiteSync.equals(true) |
+          t.needsImageSync.equals(true));
+
+    return query.watch().map((entries) =>
+      entries.map((e) => _entryToSite(e)).toList()
     );
   }
 }

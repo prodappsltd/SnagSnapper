@@ -5,8 +5,9 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i6;
 import 'dart:io' as _i4;
+import 'dart:typed_data' as _i10;
 
-import 'package:connectivity_plus/connectivity_plus.dart' as _i10;
+import 'package:connectivity_plus/connectivity_plus.dart' as _i11;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i9;
 import 'package:snagsnapper/Data/models/sync_queue_item.dart' as _i3;
@@ -281,6 +282,12 @@ class MockSyncService extends _i1.Mock implements _i5.SyncService {
           as _i6.Future<void>);
 
   @override
+  void cleanupBeforeSignout() => super.noSuchMethod(
+    Invocation.method(#cleanupBeforeSignout, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   void dispose() => super.noSuchMethod(
     Invocation.method(#dispose, []),
     returnValueForMissingStub: null,
@@ -355,6 +362,80 @@ class MockImageStorageService extends _i1.Mock
           as _i6.Future<bool>);
 
   @override
+  _i6.Future<String> saveSiteImage(
+    _i4.File? imageFile,
+    String? userId,
+    String? siteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#saveSiteImage, [imageFile, userId, siteId]),
+            returnValue: _i6.Future<String>.value(
+              _i9.dummyValue<String>(
+                this,
+                Invocation.method(#saveSiteImage, [imageFile, userId, siteId]),
+              ),
+            ),
+          )
+          as _i6.Future<String>);
+
+  @override
+  _i6.Future<String> saveSiteImageFromBytes(
+    _i10.Uint8List? imageBytes,
+    String? userId,
+    String? siteId,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#saveSiteImageFromBytes, [
+              imageBytes,
+              userId,
+              siteId,
+            ]),
+            returnValue: _i6.Future<String>.value(
+              _i9.dummyValue<String>(
+                this,
+                Invocation.method(#saveSiteImageFromBytes, [
+                  imageBytes,
+                  userId,
+                  siteId,
+                ]),
+              ),
+            ),
+          )
+          as _i6.Future<String>);
+
+  @override
+  _i6.Future<String?> getSiteImagePath(String? userId, String? siteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#getSiteImagePath, [userId, siteId]),
+            returnValue: _i6.Future<String?>.value(),
+          )
+          as _i6.Future<String?>);
+
+  @override
+  _i6.Future<_i4.File?> getSiteImageFile(String? relativePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#getSiteImageFile, [relativePath]),
+            returnValue: _i6.Future<_i4.File?>.value(),
+          )
+          as _i6.Future<_i4.File?>);
+
+  @override
+  _i6.Future<bool> deleteSiteImage(String? userId, String? siteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteSiteImage, [userId, siteId]),
+            returnValue: _i6.Future<bool>.value(false),
+          )
+          as _i6.Future<bool>);
+
+  @override
+  _i6.Future<bool> deleteSiteDirectory(String? userId, String? siteId) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteSiteDirectory, [userId, siteId]),
+            returnValue: _i6.Future<bool>.value(false),
+          )
+          as _i6.Future<bool>);
+
+  @override
   _i6.Future<String> relativeToAbsolute(String? relativePath) =>
       (super.noSuchMethod(
             Invocation.method(#relativeToAbsolute, [relativePath]),
@@ -409,26 +490,26 @@ class MockImageStorageService extends _i1.Mock
 /// A class which mocks [Connectivity].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockConnectivity extends _i1.Mock implements _i10.Connectivity {
+class MockConnectivity extends _i1.Mock implements _i11.Connectivity {
   MockConnectivity() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i6.Stream<List<_i10.ConnectivityResult>> get onConnectivityChanged =>
+  _i6.Stream<List<_i11.ConnectivityResult>> get onConnectivityChanged =>
       (super.noSuchMethod(
             Invocation.getter(#onConnectivityChanged),
-            returnValue: _i6.Stream<List<_i10.ConnectivityResult>>.empty(),
+            returnValue: _i6.Stream<List<_i11.ConnectivityResult>>.empty(),
           )
-          as _i6.Stream<List<_i10.ConnectivityResult>>);
+          as _i6.Stream<List<_i11.ConnectivityResult>>);
 
   @override
-  _i6.Future<List<_i10.ConnectivityResult>> checkConnectivity() =>
+  _i6.Future<List<_i11.ConnectivityResult>> checkConnectivity() =>
       (super.noSuchMethod(
             Invocation.method(#checkConnectivity, []),
-            returnValue: _i6.Future<List<_i10.ConnectivityResult>>.value(
-              <_i10.ConnectivityResult>[],
+            returnValue: _i6.Future<List<_i11.ConnectivityResult>>.value(
+              <_i11.ConnectivityResult>[],
             ),
           )
-          as _i6.Future<List<_i10.ConnectivityResult>>);
+          as _i6.Future<List<_i11.ConnectivityResult>>);
 }

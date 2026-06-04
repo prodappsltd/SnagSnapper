@@ -19,6 +19,7 @@ import 'package:snagsnapper/services/image_compression_service.dart';
 import 'package:snagsnapper/Widgets/imageHelper.dart';
 import 'package:snagsnapper/Widgets/reusable_image_picker.dart';
 import 'package:snagsnapper/Screens/profile/components/colleagues_section.dart';
+import 'package:snagsnapper/Widgets/info_text_field.dart';
 
 // Removed BasicDateField import - date is now auto-set
 
@@ -54,6 +55,7 @@ class _SiteInfoState extends State<SiteInfo> {
   late String _siteCompanyName; // Renamed from _siteClientName
   late String _siteContactPerson;
   late String _siteContactPhone;
+  late String _siteReportTitle;
   late DateTime? _siteExpectedCompletion;
   late DateTime _siteDate; // Temporary for old Site model compatibility
 
@@ -186,265 +188,105 @@ class _SiteInfoState extends State<SiteInfo> {
                             const SizedBox(height: 20),
                             
                             // Company Name Field
-                            TextFormField(
+                            InfoTextField(
+                              labelText: 'Client Name',
+                              infoText: 'Enter the company or client name associated with this site. This will appear on reports and helps identify the project owner.',
+                              hintText: 'Enter client name',
+                              prefixIcon: Icons.business_center,
+                              initialValue: _siteCompanyName,
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ]'))],
                               keyboardType: TextInputType.text,
                               textCapitalization: TextCapitalization.words,
-                              initialValue: _siteCompanyName,
-                              style: GoogleFonts.montserrat(fontSize: 16),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Theme.of(context).colorScheme.surface,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                prefixIcon: Icon(Icons.business_center,
-                                  color: Theme.of(context).colorScheme.primary),
-                                labelText: 'Client Name',
-                                labelStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                helperText: 'Company or client name for this site',
-                                helperStyle: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                hintText: 'Enter client name',
-                                hintStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
-                                ),
-                              ),
+                              isRequired: true,
                               onChanged: (value) {
-                                _siteCompanyName = value.toString().trim();
+                                _siteCompanyName = value.trim();
                               },
                               validator: (value) {
-                                return value.toString().isNotEmpty ? null : 'Client name is required';
+                                return value != null && value.isNotEmpty ? null : 'Client name is required';
                               },
                             ),
                             const SizedBox(height: 16),
                             
                             // Site Name Field
-                            TextFormField(
+                            InfoTextField(
+                              labelText: 'Site Name',
+                              infoText: 'Provide a unique, descriptive name for this site. Examples: "Main Street Renovation", "Office Building Phase 2", "Smith Residence Extension".',
+                              hintText: 'Enter site name',
+                              prefixIcon: Icons.apartment,
+                              initialValue: _siteName,
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ]'))],
                               keyboardType: TextInputType.text,
                               textCapitalization: TextCapitalization.words,
-                              initialValue: _siteName,
-                              style: GoogleFonts.montserrat(fontSize: 16),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Theme.of(context).colorScheme.surface,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                prefixIcon: Icon(Icons.apartment,
-                                  color: Theme.of(context).colorScheme.primary),
-                                labelText: 'Site Name',
-                                labelStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                helperText: 'e.g., Main Street Renovation, Phase 2',
-                                helperStyle: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                hintText: 'Enter site name',
-                                hintStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
-                                ),
-                              ),
+                              isRequired: true,
                               onChanged: (value) {
-                                _siteName = value.toString().trim();
+                                _siteName = value.trim();
                               },
                               validator: (value) {
-                                return value.toString().isNotEmpty ? null : 'Site name is required';
+                                return value != null && value.isNotEmpty ? null : 'Site name is required';
                               },
                             ),
                             const SizedBox(height: 16),
-                            
+
+                            // Report Title Field
+                            InfoTextField(
+                              labelText: 'Report Title',
+                              infoText: 'Custom title that appears at the top of PDF reports for this site. If left empty, the site name will be used as the report title.',
+                              hintText: 'Enter report title (optional)',
+                              prefixIcon: Icons.description_outlined,
+                              initialValue: _siteReportTitle,
+                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ,.-]'))],
+                              keyboardType: TextInputType.text,
+                              textCapitalization: TextCapitalization.words,
+                              onChanged: (value) {
+                                _siteReportTitle = value.trim();
+                              },
+                            ),
+                            const SizedBox(height: 16),
+
                             // Address Field
-                            TextFormField(
+                            InfoTextField(
+                              labelText: 'Location',
+                              infoText: 'Enter the full street address or a description of the site location. This helps team members find the site and appears on reports.',
+                              hintText: 'Enter location or address',
+                              prefixIcon: Icons.location_on,
+                              initialValue: _siteAddress,
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ,.-]'))],
                               keyboardType: TextInputType.streetAddress,
                               textCapitalization: TextCapitalization.words,
-                              initialValue: _siteAddress,
-                              style: GoogleFonts.montserrat(fontSize: 16),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Theme.of(context).colorScheme.surface,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                prefixIcon: Icon(Icons.location_on,
-                                  color: Theme.of(context).colorScheme.primary),
-                                labelText: 'Location (Optional)',
-                                labelStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                helperText: 'Street address or location description',
-                                helperStyle: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                hintText: 'Enter location or address',
-                                hintStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
-                                ),
-                              ),
                               onChanged: (value) {
-                                _siteAddress = value.toString().trim();
+                                _siteAddress = value.trim();
                               },
-                              validator: (value) => null, // Optional field
                             ),
                             const SizedBox(height: 16),
                             
                             // Contact Person Field
-                            TextFormField(
+                            InfoTextField(
+                              labelText: 'Contact Person',
+                              infoText: 'Name of the primary contact person at this site. This could be the client, site supervisor, or main point of contact for the project.',
+                              hintText: 'Enter contact person name',
+                              prefixIcon: Icons.person_outline,
+                              initialValue: _siteContactPerson,
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[a-zA-Z ]'))],
                               keyboardType: TextInputType.name,
                               textCapitalization: TextCapitalization.words,
-                              initialValue: _siteContactPerson,
-                              style: GoogleFonts.montserrat(fontSize: 16),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Theme.of(context).colorScheme.surface,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                prefixIcon: Icon(Icons.person_outline,
-                                  color: Theme.of(context).colorScheme.primary),
-                                labelText: 'Contact Person (Optional)',
-                                labelStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                helperText: 'Primary contact at this site',
-                                helperStyle: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                hintText: 'Enter contact person name',
-                                hintStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
-                                ),
-                              ),
                               onChanged: (value) {
-                                _siteContactPerson = value.toString().trim();
+                                _siteContactPerson = value.trim();
                               },
-                              validator: (value) => null, // Optional field
                             ),
                             const SizedBox(height: 16),
                             
                             // Contact Phone Field
-                            TextFormField(
+                            InfoTextField(
+                              labelText: 'Contact Phone',
+                              infoText: 'Phone number of the site contact person. Include country code for international numbers.',
+                              hintText: 'Enter contact phone number',
+                              prefixIcon: Icons.phone_outlined,
+                              initialValue: _siteContactPhone,
                               inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9+() -]'))],
                               keyboardType: TextInputType.phone,
-                              initialValue: _siteContactPhone,
-                              style: GoogleFonts.montserrat(fontSize: 16),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Theme.of(context).colorScheme.surface,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                prefixIcon: Icon(Icons.phone_outlined,
-                                  color: Theme.of(context).colorScheme.primary),
-                                labelText: 'Contact Phone (Optional)',
-                                labelStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                helperText: 'Phone number for site contact',
-                                helperStyle: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                hintText: 'Enter contact phone number',
-                                hintStyle: GoogleFonts.montserrat(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
-                                ),
-                              ),
                               onChanged: (value) {
-                                _siteContactPhone = value.toString().trim();
+                                _siteContactPhone = value.trim();
                               },
-                              validator: (value) => null, // Optional field
                             ),
                             const SizedBox(height: 16),
                             
@@ -824,6 +666,7 @@ class _SiteInfoState extends State<SiteInfo> {
     _siteAddress = '';
     _siteContactPerson = '';
     _siteContactPhone = '';
+    _siteReportTitle = '';
     _siteExpectedCompletion = null;
     _siteDate = DateTime.now(); // Temporary for old Site model
     _btnPicQuality = 1; // Default to medium
@@ -838,6 +681,7 @@ class _SiteInfoState extends State<SiteInfo> {
     _siteAddress = site.location;
     _siteContactPerson = ''; // TODO: Update when Site model has this field
     _siteContactPhone = ''; // TODO: Update when Site model has this field
+    _siteReportTitle = site.reportTitle ?? '';
     _siteExpectedCompletion = null; // TODO: Update when Site model has this field
     _siteDate = site.date; // Temporary for old Site model
     _btnPicQuality = site.pictureQuality;
@@ -999,6 +843,7 @@ class _SiteInfoState extends State<SiteInfo> {
               address: _siteAddress.isNotEmpty ? _siteAddress : null,
               contactPerson: _siteContactPerson.isNotEmpty ? _siteContactPerson : null,
               contactPhone: _siteContactPhone.isNotEmpty ? _siteContactPhone : null,
+              reportTitle: _siteReportTitle.isNotEmpty ? _siteReportTitle : null,
               expectedCompletion: _siteExpectedCompletion,
               pictureQuality: _btnPicQuality,
               imagePath: _siteImagePath.isNotEmpty ? _siteImagePath : null,
@@ -1031,6 +876,7 @@ class _SiteInfoState extends State<SiteInfo> {
               uID: site!.uID,
               ownerEmail: site!.ownerEmail,
               ownerName: Provider.of<CP>(context, listen: false).getAppUser()!.name,
+              reportTitle: _siteReportTitle.isNotEmpty ? _siteReportTitle : null,
             );
             await Provider.of<CP>(context, listen: false).updateSite(nSite);
           }

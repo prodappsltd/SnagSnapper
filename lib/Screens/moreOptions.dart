@@ -822,7 +822,7 @@ class _MoreOptionsState extends State<MoreOptions> with TickerProviderStateMixin
       );
 
       // Get a real site from database
-      final sites = await database.siteDao.getOwnedSites(currentUser.email!);
+      final sites = await database.siteDao.getOwnedSites(currentUser.uid);
 
       if (sites.isEmpty) {
         results.add('❌ SETUP: No sites found. Create a site first.');

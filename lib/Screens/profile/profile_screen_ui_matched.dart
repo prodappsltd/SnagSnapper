@@ -23,6 +23,8 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:snagsnapper/services/sync/device_manager.dart';
+import 'package:provider/provider.dart';
+import 'package:snagsnapper/Data/contentProvider.dart';
 
 /// Profile Screen with offline-first database integration
 /// UI matches the original profile_cleaned.dart design
@@ -472,12 +474,15 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       }
 
       if (success && mounted) {
+        // Update ContentProvider so other screens see the changes
+        Provider.of<CP>(context, listen: false).setAppUser(user);
+
         setState(() {
           _currentUser = user;
           busy = false;
           _isDirty = false;
         });
-        
+
         // Show simple success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

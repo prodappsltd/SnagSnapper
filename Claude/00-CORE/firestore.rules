@@ -60,7 +60,7 @@ service cloud.firestore {
 
         // Owner can delete their own sites
         allow delete: if isOwner(userId) && isEmailVerified();
-
+commit and push
         // TODO: Add shared user access logic
         // - Check sharedWith map for user's email
         // - VIEW: read only
@@ -80,3 +80,4 @@ service cloud.firestore {
     // These are just the Firestore rules
   }
 }
+

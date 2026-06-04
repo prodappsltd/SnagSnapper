@@ -7,7 +7,9 @@ import 'package:snagsnapper/Data/models/sync_status.dart';
 import 'package:snagsnapper/Data/models/sync_result.dart';
 import 'package:snagsnapper/Data/models/sync_queue_item.dart';
 import 'package:snagsnapper/services/sync/handlers/profile_sync_handler.dart';
+import 'package:snagsnapper/services/sync/handlers/site_sync_handler.dart';
 import 'package:snagsnapper/services/sync/network_monitor.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:snagsnapper/services/sync/queue_manager.dart';
 import 'package:snagsnapper/services/sync/device_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,6 +27,7 @@ class SyncService {
 
   late AppDatabase _database;
   late ProfileSyncHandler _profileHandler;
+  late SiteSyncHandler _siteHandler;
   late NetworkMonitor _networkMonitor;
   late SyncQueueManager _queueManager;
   late DeviceManager _deviceManager;
@@ -76,7 +79,14 @@ class SyncService {
       storage: FirebaseStorage.instance,
       imageStorage: ImageStorageService.instance,
     );
-    
+
+    _siteHandler = SiteSyncHandler(
+      database: _database,
+      firestore: FirebaseFirestore.instance,
+      storage: FirebaseStorage.instance,
+      imageStorage: ImageStorageService.instance,
+    );
+
     _queueManager = SyncQueueManager(
       database: _database,
       profileHandler: _profileHandler,
@@ -255,8 +265,95 @@ class SyncService {
         return SyncResult.cancelled();
       }
 
+      // Download owned sites if none exist locally
+      // This handles: new user, device switch, or cleared data
+      updateProgress(0.35);
+      final localOwnedSites = await _database.siteDao.getOwnedSites(_userId!);
+      if (localOwnedSites.isEmpty) {
+        if (kDebugMode) {
+          print('SyncService.syncNow: No local owned sites, downloading from Firebase...');
+        }
+        final sitesDownloaded = await _siteHandler.downloadAllOwnedSites(_userId!);
+        if (kDebugMode) {
+          print('SyncService.syncNow: Downloaded $sitesDownloaded sites');
+        }
+        if (sitesDownloaded > 0) {
+          syncedItems.add('sites');
+        }
+      } else {
+        if (kDebugMode) {
+          print('SyncService.syncNow: Found ${localOwnedSites.length} local owned sites, skipping download');
+        }
+      }
+
+      // Check cancellation
+      if (_isCancelled) {
+        if (kDebugMode) {
+          print('SyncService.syncNow: Sync cancelled');
+        }
+        return SyncResult.cancelled();
+      }
+
+      // Upload sites that need syncing
+      updateProgress(0.4);
+      final sitesNeedingSync = await _database.siteDao.getSitesNeedingSync();
+      if (sitesNeedingSync.isNotEmpty) {
+        if (kDebugMode) {
+          print('SyncService.syncNow: Found ${sitesNeedingSync.length} sites needing sync');
+        }
+
+        int sitesSynced = 0;
+        for (final site in sitesNeedingSync) {
+          // Check cancellation between sites
+          if (_isCancelled) {
+            if (kDebugMode) {
+              print('SyncService.syncNow: Sync cancelled during site upload');
+            }
+            return SyncResult.cancelled();
+          }
+
+          if (kDebugMode) {
+            print('SyncService.syncNow: Syncing site ${site.id} - ${site.name}');
+          }
+
+          // Sync site data if needed
+          if (site.needsSiteSync) {
+            final siteSuccess = await _siteHandler.syncSiteData(site.id);
+            if (kDebugMode) {
+              print('SyncService.syncNow: Site data sync result: $siteSuccess');
+            }
+          }
+
+          // Sync site image if needed
+          if (site.needsImageSync) {
+            final imageSuccess = await _siteHandler.syncSiteImage(site.id);
+            if (kDebugMode) {
+              print('SyncService.syncNow: Site image sync result: $imageSuccess');
+            }
+          }
+
+          sitesSynced++;
+        }
+
+        if (sitesSynced > 0) {
+          syncedItems.add('sites:$sitesSynced');
+        }
+
+        if (kDebugMode) {
+          print('SyncService.syncNow: Synced $sitesSynced/${sitesNeedingSync.length} sites');
+        }
+      }
+
+      // Check cancellation
+      if (_isCancelled) {
+        if (kDebugMode) {
+          print('SyncService.syncNow: Sync cancelled');
+        }
+        return SyncResult.cancelled();
+      }
+
       // Sync profile image if needed (including deletions)
-      updateProgress(0.5);
+      updateProgress(0.6);
       // IMPORTANT: Re-fetch user data to get the latest state
       // This prevents using stale data if image was just added/deleted
       final localUser = await _database.profileDao.getProfile(_userId!);

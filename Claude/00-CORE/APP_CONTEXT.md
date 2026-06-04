@@ -10,7 +10,7 @@
 2. **No Legacy Support**: Do not add code for backward compatibility with old data structures
 3. **Clean Slate**: This app has a fresh Firebase instance with no historical data
 
-## Firebase Configuration
+## Firebase Configuration, 
 - **Region**: Europe-west1 (not US-central)
 - **Realtime Database URL**: https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app/
 - **Collections Used**:

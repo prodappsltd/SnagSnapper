@@ -77,27 +77,7 @@ class SiteService {
   }
 
   // ============== Read Operations ==============
-  
-  /// Get all sites accessible to the current user
-  Future<List<Site>> getAllSites() async {
-    return await _siteDao.getAllSites(_currentUserEmail);
-  }
-  
-  /// Get only sites owned by the current user
-  Future<List<Site>> getOwnedSites() async {
-    return await _siteDao.getOwnedSites(_currentUserEmail);
-  }
-  
-  /// Get only sites shared with the current user
-  Future<List<Site>> getSharedSites() async {
-    return await _siteDao.getSharedSites(_currentUserEmail);
-  }
-  
-  /// Get active (non-archived) sites
-  Future<List<Site>> getActiveSites() async {
-    return await _siteDao.getActiveSites(_currentUserEmail);
-  }
-  
+
   /// Get a specific site by ID
   Future<Site?> getSite(String siteId) async {
     final site = await _siteDao.getSiteById(siteId);

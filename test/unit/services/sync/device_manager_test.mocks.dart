@@ -1790,6 +1790,17 @@ class MockAndroidDeviceInfo extends _i1.Mock implements _i6.AndroidDeviceInfo {
           as List<String>);
 
   @override
+  String get serialNumber =>
+      (super.noSuchMethod(
+            Invocation.getter(#serialNumber),
+            returnValue: _i14.dummyValue<String>(
+              this,
+              Invocation.getter(#serialNumber),
+            ),
+          )
+          as String);
+
+  @override
   bool get isLowRamDevice =>
       (super.noSuchMethod(
             Invocation.getter(#isLowRamDevice),
@@ -1919,14 +1930,6 @@ class MockIosDeviceInfo extends _i1.Mock implements _i7.IosDeviceInfo {
   @override
   bool get isiOSAppOnMac =>
       (super.noSuchMethod(Invocation.getter(#isiOSAppOnMac), returnValue: false)
-          as bool);
-
-  @override
-  bool get isiOSAppOnVision =>
-      (super.noSuchMethod(
-            Invocation.getter(#isiOSAppOnVision),
-            returnValue: false,
-          )
           as bool);
 
   @override

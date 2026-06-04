@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -314,11 +315,115 @@ class SiteSyncHandler {
     }
   }
 
+  // ============== Feature 1.36: Download Methods ==============
+
+  /// Download site image from Firebase Storage
+  /// Saves to local storage and returns relative path
+  Future<String?> downloadSiteImage(String siteId, String firebasePath, String ownerUID) async {
+    try {
+      if (kDebugMode) {
+        print('SiteSyncHandler: Downloading image from $firebasePath');
+      }
+
+      // Download bytes from Firebase Storage
+      final storageRef = storage.ref(firebasePath);
+      final Uint8List? imageData = await storageRef.getData();
+
+      if (imageData == null) {
+        if (kDebugMode) {
+          print('SiteSyncHandler: No image data received');
+        }
+        return null;
+      }
+
+      // Save to local storage (returns relative path)
+      final relativePath = await imageStorage.saveSiteImageFromBytes(
+        imageData,
+        ownerUID,
+        siteId,
+      );
+
+      if (kDebugMode) {
+        print('SiteSyncHandler: Image saved to $relativePath');
+      }
+
+      // Update local DB with relative path
+      await database.siteDao.updateImageLocalPath(siteId, relativePath);
+
+      return relativePath;
+    } catch (e) {
+      if (kDebugMode) {
+        print('SiteSyncHandler: Error downloading site image: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Download all owned sites from Firebase to local DB
+  /// Called after profile download on sign-in
+  Future<int> downloadAllOwnedSites(String userUID) async {
+    try {
+      if (kDebugMode) {
+        print('SiteSyncHandler: Downloading all owned sites for user $userUID');
+      }
+
+      // Query Firestore for all sites owned by this user
+      final snapshot = await firestore
+          .collection('Profile')
+          .doc(userUID)
+          .collection('Sites')
+          .get();
+
+      if (kDebugMode) {
+        print('SiteSyncHandler: Found ${snapshot.docs.length} sites in Firebase');
+      }
+
+      int downloadedCount = 0;
+
+      for (final doc in snapshot.docs) {
+        try {
+          // Create Site from Firestore data
+          final site = Site.fromFirestore(doc.id, doc.data());
+
+          if (kDebugMode) {
+            print('SiteSyncHandler: Downloading site ${site.id} - ${site.name}');
+          }
+
+          // Upsert to local DB
+          await database.siteDao.upsertSite(site);
+
+          // Download image if exists
+          if (site.imageFirebasePath != null && site.imageFirebasePath!.isNotEmpty) {
+            await downloadSiteImage(site.id, site.imageFirebasePath!, userUID);
+          }
+
+          downloadedCount++;
+        } catch (e) {
+          if (kDebugMode) {
+            print('SiteSyncHandler: Error downloading site ${doc.id}: $e');
+          }
+          // Continue with next site
+        }
+      }
+
+      if (kDebugMode) {
+        print('SiteSyncHandler: Downloaded $downloadedCount/${snapshot.docs.length} sites');
+      }
+
+      return downloadedCount;
+    } catch (e) {
+      if (kDebugMode) {
+        print('SiteSyncHandler: Error downloading owned sites: $e');
+      }
+      return 0;
+    }
+  }
+
   // ============== Feature 1.4: downloadSite() ==============
-  // TODO: Implement - download site from Firestore
+  // TODO: Implement - download single site from Firestore
 
   // ============== Feature 1.5: downloadSiteImage() ==============
-  // TODO: Implement - download site image from Storage
+  // Implemented above as part of Feature 1.36
 
   // ============== Feature 1.6: syncAll() ==============
   // TODO: Implement - batch sync all sites needing sync

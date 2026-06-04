@@ -44,9 +44,23 @@ class ProfileSyncHandler {
       
       final localUser = await database.profileDao.getProfile(userId);
       if (localUser == null) {
-        // No local profile exists - try to download from Firebase
+        // No local profile for this user - check if different user's data exists
         if (kDebugMode) {
-          print('ProfileSyncHandler.syncProfileData: No local profile found, attempting to download from Firebase...');
+          print('ProfileSyncHandler.syncProfileData: No local profile found for user $userId');
+        }
+
+        // Data integrity check: clear stale data from different user
+        final anyProfile = await database.profileDao.getSavedProfile();
+        if (anyProfile != null && anyProfile.id != userId) {
+          if (kDebugMode) {
+            print('ProfileSyncHandler.syncProfileData: Found different user data (${anyProfile.id}) - clearing all data');
+          }
+          await database.clearAllData();
+        }
+
+        // Download profile from Firebase
+        if (kDebugMode) {
+          print('ProfileSyncHandler.syncProfileData: Attempting to download from Firebase...');
         }
         final firebaseProfile = await _downloadProfile(userId);
         
