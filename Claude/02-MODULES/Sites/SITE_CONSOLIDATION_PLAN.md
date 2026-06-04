@@ -134,7 +134,7 @@ Update MySites screen to:
 ---
 
 ### Feature 1.36: Download Owned Sites on Sign-In
-**Status**: VERIFIED (Bug Fixed 2026-06-05)
+**Status**: TESTED ✅ (Bug Fixed & Verified 2026-06-05)
 **Depends on**: 1.35
 **Completed**: 2026-06-04
 
@@ -182,6 +182,13 @@ Implements data integrity check and site download on sign-in per PRD Section 5.3
 - Force logout: DB cleared by `_handleForceLogout()` → download triggered
 - New device: No local data → download triggered
 - Same user sign out/in: Data persists → no download needed (correct)
+
+**Test Results (2026-06-05):**
+- ✅ User A (rfsingh81) sign-in: 1 site downloaded with image
+- ✅ User switch A→B (djsrajjo): Data cleared, 3 sites downloaded
+- ✅ User switch B→A: Data cleared, 1 site re-downloaded
+- ✅ Debug log shows: `MainMenu: Pending sync - profile: false, upload: 0, download: true`
+- ✅ All site images downloaded and saved correctly
 
 ---
 
@@ -336,7 +343,7 @@ Updated `_checkForPendingSync()`:
 | 2026-06-04 | 1.36 | VERIFIED | Download owned sites on sign-in with data integrity check |
 | 2026-06-04 | 2.1-2.3 | VERIFIED | Site upload integrated into syncNow(), tested end-to-end |
 | 2026-06-04 | 3.1-3.3 | VERIFIED | MainMenu site sync watcher, auto-triggers upload on site create |
-| 2026-06-05 | 1.36 | BUG FIX | Fixed download trigger - added sitesNeedDownload check, changed to UID |
+| 2026-06-05 | 1.36 | TESTED | Bug fix verified - user switch A→B→A, all sites download correctly |
 
 ---
 
