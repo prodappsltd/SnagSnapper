@@ -118,23 +118,15 @@ class _OwnedSitesState extends State<OwnedSites> {
   }
 
   void _onSiteTap(Site site) {
-    // TODO: Update SiteStatus to accept new Site model (Phase 5)
-    // For now, show a message that this feature is being updated
     if (kDebugMode) {
       print('OwnedSites: Tapped site ${site.id} - ${site.name}');
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Opening ${site.name}...'),
-        duration: const Duration(seconds: 1),
-      ),
+    // Navigate to SiteInfo for editing
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SiteInfo(site)),
     );
-
-    // TODO: Navigate to SiteStatus when it's updated to use new model
-    // Navigator.push(context, MaterialPageRoute(
-    //   builder: (context) => SiteStatus(site: site),
-    // ));
   }
 
   void _onSiteLongPress(Site site) {

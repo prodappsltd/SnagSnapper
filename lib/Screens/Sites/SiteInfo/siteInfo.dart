@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/colleague.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
-import 'package:snagsnapper/Data/site.dart';
+import 'package:snagsnapper/Data/models/site.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/services/site_service.dart';
 import 'package:snagsnapper/services/image_storage_service.dart';
@@ -57,7 +57,6 @@ class _SiteInfoState extends State<SiteInfo> {
   late String _siteContactPhone;
   late String _siteReportTitle;
   late DateTime? _siteExpectedCompletion;
-  late DateTime _siteDate; // Temporary for old Site model compatibility
 
   /// Firebase user
   final User _firebaseUser = FirebaseAuth.instance.currentUser!;
@@ -668,36 +667,45 @@ class _SiteInfoState extends State<SiteInfo> {
     _siteContactPhone = '';
     _siteReportTitle = '';
     _siteExpectedCompletion = null;
-    _siteDate = DateTime.now(); // Temporary for old Site model
     _btnPicQuality = 1; // Default to medium
     _assignedEmails = {};
   }
 
   void _loadValuesFromSite(Site site) {
-    _siteImagePath = site.image; // Now stores file path instead of base64
-    _siteId = site.uID;
+    newSite = false; // Explicit - editing existing site
+    _siteImagePath = site.imageLocalPath ?? '';
+    _siteId = site.id;
     _siteName = site.name;
-    _siteCompanyName = site.companyName;
-    _siteAddress = site.location;
-    _siteContactPerson = ''; // TODO: Update when Site model has this field
-    _siteContactPhone = ''; // TODO: Update when Site model has this field
+    _siteCompanyName = site.companyName ?? '';
+    _siteAddress = site.address ?? '';
+    _siteContactPerson = site.contactPerson ?? '';
+    _siteContactPhone = site.contactPhone ?? '';
     _siteReportTitle = site.reportTitle ?? '';
-    _siteExpectedCompletion = null; // TODO: Update when Site model has this field
-    _siteDate = site.date; // Temporary for old Site model
+    _siteExpectedCompletion = site.expectedCompletion;
     _btnPicQuality = site.pictureQuality;
-    _assignedEmails = site.sharedWith;
+    _assignedEmails = Map<String, String>.from(site.sharedWith);
   }
 
   /// Handle site image selection using ReusableImagePicker
   Future<void> _pickSiteImage() async {
-    ReusableImagePicker.show(
-      context: context,
-      onImageSelected: (ImageSource source) => _processImageFromSource(source),
-      onImageRemoved: _siteImagePath.isNotEmpty ? _removeSiteImage : null,
-      removeItemName: 'Photo',
-      removeItemDescription: 'Delete site photo',
-      hasExistingImage: _siteImagePath.isNotEmpty,
-    );
+    // If image exists, only show Remove option (no direct replace per design)
+    if (_siteImagePath.isNotEmpty) {
+      ReusableImagePicker.showRemoveOnly(
+        context: context,
+        onImageRemoved: _removeSiteImage,
+        removeItemName: 'Photo',
+        removeItemDescription: 'Delete site photo',
+      );
+    } else {
+      // No image - show Camera and Gallery options
+      ReusableImagePicker.show(
+        context: context,
+        onImageSelected: (ImageSource source) => _processImageFromSource(source),
+        removeItemName: 'Photo',
+        removeItemDescription: 'Delete site photo',
+        hasExistingImage: false,
+      );
+    }
   }
 
   /// Process image from the selected source (camera or gallery)
@@ -724,12 +732,15 @@ class _SiteInfoState extends State<SiteInfo> {
 
       // Save to local storage
       final imageStorageService = ImageStorageService.instance;
-      final siteId = site?.uID ?? _siteId;
+      final siteId = site?.id ?? _siteId;
       final relativePath = await imageStorageService.saveSiteImageFromBytes(
         result.data,
         _firebaseUser.uid,
         siteId,
       );
+
+      // Clear image cache to force reload (same path, new content)
+      imageCache.clear();
 
       setState(() {
         _siteImagePath = relativePath;
@@ -738,8 +749,13 @@ class _SiteInfoState extends State<SiteInfo> {
 
       // Instant DB update for existing sites (no waiting for Save button)
       if (!newSite && site != null) {
-        site!.image = relativePath;
-        await Provider.of<CP>(context, listen: false).updateSite(site!);
+        site = site!.copyWith(
+          imageLocalPath: relativePath,
+          imageFirebasePath: 'sites/${site!.ownerUID}/${site!.id}/site.jpg',
+          needsImageSync: true,
+          updatedAt: DateTime.now(),
+        );
+        await AppDatabase.instance.siteDao.updateSite(site!);
         if (kDebugMode) {
           print('Instant DB update: site image saved for existing site');
         }
@@ -787,7 +803,7 @@ class _SiteInfoState extends State<SiteInfo> {
   Future<void> _removeSiteImage() async {
     try {
       final imageStorageService = ImageStorageService.instance;
-      final siteId = site?.uID ?? _siteId;
+      final siteId = site?.id ?? _siteId;
       await imageStorageService.deleteSiteImage(_firebaseUser.uid, siteId);
 
       setState(() {
@@ -796,8 +812,13 @@ class _SiteInfoState extends State<SiteInfo> {
 
       // Instant DB update for existing sites (no waiting for Save button)
       if (!newSite && site != null) {
-        site!.image = '';
-        await Provider.of<CP>(context, listen: false).updateSite(site!);
+        site = site!.copyWith(
+          imageLocalPath: null,
+          imageMarkedForDeletion: true, // Mark for Firebase deletion during sync
+          needsImageSync: true,
+          updatedAt: DateTime.now(),
+        );
+        await AppDatabase.instance.siteDao.updateSite(site!);
         if (kDebugMode) {
           print('Instant DB update: site image removed for existing site');
         }
@@ -814,17 +835,23 @@ class _SiteInfoState extends State<SiteInfo> {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
       if (kDebugMode) print('Site - Form validated');
-      if (newSite || _siteImagePath != site!.image ||
-          _siteName != site!.name ||
-          _siteCompanyName != site!.companyName ||
-          _siteAddress != site!.location ||
-          _siteDate != site!.date ||
-          _btnPicQuality != site!.pictureQuality ||
-          !mapEquals(_assignedEmails, site!.sharedWith)) {
-        setState(() => busy = true);
-        if (kDebugMode) print('Site - Create Update initiated');
 
-        // Use new database service for creating/updating sites
+      // Check if any TEXT field changes were made (image ops are instant/independent)
+      final bool hasChanges = newSite ||
+          _siteName != site!.name ||
+          _siteCompanyName != (site!.companyName ?? '') ||
+          _siteAddress != (site!.address ?? '') ||
+          _siteContactPerson != (site!.contactPerson ?? '') ||
+          _siteContactPhone != (site!.contactPhone ?? '') ||
+          _siteReportTitle != (site!.reportTitle ?? '') ||
+          _siteExpectedCompletion != site!.expectedCompletion ||
+          _btnPicQuality != site!.pictureQuality ||
+          !mapEquals(_assignedEmails, site!.sharedWith);
+
+      if (hasChanges) {
+        setState(() => busy = true);
+        if (kDebugMode) print('Site - Create/Update initiated');
+
         try {
           final database = AppDatabase.instance;
           final siteService = SiteService(
@@ -835,9 +862,8 @@ class _SiteInfoState extends State<SiteInfo> {
 
           if (newSite) {
             // Create new site using the service with pre-generated ID
-            // This ensures the image path (saved earlier) matches the site ID
             await siteService.createSite(
-              siteId: _siteId, // Use pre-generated ID for consistency with image path
+              siteId: _siteId,
               name: _siteName,
               companyName: _siteCompanyName.isNotEmpty ? _siteCompanyName : null,
               address: _siteAddress.isNotEmpty ? _siteAddress : null,
@@ -862,26 +888,31 @@ class _SiteInfoState extends State<SiteInfo> {
 
             if (kDebugMode) print('Site created successfully: $_siteId');
           } else {
-            // For now, still use old update method until we migrate fully
-            // TODO: Implement update using new model
-            Site nSite = Site(
-              image: _siteImagePath, // Now stores file path instead of base64
+            // Update existing site using offline-first pattern
+            // Use copyWith to create updated Site with sync flags
+            // Note: needsImageSync is NOT set here - instant image operations handle it
+            final updatedSite = site!.copyWith(
               name: _siteName,
-              companyName: _siteCompanyName,
-              location: _siteAddress,
-              date: _siteDate,
-              pictureQuality: _btnPicQuality,
-              sharedWith: _assignedEmails,
-              archive: site!.archive,
-              uID: site!.uID,
-              ownerEmail: site!.ownerEmail,
-              ownerName: Provider.of<CP>(context, listen: false).getAppUser()!.name,
+              companyName: _siteCompanyName.isNotEmpty ? _siteCompanyName : null,
+              address: _siteAddress.isNotEmpty ? _siteAddress : null,
+              contactPerson: _siteContactPerson.isNotEmpty ? _siteContactPerson : null,
+              contactPhone: _siteContactPhone.isNotEmpty ? _siteContactPhone : null,
               reportTitle: _siteReportTitle.isNotEmpty ? _siteReportTitle : null,
+              expectedCompletion: _siteExpectedCompletion,
+              pictureQuality: _btnPicQuality,
+              imageLocalPath: _siteImagePath.isNotEmpty ? _siteImagePath : null,
+              sharedWith: _assignedEmails,
+              needsSiteSync: true, // Mark for background sync
+              updatedAt: DateTime.now(),
             );
-            await Provider.of<CP>(context, listen: false).updateSite(nSite);
+
+            // Save to local SQLite - MainMenu watcher will trigger Firebase sync
+            await database.siteDao.updateSite(updatedSite);
+
+            if (kDebugMode) print('Site updated locally: ${site!.id}, needsSync: true');
           }
-          Navigator.pop(context, site);
         } catch (e) {
+          if (kDebugMode) print('Error saving site: $e');
           if (mounted) {
             showFlushbar(
               context: context,
@@ -892,7 +923,7 @@ class _SiteInfoState extends State<SiteInfo> {
                 duration: const Duration(seconds: 6),
                 flushbarPosition: FlushbarPosition.TOP,
                 title: 'Error',
-                message: 'Error updating Site, please try again',
+                message: 'Error saving Site, please try again',
                 icon: const Icon(Icons.error, size: 35.0),
                 shouldIconPulse: true,
                 padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
@@ -901,9 +932,11 @@ class _SiteInfoState extends State<SiteInfo> {
             );
             setState(() => busy = false);
           }
+          return; // Stay on screen for retry
         }
-        setState(() => busy = false);
       }
+      // Always navigate back after Save (even if no text changes - image ops are instant)
+      if (mounted) Navigator.pop(context);
     }
   }
 

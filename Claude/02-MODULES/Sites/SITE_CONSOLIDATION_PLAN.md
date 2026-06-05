@@ -315,20 +315,32 @@ Updated `_checkForPendingSync()`:
 
 ---
 
-## Phase 4: Migrate ContentProvider (After Phase 3)
+## Phase 4: Migrate ContentProvider & siteInfo.dart (After Phase 3)
 
-### Feature 4.1: Migrate addSite()
-### Feature 4.2: Migrate updateSite()
-### Feature 4.3: Migrate loadOwnedSites()
-### Feature 4.4: Migrate loadSharedSites()
+### Feature 4.1: Remove CP.addSite() - COMPLETE
+**Status**: COMPLETE (2026-06-05)
+- Removed `addSite()`, `updateSite()`, `updateSiteLocalVariables()` methods
+- Commented out `loadOwnedSites()`, `loadOnlySharedSites()`, `downloadSite()`, `storeSharedSite()`
+- Site operations now use SiteDao + SiteSyncHandler (offline-first)
 
----
+### Feature 4.2: Migrate siteInfo.dart to NEW Site model - COMPLETE
+**Status**: COMPLETE (2026-06-05)
+- Changed import from `lib/Data/site.dart` to `lib/Data/models/site.dart`
+- Updated `_loadValuesFromSite()` with new field names (id, imageLocalPath, address, etc.)
+- Updated `_saveSite()` EDIT flow: uses `site.copyWith()` + `SiteDao.updateSite()` + sync flags
+- Removed unused `_siteDate` field
+- Fixed instant image update to use `copyWith()` (immutable model)
 
-## Phase 5: Complete siteInfo.dart (After Phase 4)
+### Feature 4.3: Update MySites navigation - COMPLETE
+**Status**: COMPLETE (2026-06-05)
+- `ownedSites.dart` now navigates to `SiteInfo(site)` with NEW Site model
+- Shared sites navigation deferred (left as placeholder)
 
-### Feature 5.1: Remove Old Site Import
-### Feature 5.2: Update _loadValuesFromSite()
-### Feature 5.3: Update _saveSite() for Updates
+### Feature 4.4: Cleanup siteStatus.dart references - PARTIAL
+**Status**: PARTIAL (2026-06-05)
+- Commented out Firebase listener that called removed `updateSiteLocalVariables()`
+- Commented out SiteInfo navigation (type mismatch - needs full migration)
+- siteStatus.dart still uses OLD Site model - needs separate migration
 
 ---
 
@@ -344,26 +356,40 @@ Updated `_checkForPendingSync()`:
 | 2026-06-04 | 2.1-2.3 | VERIFIED | Site upload integrated into syncNow(), tested end-to-end |
 | 2026-06-04 | 3.1-3.3 | VERIFIED | MainMenu site sync watcher, auto-triggers upload on site create |
 | 2026-06-05 | 1.36 | TESTED | Bug fix verified - user switch A→B→A, all sites download correctly |
+| 2026-06-05 | 4.1-4.3 | COMPLETE | siteInfo.dart migrated to NEW Site model, CP methods removed |
+| 2026-06-05 | 4.4 | PARTIAL | siteStatus.dart references commented out, needs full migration |
 
 ---
 
 ## Context Recovery Notes
 
-**Current state**: Phase 1, 2, 3 COMPLETE - Site sync fully operational (bug fixed)
+**Current state**: Phase 1, 2, 3, 4 COMPLETE - Site create/edit fully offline-first
 
 **What's working now:**
 1. Create site locally → saved to SQLite with sync flags
-2. MainMenu's `watchSitesNeedingSync()` detects new site needing upload
-3. MainMenu's `_checkForPendingSync()` detects empty local sites needing download
-4. `syncNow()` automatically uploads/downloads site data + images
-5. Flags cleared only after confirmed upload success
-6. Download triggers on: user switch, force logout, new device, app reinstall
+2. Edit site → uses copyWith() + SiteDao.updateSite() + sync flags
+3. MainMenu's `watchSitesNeedingSync()` detects sites needing upload
+4. MainMenu's `_checkForPendingSync()` detects empty local sites needing download
+5. `syncNow()` automatically uploads/downloads site data + images
+6. Flags cleared only after confirmed upload success
+7. Download triggers on: user switch, force logout, new device, app reinstall
+8. MySites → tap site → opens siteInfo.dart for editing (owned sites)
+
+**Removed from ContentProvider:**
+- `addSite()`, `updateSite()`, `updateSiteLocalVariables()`
+- `loadOwnedSites()`, `loadOnlySharedSites()` (commented out)
+- `downloadSite()`, `storeSharedSite()` (commented out)
 
 **Key files**:
 - SiteSyncHandler: `lib/services/sync/handlers/site_sync_handler.dart`
 - SyncService: `lib/services/sync_service.dart`
 - SiteDao: `lib/Data/database/daos/site_dao.dart`
 - MainMenu: `lib/Screens/mainMenu.dart`
+- siteInfo.dart: Now uses NEW Site model
+
+**Pending:**
+- siteStatus.dart migration to NEW Site model
+- Shared sites functionality
 
 **Firebase paths**:
 - Site data: `Profile/{ownerUID}/Sites/{siteID}`

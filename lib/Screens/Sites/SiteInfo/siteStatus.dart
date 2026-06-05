@@ -122,14 +122,16 @@ class _SiteStatusState extends State<SiteStatus> {
     // As it is shared site. Get the owner ID
     String? ownerUID = sharedSitesPath[siteID];
     if (kDebugMode) print('Attach Listener SiteOwnerUID: $ownerUID');
-    if (ownerUID != null) {
-      DocumentReference ref = FirebaseFirestore.instance.collection('Profile/$ownerUID/Sites').doc(siteID);
-      listenSite = ref.snapshots().listen((DocumentSnapshot documentSnapshot) {
-        if (kDebugMode) print('Site ${widget.site.name} - Changed Detected');
-        Site site = Site.fromJson(documentSnapshot.data() as Map<String, dynamic>);
-        Provider.of<CP>(context, listen:false).updateSiteLocalVariables(site);
-      });
-    }
+    // TODO: Migrate to use SiteDao streams instead of Firebase listener
+    // if (ownerUID != null) {
+    //   DocumentReference ref = FirebaseFirestore.instance.collection('Profile/$ownerUID/Sites').doc(siteID);
+    //   listenSite = ref.snapshots().listen((DocumentSnapshot documentSnapshot) {
+    //     if (kDebugMode) print('Site ${widget.site.name} - Changed Detected');
+    //     Site site = Site.fromJson(documentSnapshot.data() as Map<String, dynamic>);
+    //     Provider.of<CP>(context, listen:false).updateSiteLocalVariables(site);
+    //   });
+    // }
+    if (kDebugMode) print('SiteStatus: Firebase listener disabled - pending migration to SiteDao');
     await _attachSnagListener();
   }
 
@@ -840,11 +842,13 @@ class _SiteStatusState extends State<SiteStatus> {
         children: <Widget>[
           GestureDetector(
             onTap: () async {
-              String email = FirebaseAuth.instance.currentUser!.email!;
-              if (kDebugMode) print('Owner Email: ${widget.site.ownerEmail} - Firebase Email: $email');
-              widget.site.ownerEmail == email
-                  ? Navigator.push(context, MaterialPageRoute(builder: (context) => SiteInfo(widget.site)))
-                  : null;
+              // TODO: Migrate siteStatus to use NEW Site model, then enable edit navigation
+              // String email = FirebaseAuth.instance.currentUser!.email!;
+              // if (kDebugMode) print('Owner Email: ${widget.site.ownerEmail} - Firebase Email: $email');
+              // widget.site.ownerEmail == email
+              //     ? Navigator.push(context, MaterialPageRoute(builder: (context) => SiteInfo(widget.site)))
+              //     : null;
+              if (kDebugMode) print('SiteStatus: Edit navigation disabled - pending migration');
             },
             child: SizedBox(
               height: MediaQuery.of(context).size.height / 7,

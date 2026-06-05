@@ -4,13 +4,11 @@
 // - uID → id
 // - location → address
 // - image (base64) → imageLocalPath (file path)
-// - ownerName → look up from Profile using ownerEmail/ownerUID
+// - ownerName → removed (not needed)
 //
 // Files still using this old model (need migration):
-// - lib/Screens/Sites/SiteInfo/siteStatus.dart (Phase 5)
-// - lib/Screens/Sites/SiteInfo/siteInfo.dart (Phase 5)
-// - lib/Widgets/siteGridView.dart (replaced by site_grid_tile.dart)
-// - lib/Data/contentProvider.dart (Phase 4)
+// - lib/Screens/Sites/SiteInfo/siteStatus.dart (pending - uses OLD model for display)
+// - lib/Widgets/siteGridView.dart (can be deleted - replaced by site_grid_tile.dart)
 // - lib/Screens/Snags/CreateEditSnag.dart
 // - lib/Data/createPDF.dart
 //
@@ -18,6 +16,8 @@
 // - lib/Screens/Sites/mySites.dart (Feature 1.35)
 // - lib/Screens/Sites/Tabs/ownedSites.dart (Feature 1.35)
 // - lib/Screens/Sites/Tabs/sharedSites.dart (Feature 1.35)
+// - lib/Screens/Sites/SiteInfo/siteInfo.dart (Phase 4.2 - 2026-06-05)
+// - lib/Data/contentProvider.dart (Phase 4 - site methods removed 2026-06-05)
 
 import 'package:json_annotation/json_annotation.dart';
 import 'package:snagsnapper/Constants/constants.dart';
