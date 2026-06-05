@@ -1,7 +1,7 @@
 # Sync Architecture Guide
-**Version**: 1.0.0  
-**Last Updated**: 2025-08-22  
-**Status**: Production Ready
+**Version**: 1.1.0
+**Last Updated**: 2025-06-06
+**Status**: Production Ready (Profile + Sites modules implemented)
 
 ---
 
@@ -281,44 +281,51 @@ class AppUser {
 }
 ```
 
-### Sites Example (Proposed)
+### Sites Example (IMPLEMENTED - 2025-06-06)
 
 ```dart
 class Site {
   // Identity
-  final String id;
-  final String ownerId;
-  
-  // Sharing
-  final List<String> sharedWith;      // User IDs with access
-  final Map<String, String> locks;    // Field-level locks
-  
-  // Data fields
+  final String id;                    // UUID v4
+  final String ownerUID;              // Firebase UID of owner
+  final String ownerEmail;            // Used for ownership checks
+
+  // Core Fields
   final String name;
-  final String address;
-  final List<String> imageLocalPaths;
-  final List<String> imageFirebasePaths;
-  
-  // Sync flags
-  final bool needsDataSync;
-  final bool needsImagesSync;
-  final bool needsMetadataSync;
-  
-  // Conflict tracking
-  final Map<String, DateTime> fieldLastModified;
-  final Map<String, String> fieldLastModifiedBy;
-  
+  final String? companyName;
+  final String? address;
+  final String? contactPerson;
+  final String? contactPhone;
+  final DateTime date;
+  final DateTime? expectedCompletion;
+  final String? reportTitle;
+
+  // Site Image (single image, fixed path)
+  final String? imageLocalPath;       // Local: SnagSnapper/{uid}/Sites/{siteId}/site.jpg
+  final String? imageFirebasePath;    // Firebase: sites/{ownerUID}/{siteId}/site.jpg
+
+  // Sharing
+  final Map<String, String> sharedWith;  // {email: VIEW|FIXER|CONTRIBUTOR}
+
+  // Sync flags (granular control)
+  final bool needsSiteSync;           // Site text data changed
+  final bool needsImageSync;          // Site image changed
+  final bool imageMarkedForDeletion;  // Delete from Firebase before upload
+  final bool needsSnagsSync;          // Snags under site changed
+
   // Version control
   final int localVersion;
   final int firebaseVersion;
-  final String lastSyncedBy;
-  
-  // Timestamps
-  final DateTime createdAt;
   final DateTime updatedAt;
-  final DateTime? lastSyncedAt;
+  final DateTime? lastSyncTime;
 }
 ```
+
+**Key Implementation Details:**
+- Single site image with fixed path (no orphans)
+- Image operations are INSTANT (independent of Save button)
+- `imageMarkedForDeletion` enables Replace scenario (Remove → Pick)
+- Sync triggered from MainMenu via stream watchers
 
 ---
 
@@ -909,16 +916,22 @@ When implementing sync for a new module:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2025-08-22 | Initial version based on Profile implementation |
+| 1.1.0 | 2025-06-06 | Sites module implemented with instant image ops |
 
 ---
 
 ## 📝 Notes
 
-This architecture has been thoroughly tested in production with the Profile module and handles:
-- Offline operations
-- Network interruptions
-- Rapid user actions
-- Large media files
-- Concurrent device usage
+This architecture has been thoroughly tested with Profile and Sites modules:
+- Offline operations ✅
+- Network interruptions ✅
+- Rapid user actions ✅
+- Large media files ✅
+- Concurrent device usage ✅
 
-For Sites module, additional considerations for multi-user collaboration have been included but will need testing during implementation.
+### Sites Module Implementation Notes (2025-06-06)
+- **Instant Image Operations**: Pick/Remove are independent of Save button
+- **Fixed Paths**: `sites/{ownerUID}/{siteId}/site.jpg` - no orphan cleanup needed
+- **Replace Scenario**: `imageMarkedForDeletion` flag enables Remove → Pick flow
+- **UI Refresh**: `imageCache.clear()` called after Pick to force reload
+- **No Direct Replace**: User must Remove first, then Pick new image

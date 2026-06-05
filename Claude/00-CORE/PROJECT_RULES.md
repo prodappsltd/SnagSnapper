@@ -71,14 +71,19 @@ A feature is ONLY complete when ALL of these are verified:
 ### Key Documentation
 When starting a new session, review:
 
-1. **Claude/PRD.md** - Product Requirements Document (PRIMARY REFERENCE)
+1. **Claude/00-CORE/PRD.md** - Product Requirements Document (PRIMARY REFERENCE)
    - Complete product specifications and requirements
    - User flows and technical architecture
-   - Profile module implementation details
+   - Profile and Sites module implementation details
    - Database schema and sync strategy
    - Must be kept in sync with implementation
 
-2. **lib/Constants/validation_rules.dart** - Field validation rules
+2. **Claude/00-CORE/** - Core documentation folder
+   - APP_CONTEXT.md - App status and Firebase configuration
+   - SYNC_ARCHITECTURE_GUIDE.md - Offline-first sync patterns
+   - firestore.rules / storage.rules - Security rules
+
+3. **lib/Constants/validation_rules.dart** - Field validation rules
    - Validation patterns and constraints
    - Must match PRD Section 4.5 specifications
 

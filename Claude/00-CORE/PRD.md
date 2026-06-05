@@ -113,7 +113,7 @@ The Sites module enables construction site management with offline-first archite
 
 ### 4.2 Data Models
 
-#### 4.2.1 Site Model (Updated 2025-08-28)
+#### 4.2.1 Site Model (Updated 2025-06-06)
 ```dart
 class Site {
   // Identity
@@ -121,7 +121,7 @@ class Site {
   String ownerUID;                  // Firebase UID of owner
   String ownerEmail;                // Used for ownership verification
   // REMOVED: ownerName - Can be fetched from Profile using ownerUID
-  
+
   // Core Fields (UI Visibility noted)
   String name;                      // Required - Site name (UI visible)
   String? companyName;              // Optional - Client company or name (UI visible)
@@ -130,33 +130,35 @@ class Site {
   String? contactPhone;             // Optional - Client phone (UI visible)
   DateTime date;                    // Site creation date (Auto-set, not UI visible)
   DateTime? expectedCompletion;     // Optional - Target completion (UI visible)
-  
+  String? reportTitle;              // Optional - Custom PDF report title (UI visible)
+
   // Site Image
   String? imageLocalPath;           // Local file path (System-managed)
-  String? imageFirebasePath;        // Firebase Storage path (System-managed)
-  
+  String? imageFirebasePath;        // Firebase Storage path: sites/{ownerUID}/{siteId}/site.jpg
+
   // Settings
   int pictureQuality;               // 0-2 (Low, Medium, High) for PDF (UI visible)
   bool archive;                     // Archive status (Not in create UI, editable later)
-  
+
   // Sharing & Permissions
   Map<String, String> sharedWith;  // {email: permission}
   // Permissions: VIEW, FIXER, CONTRIBUTOR only
   // NOTE: Owner is NOT a permission level - identified by ownerEmail match
-  
+
   // Statistics (Auto-calculated)
   int totalSnags;                   // Total snag count
-  int openSnags;                    // Open snag count  
+  int openSnags;                    // Open snag count
   int closedSnags;                  // Closed snag count
-  
+
   // Categories (Site-specific) - CHANGED FROM LIST TO MAP
   Map<int, String> snagCategories;  // {1: 'Electrical', 2: 'Plumbing'}
   // Categories are added dynamically when creating snags
   // Empty by default, populated as snags are created
-  
+
   // Sync Management
   bool needsSiteSync;               // Site data changed
   bool needsImageSync;              // Site image changed
+  bool imageMarkedForDeletion;      // Image should be deleted from Firebase during sync
   bool needsSnagsSync;              // Snags under site changed
   DateTime? lastSyncTime;
   
