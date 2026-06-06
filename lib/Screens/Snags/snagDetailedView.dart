@@ -7,7 +7,8 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/snag.dart';
 import 'package:snagsnapper/Screens/Sites/SiteInfo/siteStatus.dart';
-import 'package:snagsnapper/Screens/Snags/CreateEditSnag.dart';
+// import 'package:snagsnapper/Screens/Snags/CreateEditSnag.dart'; // BACKUP - legacy UI
+import 'package:snagsnapper/Screens/Snags/create_snag_v2.dart';
 import 'package:snagsnapper/Screens/showFullScreenImage.dart';
 import 'package:snagsnapper/Widgets/markedImageStack.dart';
 import 'package:snagsnapper/Widgets/smallImageSnags.dart';
@@ -150,7 +151,7 @@ class _SnagDetailedViewState extends State<SnagDetailedView> {
                                       onTap: () => Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                              builder: (context) => CreateSnag(
+                                              builder: (context) => CreateSnagV2(
                                                     snag: widget.snag,
                                                     siteID: widget.siteID,
                                                     siteOwnersEmail: widget.siteOwnersEmail,

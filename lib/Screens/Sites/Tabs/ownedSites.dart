@@ -16,7 +16,8 @@ import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/site.dart';
 import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart';
-import 'package:snagsnapper/Screens/Sites/SiteInfo/siteStatus.dart';
+// import 'package:snagsnapper/Screens/Sites/SiteInfo/siteStatus.dart'; // BACKUP - legacy UI
+import 'package:snagsnapper/Screens/Sites/SiteInfo/site_status_v2.dart';
 import 'package:snagsnapper/Widgets/site_grid_tile.dart';
 import 'package:snagsnapper/Widgets/site_list_tile.dart';
 
@@ -123,10 +124,10 @@ class _OwnedSitesState extends State<OwnedSites> {
       print('OwnedSites: Tapped site ${site.id} - ${site.name}');
     }
 
-    // Navigate to SiteStatus to view snags (edit via site header tap)
+    // Navigate to SiteStatusV2 to view snags (edit via site header tap)
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => SiteStatus(site: site)),
+      MaterialPageRoute(builder: (context) => SiteStatusV2(site: site)),
     );
   }
 

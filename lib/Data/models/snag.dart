@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:snagsnapper/Data/models/image_slot.dart';
 
 /// Snag model for offline-first snag management
 /// Implements PRD Section 4.2.2 specifications
@@ -25,26 +26,13 @@ class Snag {
   final String? assignedEmail; // Assigned colleague email
   final String? assignedName; // Assigned colleague name
   
-  // Problem Documentation (Owner-only)
-  final String? imageMain1LocalPath;
-  final String? imageMain1FirebasePath;
-  final String? image2LocalPath;
-  final String? image2FirebasePath;
-  final String? image3LocalPath;
-  final String? image3FirebasePath;
-  final String? image4LocalPath;
-  final String? image4FirebasePath;
-  
-  // Fix Documentation (Colleague-editable when assigned)
+  // Problem Documentation (Owner-only) - 6 slots
+  // See: Claude/02-MODULES/Snags/SNAG_IMAGE_HANDLING_PLAN.md
+  final List<ImageSlot> images;
+
+  // Fix Documentation (Colleague-editable when assigned) - 6 slots
   final String? snagFixDescription; // How it was fixed
-  final String? snagFixMainImageLocalPath;
-  final String? snagFixMainImageFirebasePath;
-  final String? snagFixImage1LocalPath;
-  final String? snagFixImage1FirebasePath;
-  final String? snagFixImage2LocalPath;
-  final String? snagFixImage2FirebasePath;
-  final String? snagFixImage3LocalPath;
-  final String? snagFixImage3FirebasePath;
+  final List<ImageSlot> fixImages;
   
   // Status (Two-boolean system)
   final bool snagStatus; // true=open, false=completed by FIXER
@@ -71,7 +59,7 @@ class Snag {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const Snag({
+  Snag({
     required this.id,
     required this.siteUID,
     required this.ownerEmail,
@@ -85,23 +73,9 @@ class Snag {
     this.snagCategory,
     this.assignedEmail,
     this.assignedName,
-    this.imageMain1LocalPath,
-    this.imageMain1FirebasePath,
-    this.image2LocalPath,
-    this.image2FirebasePath,
-    this.image3LocalPath,
-    this.image3FirebasePath,
-    this.image4LocalPath,
-    this.image4FirebasePath,
+    List<ImageSlot>? images,
     this.snagFixDescription,
-    this.snagFixMainImageLocalPath,
-    this.snagFixMainImageFirebasePath,
-    this.snagFixImage1LocalPath,
-    this.snagFixImage1FirebasePath,
-    this.snagFixImage2LocalPath,
-    this.snagFixImage2FirebasePath,
-    this.snagFixImage3LocalPath,
-    this.snagFixImage3FirebasePath,
+    List<ImageSlot>? fixImages,
     this.snagStatus = true, // Default to open
     this.snagConfirmedStatus = true, // Default to pending
     this.lastModifiedBy,
@@ -117,7 +91,8 @@ class Snag {
     this.firebaseVersion = 0,
     required this.createdAt,
     required this.updatedAt,
-  });
+  })  : images = images ?? ImageSlot.emptyList(),
+        fixImages = fixImages ?? ImageSlot.emptyList();
 
   /// Create a new snag with default values
   factory Snag.create({
@@ -166,23 +141,9 @@ class Snag {
     String? snagCategory,
     String? assignedEmail,
     String? assignedName,
-    String? imageMain1LocalPath,
-    String? imageMain1FirebasePath,
-    String? image2LocalPath,
-    String? image2FirebasePath,
-    String? image3LocalPath,
-    String? image3FirebasePath,
-    String? image4LocalPath,
-    String? image4FirebasePath,
+    List<ImageSlot>? images,
     String? snagFixDescription,
-    String? snagFixMainImageLocalPath,
-    String? snagFixMainImageFirebasePath,
-    String? snagFixImage1LocalPath,
-    String? snagFixImage1FirebasePath,
-    String? snagFixImage2LocalPath,
-    String? snagFixImage2FirebasePath,
-    String? snagFixImage3LocalPath,
-    String? snagFixImage3FirebasePath,
+    List<ImageSlot>? fixImages,
     bool? snagStatus,
     bool? snagConfirmedStatus,
     String? lastModifiedBy,
@@ -213,23 +174,9 @@ class Snag {
       snagCategory: snagCategory ?? this.snagCategory,
       assignedEmail: assignedEmail ?? this.assignedEmail,
       assignedName: assignedName ?? this.assignedName,
-      imageMain1LocalPath: imageMain1LocalPath ?? this.imageMain1LocalPath,
-      imageMain1FirebasePath: imageMain1FirebasePath ?? this.imageMain1FirebasePath,
-      image2LocalPath: image2LocalPath ?? this.image2LocalPath,
-      image2FirebasePath: image2FirebasePath ?? this.image2FirebasePath,
-      image3LocalPath: image3LocalPath ?? this.image3LocalPath,
-      image3FirebasePath: image3FirebasePath ?? this.image3FirebasePath,
-      image4LocalPath: image4LocalPath ?? this.image4LocalPath,
-      image4FirebasePath: image4FirebasePath ?? this.image4FirebasePath,
+      images: images ?? this.images,
       snagFixDescription: snagFixDescription ?? this.snagFixDescription,
-      snagFixMainImageLocalPath: snagFixMainImageLocalPath ?? this.snagFixMainImageLocalPath,
-      snagFixMainImageFirebasePath: snagFixMainImageFirebasePath ?? this.snagFixMainImageFirebasePath,
-      snagFixImage1LocalPath: snagFixImage1LocalPath ?? this.snagFixImage1LocalPath,
-      snagFixImage1FirebasePath: snagFixImage1FirebasePath ?? this.snagFixImage1FirebasePath,
-      snagFixImage2LocalPath: snagFixImage2LocalPath ?? this.snagFixImage2LocalPath,
-      snagFixImage2FirebasePath: snagFixImage2FirebasePath ?? this.snagFixImage2FirebasePath,
-      snagFixImage3LocalPath: snagFixImage3LocalPath ?? this.snagFixImage3LocalPath,
-      snagFixImage3FirebasePath: snagFixImage3FirebasePath ?? this.snagFixImage3FirebasePath,
+      fixImages: fixImages ?? this.fixImages,
       snagStatus: snagStatus ?? this.snagStatus,
       snagConfirmedStatus: snagConfirmedStatus ?? this.snagConfirmedStatus,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
@@ -260,6 +207,32 @@ class Snag {
   /// Check if snag is assigned to someone
   bool get isAssigned => assignedEmail != null && assignedEmail!.isNotEmpty;
 
+  // ============== Image Helper Getters ==============
+
+  /// True if snag has any problem images
+  bool get hasAnyImages => images.any((slot) => slot.hasImage);
+
+  /// True if snag has any fix images
+  bool get hasAnyFixImages => fixImages.any((slot) => slot.hasImage);
+
+  /// True if any problem image needs sync
+  bool get needsImageSync => images.any((slot) => slot.needsAttention);
+
+  /// True if any fix image needs sync
+  bool get needsFixImageSync => fixImages.any((slot) => slot.needsAttention);
+
+  /// Count of problem images
+  int get imageCount => images.where((slot) => slot.hasImage).length;
+
+  /// Count of fix images
+  int get fixImageCount => fixImages.where((slot) => slot.hasImage).length;
+
+  /// First empty problem image slot index (-1 if all full)
+  int get firstEmptyImageSlot => images.indexWhere((slot) => slot.isEmpty);
+
+  /// First empty fix image slot index (-1 if all full)
+  int get firstEmptyFixImageSlot => fixImages.indexWhere((slot) => slot.isEmpty);
+
   /// Convert to JSON for database storage
   Map<String, dynamic> toJson() {
     return {
@@ -276,23 +249,9 @@ class Snag {
       'snagCategory': snagCategory,
       'assignedEmail': assignedEmail,
       'assignedName': assignedName,
-      'imageMain1LocalPath': imageMain1LocalPath,
-      'imageMain1FirebasePath': imageMain1FirebasePath,
-      'image2LocalPath': image2LocalPath,
-      'image2FirebasePath': image2FirebasePath,
-      'image3LocalPath': image3LocalPath,
-      'image3FirebasePath': image3FirebasePath,
-      'image4LocalPath': image4LocalPath,
-      'image4FirebasePath': image4FirebasePath,
+      'images': ImageSlot.listToJson(images),
       'snagFixDescription': snagFixDescription,
-      'snagFixMainImageLocalPath': snagFixMainImageLocalPath,
-      'snagFixMainImageFirebasePath': snagFixMainImageFirebasePath,
-      'snagFixImage1LocalPath': snagFixImage1LocalPath,
-      'snagFixImage1FirebasePath': snagFixImage1FirebasePath,
-      'snagFixImage2LocalPath': snagFixImage2LocalPath,
-      'snagFixImage2FirebasePath': snagFixImage2FirebasePath,
-      'snagFixImage3LocalPath': snagFixImage3LocalPath,
-      'snagFixImage3FirebasePath': snagFixImage3FirebasePath,
+      'fixImages': ImageSlot.listToJson(fixImages),
       'snagStatus': snagStatus,
       'snagConfirmedStatus': snagConfirmedStatus,
       'lastModifiedBy': lastModifiedBy,
@@ -329,23 +288,9 @@ class Snag {
       snagCategory: json['snagCategory'] as String?,
       assignedEmail: json['assignedEmail'] as String?,
       assignedName: json['assignedName'] as String?,
-      imageMain1LocalPath: json['imageMain1LocalPath'] as String?,
-      imageMain1FirebasePath: json['imageMain1FirebasePath'] as String?,
-      image2LocalPath: json['image2LocalPath'] as String?,
-      image2FirebasePath: json['image2FirebasePath'] as String?,
-      image3LocalPath: json['image3LocalPath'] as String?,
-      image3FirebasePath: json['image3FirebasePath'] as String?,
-      image4LocalPath: json['image4LocalPath'] as String?,
-      image4FirebasePath: json['image4FirebasePath'] as String?,
+      images: ImageSlot.listFromJson(json['images'] as List<dynamic>?),
       snagFixDescription: json['snagFixDescription'] as String?,
-      snagFixMainImageLocalPath: json['snagFixMainImageLocalPath'] as String?,
-      snagFixMainImageFirebasePath: json['snagFixMainImageFirebasePath'] as String?,
-      snagFixImage1LocalPath: json['snagFixImage1LocalPath'] as String?,
-      snagFixImage1FirebasePath: json['snagFixImage1FirebasePath'] as String?,
-      snagFixImage2LocalPath: json['snagFixImage2LocalPath'] as String?,
-      snagFixImage2FirebasePath: json['snagFixImage2FirebasePath'] as String?,
-      snagFixImage3LocalPath: json['snagFixImage3LocalPath'] as String?,
-      snagFixImage3FirebasePath: json['snagFixImage3FirebasePath'] as String?,
+      fixImages: ImageSlot.listFromJson(json['fixImages'] as List<dynamic>?),
       snagStatus: json['snagStatus'] as bool? ?? true,
       snagConfirmedStatus: json['snagConfirmedStatus'] as bool? ?? true,
       lastModifiedBy: json['lastModifiedBy'] as String?,
@@ -385,15 +330,10 @@ class Snag {
       'snagCategory': snagCategory,
       'assignedEmail': assignedEmail,
       'assignedName': assignedName,
-      'imageMain1FirebasePath': imageMain1FirebasePath,
-      'image2FirebasePath': image2FirebasePath,
-      'image3FirebasePath': image3FirebasePath,
-      'image4FirebasePath': image4FirebasePath,
+      // Only store firebasePaths in Firestore (localPaths are device-specific)
+      'imagePaths': images.map((slot) => slot.firebasePath).toList(),
       'snagFixDescription': snagFixDescription,
-      'snagFixMainImageFirebasePath': snagFixMainImageFirebasePath,
-      'snagFixImage1FirebasePath': snagFixImage1FirebasePath,
-      'snagFixImage2FirebasePath': snagFixImage2FirebasePath,
-      'snagFixImage3FirebasePath': snagFixImage3FirebasePath,
+      'fixImagePaths': fixImages.map((slot) => slot.firebasePath).toList(),
       'snagStatus': snagStatus,
       'snagConfirmedStatus': snagConfirmedStatus,
       'lastModifiedBy': lastModifiedBy,
@@ -429,15 +369,10 @@ class Snag {
       snagCategory: data['snagCategory'] as String?,
       assignedEmail: data['assignedEmail'] as String?,
       assignedName: data['assignedName'] as String?,
-      imageMain1FirebasePath: data['imageMain1FirebasePath'] as String?,
-      image2FirebasePath: data['image2FirebasePath'] as String?,
-      image3FirebasePath: data['image3FirebasePath'] as String?,
-      image4FirebasePath: data['image4FirebasePath'] as String?,
+      // Create ImageSlots from firebasePaths (localPaths will be set after download)
+      images: _imageSlotsFromFirebasePaths(data['imagePaths'] as List<dynamic>?),
       snagFixDescription: data['snagFixDescription'] as String?,
-      snagFixMainImageFirebasePath: data['snagFixMainImageFirebasePath'] as String?,
-      snagFixImage1FirebasePath: data['snagFixImage1FirebasePath'] as String?,
-      snagFixImage2FirebasePath: data['snagFixImage2FirebasePath'] as String?,
-      snagFixImage3FirebasePath: data['snagFixImage3FirebasePath'] as String?,
+      fixImages: _imageSlotsFromFirebasePaths(data['fixImagePaths'] as List<dynamic>?),
       snagStatus: data['snagStatus'] as bool? ?? true,
       snagConfirmedStatus: data['snagConfirmedStatus'] as bool? ?? true,
       lastModifiedBy: data['lastModifiedBy'] as String?,
@@ -466,4 +401,18 @@ class Snag {
 
   @override
   int get hashCode => id.hashCode;
+
+  /// Helper to create ImageSlot list from Firestore firebasePaths
+  static List<ImageSlot> _imageSlotsFromFirebasePaths(List<dynamic>? paths) {
+    final slots = <ImageSlot>[];
+    for (int i = 0; i < 6; i++) {
+      final path = (paths != null && i < paths.length) ? paths[i] as String? : null;
+      if (path != null && path.isNotEmpty) {
+        slots.add(ImageSlot(firebasePath: path));
+      } else {
+        slots.add(ImageSlot.empty);
+      }
+    }
+    return slots;
+  }
 }

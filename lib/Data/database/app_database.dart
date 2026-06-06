@@ -10,17 +10,19 @@ import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 import 'tables/profile_table.dart';
 import 'tables/sync_queue_table.dart';
 import 'tables/sites_table.dart';
+import 'tables/snags_table.dart';
 import 'daos/profile_dao.dart';
 import 'daos/sync_queue_dao.dart';
 import 'daos/site_dao.dart';
+import 'daos/snag_dao.dart';
 
 part 'app_database.g.dart';
 
 /// Main database class for SnagSnapper offline-first architecture
 /// Implements singleton pattern for database access
 @DriftDatabase(
-  tables: [Profiles, SyncQueueTable, Sites], 
-  daos: [ProfileDao, SyncQueueDao, SiteDao]
+  tables: [Profiles, SyncQueueTable, Sites, Snags],
+  daos: [ProfileDao, SyncQueueDao, SiteDao, SnagDao]
 )
 class AppDatabase extends _$AppDatabase {
   // Singleton instance
@@ -46,8 +48,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// Database schema version
   /// Version 2: Added Sites table for site management
+  /// Version 3: Added Snags table for offline-first snag management
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   /// Migration strategy for database upgrades
   @override
@@ -71,6 +74,14 @@ class AppDatabase extends _$AppDatabase {
           await m.create(sites);
           if (kDebugMode) {
             print('Added Sites table in migration to version 2');
+          }
+        }
+
+        if (from < 3) {
+          // Migration from version 2 to 3: Add Snags table
+          await m.create(snags);
+          if (kDebugMode) {
+            print('Added Snags table in migration to version 3');
           }
         }
         
@@ -203,6 +214,9 @@ class AppDatabase extends _$AppDatabase {
     if (kDebugMode) print('AppDatabase.clearAllData: Starting...');
 
     // Clear all tables
+    await delete(snags).go();
+    if (kDebugMode) print('AppDatabase.clearAllData: Snags cleared');
+
     await delete(sites).go();
     if (kDebugMode) print('AppDatabase.clearAllData: Sites cleared');
 

@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/site.dart';
+import 'package:snagsnapper/Screens/Sites/SiteInfo/site_status_v2.dart';
 import 'package:snagsnapper/Widgets/site_grid_tile.dart';
 import 'package:snagsnapper/Widgets/site_list_tile.dart';
 
@@ -55,23 +56,15 @@ class _SharedSitesState extends State<SharedSites> {
   }
 
   void _onSiteTap(Site site) {
-    // TODO: Update SiteStatus to accept new Site model (Phase 5)
-    // For now, show a message that this feature is being updated
     if (kDebugMode) {
       print('SharedSites: Tapped site ${site.id} - ${site.name}');
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Opening ${site.name}...'),
-        duration: const Duration(seconds: 1),
-      ),
+    // Navigate to SiteStatusV2 to view shared site snags
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SiteStatusV2(site: site)),
     );
-
-    // TODO: Navigate to SiteStatus when it's updated to use new model
-    // Navigator.push(context, MaterialPageRoute(
-    //   builder: (context) => SiteStatus(site: site),
-    // ));
   }
 
   @override
