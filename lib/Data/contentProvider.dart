@@ -23,7 +23,8 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/colleague.dart';
-import 'package:snagsnapper/Data/site.dart';
+// TODO: OLD Site model - commented out, use SiteDao + NEW Site model instead
+// import 'package:snagsnapper/Data/site.dart';
 import 'package:snagsnapper/Data/snag.dart';
 import 'package:snagsnapper/services/sync_service.dart';
 import 'package:snagsnapper/services/sync/handlers/profile_sync_handler.dart';
@@ -39,10 +40,11 @@ class CP extends ChangeNotifier {
   bool _isProSiteSharing = false;
   Offerings? _offerings;
   AppUser? _appUser;
-  final Map<String, Site> _allSites = {}; //SiteUID, Site
-  /// Map <String SiteID, Site site>
-  final Map<String, Site> _ownedSites = {}; //SiteUID, Site
-  final Map<String, Site> _sharedSites = {}; //SiteUID, Site
+  // TODO: OLD Site maps - commented out, use SiteDao instead
+  // final Map<String, Site> _allSites = {}; //SiteUID, Site
+  // /// Map <String SiteID, Site site>
+  // final Map<String, Site> _ownedSites = {}; //SiteUID, Site
+  // final Map<String, Site> _sharedSites = {}; //SiteUID, Site
   final Map<String, String> _sharedSitedata = {}; //SiteUID, Site
   final Map<String, Map<String, Snag>> _snags = {}; //SiteUID > Map<SnagUID, Snag>
 
@@ -273,9 +275,10 @@ class CP extends ChangeNotifier {
 
     // Note: Firebase signOut is handled by Auth.signOut(), not here
     _appUser = null;
-    _allSites.clear();
-    _ownedSites.clear();
-    _sharedSites.clear();
+    // TODO: OLD Site maps removed - SiteDao handles site data
+    // _allSites.clear();
+    // _ownedSites.clear();
+    // _sharedSites.clear();
     _sharedSitedata.clear();
     _snags.clear();
     if (kDebugMode) print('DATA-L_RV: END');
@@ -377,59 +380,60 @@ class CP extends ChangeNotifier {
     if (kDebugMode) print('DATA_DSnag: END deleting Snag');
   }
 
-  Future deleteSite(Site site) async {
-    if (kDebugMode) print('DATA-F_DSite: Delete Site');
-    String ownerID;
-    bool isOwner = site.ownerEmail.toLowerCase() == FirebaseAuth.instance.currentUser!.email!.toLowerCase();
-    if (!isOwner) return;
+  // TODO: OLD Site methods - commented out, use SiteDao + SiteService instead
+  // Future deleteSite(Site site) async {
+  //   if (kDebugMode) print('DATA-F_DSite: Delete Site');
+  //   String ownerID;
+  //   bool isOwner = site.ownerEmail.toLowerCase() == FirebaseAuth.instance.currentUser!.email!.toLowerCase();
+  //   if (!isOwner) return;
+  //
+  //   ownerID = FirebaseAuth.instance.currentUser!.uid;
+  //
+  //   //-- FIREBASE UPDATE START--
+  //   if (kDebugMode) print('DATA_DSite: FIREBASE Deleting Site - ${site.name}');
+  //   try {
+  //     FirebaseFirestore.instance.collection('Profile/$ownerID/Sites').doc(site.uID).delete().then((onValue) {
+  //       if (kDebugMode) print('DATA_DSite: Deleted Site - ${site.name}');
+  //       _allSites.remove(site.uID);
+  //       _ownedSites.remove(site.uID);
+  //       if (kDebugMode) print('DATA_DSite: Notifying Listeners');
+  //       notifyListeners();
+  //     }); //Update firebase first
+  //   } on PlatformException catch (e) {
+  //     if (kDebugMode) print('DATA_DSite: Error Deleting Site - Details: ${e.code}');
+  //   }
+  //   if (kDebugMode) print('DATA_DSite: END deleting Site');
+  // }
 
-    ownerID = FirebaseAuth.instance.currentUser!.uid;
+  // getMapOfAllSites() {
+  //   if (kDebugMode) print('DATA-F-L_GMAS: Get map of all sites');
+  //   return _allSites;
+  // }
 
-    //-- FIREBASE UPDATE START--
-    if (kDebugMode) print('DATA_DSite: FIREBASE Deleting Site - ${site.name}');
-    try {
-      FirebaseFirestore.instance.collection('Profile/$ownerID/Sites').doc(site.uID).delete().then((onValue) {
-        if (kDebugMode) print('DATA_DSite: Deleted Site - ${site.name}');
-        _allSites.remove(site.uID);
-        _ownedSites.remove(site.uID);
-        if (kDebugMode) print('DATA_DSite: Notifying Listeners');
-        notifyListeners();
-      }); //Update firebase first
-    } on PlatformException catch (e) {
-      if (kDebugMode) print('DATA_DSite: Error Deleting Site - Details: ${e.code}');
-    }
-    if (kDebugMode) print('DATA_DSite: END deleting Site');
-  }
+  // getSite(String siteID) {
+  //   if (kDebugMode) print('DATA-F-L_GS: Get single site');
+  //   return _allSites[siteID]; // returns a site
+  // }
 
-  getMapOfAllSites() {
-    if (kDebugMode) print('DATA-F-L_GMAS: Get map of all sites');
-    return _allSites;
-  }
+  // /// Returns Map<String Site ID, Site site>
+  // Map<String, Site> getMapOfOwnedSites() {
+  //   if (kDebugMode) print('DATA-F-L_GLOS: Get List of OWNED sites');
+  //   return _ownedSites;
+  // }
 
-  getSite(String siteID) {
-    if (kDebugMode) print('DATA-F-L_GS: Get single site');
-    return _allSites[siteID]; // returns a site
-  }
+  // getMapOfSharedSites() {
+  //   if (kDebugMode) print('DATA-F-L_GMSS: Get map of SHARED sites');
+  //   return _sharedSites;
+  // }
 
-  /// Returns Map<String Site ID, Site site>
-  Map<String, Site> getMapOfOwnedSites() {
-    if (kDebugMode) print('DATA-F-L_GLOS: Get List of OWNED sites');
-    return _ownedSites;
-  }
-
-  getMapOfSharedSites() {
-    if (kDebugMode) print('DATA-F-L_GMSS: Get map of SHARED sites');
-    return _sharedSites;
-  }
-
-  getListOfSnags(String siteUID) {
+  List<Snag> getListOfSnags(String siteUID) {
     if (kDebugMode) print('DATA-F_GLOS: Get List Of All Snags');
     if (_snags[siteUID] != null) {
       if (kDebugMode) print('DATA-L_GLOS: END Returning List of Snags');
       return _snags[siteUID]!.values.toList();
     } else {
       if (kDebugMode) print('DATA-L_GLOS: END Returning NEW List');
-      return [];
+      return <Snag>[];
     }
   }
 

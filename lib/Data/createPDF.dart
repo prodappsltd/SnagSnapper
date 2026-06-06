@@ -9,7 +9,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
-import 'package:snagsnapper/Data/site.dart';
+// TODO: OLD Site model deleted - migrate to NEW Site model
+// import 'package:snagsnapper/Data/site.dart';
+import 'package:snagsnapper/Data/models/site.dart'; // NEW Site model (placeholder)
 import 'package:snagsnapper/Data/snag.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -39,12 +41,14 @@ class CreatePDF {
   Future<String> createPDF() async {
     mainOrng = PdfColor.fromInt(_color.value);
     final doc = pw.Document(title: 'Site Report', author: _user.name);
-    if (_site.image.isNotEmpty) {
-      _logo = pw.MemoryImage(
-        //doc.document,
-        //bytes:
-        base64Decode(_site.image),
-      );
+    // TODO: Migrate to NEW Site model - use imageLocalPath instead of image (base64)
+    // OLD code used: _site.image (base64 string)
+    // NEW model uses: _site.imageLocalPath (file path)
+    if (_site.imageLocalPath != null && _site.imageLocalPath!.isNotEmpty) {
+      final file = File(_site.imageLocalPath!);
+      if (file.existsSync()) {
+        _logo = pw.MemoryImage(file.readAsBytesSync());
+      }
     }
 
     snagSnapperLogoImage = pw.MemoryImage(
@@ -77,13 +81,13 @@ class CreatePDF {
     Directory docAppDirectory = await getApplicationDocumentsDirectory();
     //Directory docTempDirectory = await getTemporaryDirectory();
     String path = docAppDirectory.path;
-    await Directory('$path/${_site.uID}').create().then((value) async {
+    await Directory('$path/${_site.id}').create().then((value) async {
       DateTime time = DateTime.now();
       String temp = DateFormat('dd-MMMM-yyyy_HH:mm_ss').format(time);
       String name = '$temp.pdf';
       if (kDebugMode) print('File Created with name: $name');
-      File file = File('$path/${_site.uID}/$name');
-      path = '$path/${_site.uID}/$name';
+      File file = File('$path/${_site.id}/$name');
+      path = '$path/${_site.id}/$name';
       if (kDebugMode) print('File in CreatePDF: $path');
       await file.writeAsBytes(await doc.save());
       if (kDebugMode) print('File Exists : ${await file.exists()}');
@@ -229,7 +233,7 @@ class CreatePDF {
                     pw.Text('Location: ', style: const pw.TextStyle(fontSize: 16.0)),
                     pw.SizedBox(height: 4.0),
                     pw.Container(
-                        width: 350.0, child: pw.Text(_site.location, style: const pw.TextStyle(fontSize: 20.0))),
+                        width: 350.0, child: pw.Text(_site.address ?? '', style: const pw.TextStyle(fontSize: 20.0))),
                   ])
             ]),
           ],
@@ -288,7 +292,8 @@ class CreatePDF {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: <pw.Widget>[
                     pw.Text('Prepared by:'),
-                    pw.Text(_site.ownerName, style: const pw.TextStyle(fontSize: 16.0)),
+                    // TODO: ownerName removed from NEW Site model - using user name instead
+                    pw.Text(_user.name, style: const pw.TextStyle(fontSize: 16.0)),
                     pw.Text(_user.phone, style: const pw.TextStyle(fontSize: 16.0)),
                   ]),
               pw.Column(

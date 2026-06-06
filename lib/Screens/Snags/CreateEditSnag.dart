@@ -16,7 +16,8 @@ import 'package:snagsnapper/Widgets/smallImageSnags.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 
-import '../../Data/site.dart';
+// TODO: OLD Site model - pending migration to NEW Site model
+// import '../../Data/site.dart';
 import '../../Widgets/ActionButton.dart';
 
 
@@ -419,6 +420,8 @@ class _SnagFormState extends State<SnagForm> {
                 ],
               )
           ),
+          // TODO: ASSIGN SNAG section uses OLD Site model - pending migration
+          // Temporarily showing placeholder UI
           _checkIfOwner()?
               Column(
                 children: <Widget>[
@@ -429,50 +432,57 @@ class _SnagFormState extends State<SnagForm> {
                   const Center(child: Text('ASSIGN SNAG')),
                   const Center(child: Text('(Select One)')),
                   const Divider(),
-                  Provider.of<CP>(context).getMapOfAllSites()[widget.siteID].sharedWith.length < 1
-                      ? const Center(
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
                       child: Text(
-                        'To assign this SNAG, please share the site first!',
+                        'Snag assignment temporarily disabled.\nPending migration to new data model.',
                         textAlign: TextAlign.center,
-                      ))
-                      : Container(
-                    width: double.infinity,
-                    height: 200.0,
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: const BorderRadius.all(Radius.circular(10.0))),
-                    child: Center(
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: Provider.of<CP>(context).getMapOfAllSites()[widget.siteID].sharedWith.length,
-                          itemBuilder: (BuildContext context, int position) {
-                            return AssignChkBoxView( // TODO - Add an option for NONE so snag is assigned to no-one.
-                                sharedWith: getSharedList(),
-                                function: (value) { // This is the bool value
-                                  setState(() {
-                                    if (value != null && value && Provider.of<CP>(context, listen: false).getMapOfAllSites()[widget.siteID].sharedWith.keys.toList()[position] == FirebaseAuth.instance.currentUser!.email) {
-                                      assignedEmail = FirebaseAuth.instance.currentUser!.email!;
-                                      assignedName = Provider.of<CP>(context, listen: false).getAppUser()!.name;
-                                    } else if (value != null && value) {
-                                      assignedName = _getNameOfColleague((Provider.of<CP>(context, listen: false).getMapOfAllSites()[widget.siteID]).sharedWith.keys.toList()[position])?? 'Error';
-                                      assignedEmail = Provider.of<CP>(context, listen: false).getMapOfAllSites()[widget.siteID].sharedWith.keys.toList()[position];
-                                    }
-                                    //if (preAssEmail == assignedEmail) {
-                                    if (value != null && !value )assignedEmail = '';
-                                    if (value != null && !value )assignedName = '';
-                                    //} else {
-                                      //preAssEmail = assignedEmail;
-                                    //}
-                                  });
-                                },
-                                emailSelected: assignedEmail,
-                                listOfColleagues: Provider.of<CP>(context).getListOFColleagues(),
-                                email: Provider.of<CP>(context)
-                                    .getMapOfAllSites()[widget.siteID]
-                                    .sharedWith
-                                    .keys
-                                    .toList()[position]);
-                          },
-                        )),
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
                   ),
+                  // ORIGINAL CODE - COMMENTED OUT FOR MIGRATION
+                  // Provider.of<CP>(context).getMapOfAllSites()[widget.siteID].sharedWith.length < 1
+                  //     ? const Center(
+                  //     child: Text(
+                  //       'To assign this SNAG, please share the site first!',
+                  //       textAlign: TextAlign.center,
+                  //     ))
+                  //     : Container(
+                  //   width: double.infinity,
+                  //   height: 200.0,
+                  //   decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: const BorderRadius.all(Radius.circular(10.0))),
+                  //   child: Center(
+                  //       child: ListView.builder(
+                  //         shrinkWrap: true,
+                  //         itemCount: Provider.of<CP>(context).getMapOfAllSites()[widget.siteID].sharedWith.length,
+                  //         itemBuilder: (BuildContext context, int position) {
+                  //           return AssignChkBoxView(
+                  //               sharedWith: getSharedList(),
+                  //               function: (value) {
+                  //                 setState(() {
+                  //                   if (value != null && value && Provider.of<CP>(context, listen: false).getMapOfAllSites()[widget.siteID].sharedWith.keys.toList()[position] == FirebaseAuth.instance.currentUser!.email) {
+                  //                     assignedEmail = FirebaseAuth.instance.currentUser!.email!;
+                  //                     assignedName = Provider.of<CP>(context, listen: false).getAppUser()!.name;
+                  //                   } else if (value != null && value) {
+                  //                     assignedName = _getNameOfColleague((Provider.of<CP>(context, listen: false).getMapOfAllSites()[widget.siteID]).sharedWith.keys.toList()[position])?? 'Error';
+                  //                     assignedEmail = Provider.of<CP>(context, listen: false).getMapOfAllSites()[widget.siteID].sharedWith.keys.toList()[position];
+                  //                   }
+                  //                   if (value != null && !value )assignedEmail = '';
+                  //                   if (value != null && !value )assignedName = '';
+                  //                 });
+                  //               },
+                  //               emailSelected: assignedEmail,
+                  //               listOfColleagues: Provider.of<CP>(context).getListOFColleagues(),
+                  //               email: Provider.of<CP>(context)
+                  //                   .getMapOfAllSites()[widget.siteID]
+                  //                   .sharedWith
+                  //                   .keys
+                  //                   .toList()[position]);
+                  //         },
+                  //       )),
+                  // ),
                 ],
               ) : const Text(''),
           _checkIfOwner()
@@ -582,7 +592,9 @@ class _SnagFormState extends State<SnagForm> {
     return name;
   }
 
-  getSharedList() => (Provider.of<CP>(context).getSite(widget.siteID) as Site).sharedWith;
+  // TODO: Uses OLD Site model - pending migration
+  // getSharedList() => (Provider.of<CP>(context).getSite(widget.siteID) as Site).sharedWith;
+  getSharedList() => <String, String>{}; // Placeholder - returns empty map
 
 }
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -14,7 +13,7 @@ import 'package:rflutter_alert/rflutter_alert.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
-import 'package:snagsnapper/Data/site.dart';
+import 'package:snagsnapper/Data/models/site.dart';
 import 'package:snagsnapper/Data/snag.dart';
 import 'package:snagsnapper/Helper/purchasesHelper.dart';
 import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart';
@@ -103,131 +102,116 @@ class _SiteStatusState extends State<SiteStatus> {
   }
 
   /// Attach a listener to the site selected here
+  /// TODO: Firebase listeners disabled - pending migration to DAO streams
   _attachSiteListener() async {
-    String siteID = widget.site.uID;
+    // Set sharedSite flag for UI purposes
     String siteOwnerEmail = widget.site.ownerEmail.toLowerCase();
-    if (kDebugMode) print('SiteStatus: attachSiteListener : OwnerEmail: $siteOwnerEmail  + FireBaseUserEmail: ${firebaseUser.email}');
-    /// if owner email != logged in firebase user email, set flag to show it is a shared site
-    sharedSite = siteOwnerEmail.toLowerCase() != firebaseUser.email!.toLowerCase();
-    if (kDebugMode) print('Attaching Listener SharedSite: $sharedSite');
-    // Listen to SNAGS ONLY, if it your OWN site, No need for site listener
-    if (!sharedSite) { // Only watch for snag changes if it is your own site
-      _attachSnagListener();
-      return; // No need to go down and listen to SITE as well
-    }
-    //No need for a SITE listener below IF it is an OWNED Site as no one else can make changes to your OWN site
-    Map<String, String> sharedSitesPath = Provider.of<CP>(context, listen:false).getAppUser()!.mapOfSitePaths!;
-    if (kDebugMode && sharedSitesPath.isEmpty) print('Attach Listener : Shared sites Path is Empty');
-    if (sharedSitesPath.isEmpty) return; //It will be weird but still adding this statement
-    // As it is shared site. Get the owner ID
-    String? ownerUID = sharedSitesPath[siteID];
-    if (kDebugMode) print('Attach Listener SiteOwnerUID: $ownerUID');
-    // TODO: Migrate to use SiteDao streams instead of Firebase listener
-    // if (ownerUID != null) {
-    //   DocumentReference ref = FirebaseFirestore.instance.collection('Profile/$ownerUID/Sites').doc(siteID);
-    //   listenSite = ref.snapshots().listen((DocumentSnapshot documentSnapshot) {
-    //     if (kDebugMode) print('Site ${widget.site.name} - Changed Detected');
-    //     Site site = Site.fromJson(documentSnapshot.data() as Map<String, dynamic>);
-    //     Provider.of<CP>(context, listen:false).updateSiteLocalVariables(site);
-    //   });
+    sharedSite = siteOwnerEmail != firebaseUser.email!.toLowerCase();
+    if (kDebugMode) print('SiteStatus: Firebase listeners DISABLED - sharedSite: $sharedSite');
+    // Firebase listeners commented out - will be replaced with DAO streams
+    return;
+
+    // ORIGINAL CODE - COMMENTED OUT FOR MIGRATION
+    // String siteID = widget.site.id;
+    // if (kDebugMode) print('SiteStatus: attachSiteListener : OwnerEmail: $siteOwnerEmail  + FireBaseUserEmail: ${firebaseUser.email}');
+    // /// if owner email != logged in firebase user email, set flag to show it is a shared site
+    // if (kDebugMode) print('Attaching Listener SharedSite: $sharedSite');
+    // // Listen to SNAGS ONLY, if it your OWN site, No need for site listener
+    // if (!sharedSite) { // Only watch for snag changes if it is your own site
+    //   _attachSnagListener();
+    //   return; // No need to go down and listen to SITE as well
     // }
-    if (kDebugMode) print('SiteStatus: Firebase listener disabled - pending migration to SiteDao');
-    await _attachSnagListener();
+    // //No need for a SITE listener below IF it is an OWNED Site as no one else can make changes to your OWN site
+    // Map<String, String> sharedSitesPath = Provider.of<CP>(context, listen:false).getAppUser()!.mapOfSitePaths!;
+    // if (kDebugMode && sharedSitesPath.isEmpty) print('Attach Listener : Shared sites Path is Empty');
+    // if (sharedSitesPath.isEmpty) return; //It will be weird but still adding this statement
+    // // As it is shared site. Get the owner ID
+    // String? ownerUID = sharedSitesPath[siteID];
+    // if (kDebugMode) print('Attach Listener SiteOwnerUID: $ownerUID');
+    // if (kDebugMode) print('SiteStatus: Firebase listener disabled - pending migration to SiteDao');
+    // await _attachSnagListener();
   }
 
+  /// TODO: Firebase listeners disabled - pending migration to DAO streams
   _attachSnagListener() async {
-    String siteID = widget.site.uID;
-    if (kDebugMode) print('Attaching SNAG listener to siteID: $siteID');
-    String siteOwnerEmail = widget.site.ownerEmail.toLowerCase();
-    if (kDebugMode) print('SiteStatus: attachSnagListener : OwnerEmail: $siteOwnerEmail  + FireBaseUserEmail: ${firebaseUser.email}');
-    sharedSite = siteOwnerEmail.toLowerCase() != firebaseUser.email!.toLowerCase();
-    if (kDebugMode) print('Attaching SNAG Listener SharedSite: $sharedSite');
-    if (!sharedSite) {
-      _attachAllSnagOwnerListener(); //No need for a listener
-      return;
-    }
-    // NOW WE NEED COLLECTION DOCUMENT LISTENER FOR THIS SITE ONLY!
-    Map<String, String> listOfPaths = Provider.of<CP>(context, listen:false).getAppUser()!.mapOfSitePaths!;
-    String? ownerUID = listOfPaths[siteID];
-    if (ownerUID != null) {
-      listeners ??= [];
-      if (widget.site.sharedWith[firebaseUser.email!.toLowerCase()] == 'VIEW') {
-        if (kDebugMode) print('Listening to all SNAGS because of VIEW permission');
-        listeners!.add(FirebaseFirestore.instance
-            .collection('Profile/$ownerUID/Sites/$siteID/Snags')
-            .snapshots()
-            .listen((QuerySnapshot snapshot) => handleSnapShot(snapshot)));
-      } else {
-        listeners!.add(FirebaseFirestore.instance
-            .collection('Profile/$ownerUID/Sites/$siteID/Snags')
-            .where(ASSIGNED_EMAIL, isEqualTo: firebaseUser.email!.toLowerCase())
-            .snapshots()
-            .listen((QuerySnapshot snapshot) => handleSnapShot(snapshot)));
-        listeners!.add(FirebaseFirestore.instance
-            .collection('Profile/$ownerUID/Sites/$siteID/Snags')
-            .where(CREATOR_EMAIL, isEqualTo: firebaseUser.email!.toLowerCase())
-            .snapshots()
-            .listen((QuerySnapshot snapshot) => handleSnapShot(snapshot)));
-      }
-    }
+    if (kDebugMode) print('SiteStatus: _attachSnagListener DISABLED');
+    return;
+
+    // ORIGINAL CODE - COMMENTED OUT FOR MIGRATION
+    // String siteID = widget.site.id;
+    // if (kDebugMode) print('Attaching SNAG listener to siteID: $siteID');
+    // String siteOwnerEmail = widget.site.ownerEmail.toLowerCase();
+    // if (kDebugMode) print('SiteStatus: attachSnagListener : OwnerEmail: $siteOwnerEmail  + FireBaseUserEmail: ${firebaseUser.email}');
+    // sharedSite = siteOwnerEmail.toLowerCase() != firebaseUser.email!.toLowerCase();
+    // if (kDebugMode) print('Attaching SNAG Listener SharedSite: $sharedSite');
+    // if (!sharedSite) {
+    //   _attachAllSnagOwnerListener(); //No need for a listener
+    //   return;
+    // }
+    // // NOW WE NEED COLLECTION DOCUMENT LISTENER FOR THIS SITE ONLY!
+    // Map<String, String> listOfPaths = Provider.of<CP>(context, listen:false).getAppUser()!.mapOfSitePaths!;
+    // String? ownerUID = listOfPaths[siteID];
+    // if (ownerUID != null) {
+    //   listeners ??= [];
+    //   if (widget.site.sharedWith[firebaseUser.email!.toLowerCase()] == 'VIEW') {
+    //     if (kDebugMode) print('Listening to all SNAGS because of VIEW permission');
+    //     listeners!.add(FirebaseFirestore.instance
+    //         .collection('Profile/$ownerUID/Sites/$siteID/Snags')
+    //         .snapshots()
+    //         .listen((QuerySnapshot snapshot) => handleSnapShot(snapshot)));
+    //   } else {
+    //     listeners!.add(FirebaseFirestore.instance
+    //         .collection('Profile/$ownerUID/Sites/$siteID/Snags')
+    //         .where(ASSIGNED_EMAIL, isEqualTo: firebaseUser.email!.toLowerCase())
+    //         .snapshots()
+    //         .listen((QuerySnapshot snapshot) => handleSnapShot(snapshot)));
+    //     listeners!.add(FirebaseFirestore.instance
+    //         .collection('Profile/$ownerUID/Sites/$siteID/Snags')
+    //         .where(CREATOR_EMAIL, isEqualTo: firebaseUser.email!.toLowerCase())
+    //         .snapshots()
+    //         .listen((QuerySnapshot snapshot) => handleSnapShot(snapshot)));
+    //   }
+    // }
   }
 
+  /// TODO: Firebase listeners disabled - pending migration to DAO streams
   handleSnapShot(QuerySnapshot snapshot) {
-    for (var change in snapshot.docChanges) {
-      switch (change.type) {
-        case DocumentChangeType.added:
-          {
-            Snag snag = Snag.fromJson(change.doc.data() as Map<String, dynamic>);
-            Provider.of<CP>(context, listen:false).addToLocalSnags(snag);
-            if (kDebugMode) print('SNAG Document added NAME: ${snag.location}');
-          }
-          break;
-        case DocumentChangeType.modified:
-          {
-            Snag snag = Snag.fromJson(change.doc.data() as Map<String, dynamic>);
-            Provider.of<CP>(context, listen:false).addToLocalSnags(snag);
-            if (kDebugMode) print('SNAG Document modified NAME: ${snag.location}');
-          }
-          break;
-        case DocumentChangeType.removed:
-          {
-            Snag snag = Snag.fromJson(change.doc.data() as Map<String, dynamic>);
-            if (snag.creatorEmail == FirebaseAuth.instance.currentUser!.email) return; // For cases where created by by someone, then assigned to whoever does not remove from the creator list.
-            Provider.of<CP>(context, listen:false).removeFromLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
-            if (kDebugMode) print('SNAG Document removed NAME: ${snag.location}');
-          }
-          break;
-      }
-    }
+    // DISABLED - pending migration
+    return;
   }
 
+  /// TODO: Firebase listeners disabled - pending migration to DAO streams
   _attachAllSnagOwnerListener() async {
-    CollectionReference ref =
-        FirebaseFirestore.instance.collection('Profile/${firebaseUser.uid}/Sites/${widget.site.uID}/Snags');
-    listenSnags = ref.snapshots().listen((QuerySnapshot snapshot) {
-      for (var change in snapshot.docChanges) {
-        switch (change.type) {
-          case DocumentChangeType.added:
-            {
-              if (kDebugMode) print('DOCUMENT-CHANGE-TYPE: Document Added');
-              Provider.of<CP>(context, listen:false).addToLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
-            }
-            break;
-          case DocumentChangeType.modified:
-            {
-              if (kDebugMode) print('DOCUMENT-CHANGE-TYPE: Document Modified');
-              Provider.of<CP>(context, listen:false).addToLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
-            }
-            break;
-          case DocumentChangeType.removed:
-            {
-              if (kDebugMode) print('DOCUMENT-CHANGE-TYPE: Document Removed');
-              Provider.of<CP>(context, listen:false).removeFromLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
-            }
-            break;
-        }
-      }
-    });
+    if (kDebugMode) print('SiteStatus: _attachAllSnagOwnerListener DISABLED');
+    return;
+
+    // ORIGINAL CODE - COMMENTED OUT FOR MIGRATION
+    // CollectionReference ref =
+    //     FirebaseFirestore.instance.collection('Profile/${firebaseUser.uid}/Sites/${widget.site.id}/Snags');
+    // listenSnags = ref.snapshots().listen((QuerySnapshot snapshot) {
+    //   for (var change in snapshot.docChanges) {
+    //     switch (change.type) {
+    //       case DocumentChangeType.added:
+    //         {
+    //           if (kDebugMode) print('DOCUMENT-CHANGE-TYPE: Document Added');
+    //           Provider.of<CP>(context, listen:false).addToLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
+    //         }
+    //         break;
+    //       case DocumentChangeType.modified:
+    //         {
+    //           if (kDebugMode) print('DOCUMENT-CHANGE-TYPE: Document Modified');
+    //           Provider.of<CP>(context, listen:false).addToLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
+    //         }
+    //         break;
+    //       case DocumentChangeType.removed:
+    //         {
+    //           if (kDebugMode) print('DOCUMENT-CHANGE-TYPE: Document Removed');
+    //           Provider.of<CP>(context, listen:false).removeFromLocalSnags(Snag.fromJson(change.doc.data() as Map<String, dynamic>));
+    //         }
+    //         break;
+    //     }
+    //   }
+    // });
   }
 
   @override
@@ -346,11 +330,11 @@ class _SiteStatusState extends State<SiteStatus> {
   // Make New Function
   _listofFiles() async {
     String directory = (await getApplicationDocumentsDirectory()).path;
-    Directory d = Directory("$directory/${widget.site.uID}/");
+    Directory d = Directory("$directory/${widget.site.id}/");
     if (d.existsSync()){
       reportsDirectoryExists = true;
       setState(() {
-        reports = Directory("$directory/${widget.site.uID}/").listSync();  //use your folder name instead of resume.
+        reports = Directory("$directory/${widget.site.id}/").listSync();  //use your folder name instead of resume.
       });
       if (kDebugMode){
         if (reports.isEmpty) {
@@ -371,7 +355,7 @@ class _SiteStatusState extends State<SiteStatus> {
   @override
   Widget build(BuildContext context) {
     viewPermission = widget.site.sharedWith[Provider.of<CP>(context, listen:false).getAppUser()!.email.toLowerCase()] == 'VIEW';
-    snags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.uID);
+    snags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.id);
     if (selectionText == ALL_SNAGS) setState(() => displaySnags = snags);
     viewAccess = widget.site.sharedWith[Provider.of<CP>(context, listen:false).getAppUser()!.email.toLowerCase()] == 'VIEW';
 
@@ -664,7 +648,7 @@ class _SiteStatusState extends State<SiteStatus> {
                                             },
                                             child: GestureDetector(
                                               child: ReportCardView(path:reports[index].toString()),
-                                              //TODO onTap: (){Navigator.push(context, MaterialPageRoute(builder: (context)=> PdfViewer(reports[index].path,widget.site.uID)));},
+                                              //TODO onTap: (){Navigator.push(context, MaterialPageRoute(builder: (context)=> PdfViewer(reports[index].path,widget.site.id)));},
                                             ),
                                           );
                                         }),
@@ -718,7 +702,9 @@ class _SiteStatusState extends State<SiteStatus> {
                                 )
                               );
                               if (result) {
-                                Provider.of<CP>(context, listen:false).deleteSite(widget.site);
+                                // TODO: deleteSite expects OLD Site model - migrate to SiteDao
+                                // Provider.of<CP>(context, listen:false).deleteSite(widget.site);
+                                if (kDebugMode) print('SiteStatus: Delete site disabled - pending migration');
                                 Navigator.popUntil(context, ModalRoute.withName('/mySites'));
                               }
                             },
@@ -792,7 +778,7 @@ class _SiteStatusState extends State<SiteStatus> {
                     MaterialPageRoute(
                         builder: (context) => CreateSnag(
                               snag: null,
-                              siteID: widget.site.uID,
+                              siteID: widget.site.id,
                               siteOwnersEmail: widget.site.ownerEmail,
                             )));
 
@@ -842,13 +828,12 @@ class _SiteStatusState extends State<SiteStatus> {
         children: <Widget>[
           GestureDetector(
             onTap: () async {
-              // TODO: Migrate siteStatus to use NEW Site model, then enable edit navigation
-              // String email = FirebaseAuth.instance.currentUser!.email!;
-              // if (kDebugMode) print('Owner Email: ${widget.site.ownerEmail} - Firebase Email: $email');
-              // widget.site.ownerEmail == email
-              //     ? Navigator.push(context, MaterialPageRoute(builder: (context) => SiteInfo(widget.site)))
-              //     : null;
-              if (kDebugMode) print('SiteStatus: Edit navigation disabled - pending migration');
+              // Only owner can edit the site
+              String email = FirebaseAuth.instance.currentUser!.email!;
+              if (kDebugMode) print('SiteStatus: Owner Email: ${widget.site.ownerEmail} - Firebase Email: $email');
+              if (widget.site.ownerEmail.toLowerCase() == email.toLowerCase()) {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => SiteInfo(widget.site)));
+              }
             },
             child: SizedBox(
               height: MediaQuery.of(context).size.height / 7,
@@ -904,7 +889,7 @@ class _SiteStatusState extends State<SiteStatus> {
                                 //Purchase success then proceed
                                 isSiteSharing = await PurchasesHelper.isSiteSharingEnabled();
                                 if (isSiteSharing) Share.share(
-                                    'Hi, I would like to share \'${widget.site.name}\' site at \'${widget.site.location}\' with you on SnagSnapper app. Please click on the link to download the site to your app: \n $link',
+                                    'Hi, I would like to share \'${widget.site.name}\' site at \'${widget.site.address}\' with you on SnagSnapper app. Please click on the link to download the site to your app: \n $link',
                                     subject: 'Site share request on SnagSnapper app');
                                 },
                             ),
@@ -1000,7 +985,7 @@ class _SiteStatusState extends State<SiteStatus> {
                               MaterialPageRoute(
                                   builder: (context) => SnagDetailedView(
                                         snag: displaySnags[index],
-                                        siteID: widget.site.uID,
+                                        siteID: widget.site.id,
                                         siteOwnersEmail: widget.site.ownerEmail,
                                       )));
                         }),
@@ -1014,7 +999,7 @@ class _SiteStatusState extends State<SiteStatus> {
 
   _createPDFAndView(BuildContext context, int result) async {
     setState(() => createPDFInProgress = true);
-    var listOfSnags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.uID);
+    var listOfSnags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.id);
     var listOfChosenSnags = <Snag>[];
     if (result>0) {
       listOfSnags.forEach((Snag snag) {
@@ -1030,21 +1015,21 @@ class _SiteStatusState extends State<SiteStatus> {
     } else {
       listOfChosenSnags = listOfSnags;
     }
-    var site = widget.site;
-    AppUser user = Provider.of<CP>(context, listen:false).getAppUser()!;
-    Color color = Provider.of<CP>(context, listen:false).getPDFColor();
-    CreatePDF doc = CreatePDF(
-      context,
-      site,
-      listOfChosenSnags,
-      user,
-      color,
-    );
-    String? path = await doc.createPDF();
+    // TODO: CreatePDF expects OLD Site model - needs migration
+    // var site = widget.site;
+    // AppUser user = Provider.of<CP>(context, listen:false).getAppUser()!;
+    // Color color = Provider.of<CP>(context, listen:false).getPDFColor();
+    // CreatePDF doc = CreatePDF(
+    //   context,
+    //   site,
+    //   listOfChosenSnags,
+    //   user,
+    //   color,
+    // );
+    // String? path = await doc.createPDF();
     setState(() => createPDFInProgress = false);
-    path != null
-        ? Navigator.pushNamed(context, '/pdfViewer', arguments: ArgsVIEWPDF(siteUID: site.uID, path: path))
-        : showErrorDialog();
+    if (kDebugMode) print('SiteStatus: CreatePDF disabled - pending migration');
+    showErrorDialog(); // Show error for now until PDF is migrated
   }
 
   showErrorDialog() {
@@ -1069,12 +1054,12 @@ class _SiteStatusState extends State<SiteStatus> {
   // Future getDynamicLink() async {
   //   var user = FirebaseAuth.instance.currentUser;
   //   // String encryptedUserID = encryptText(user!.uid);
-  //   // String encryptedSiteID = encryptText(widget.site.uID);
+  //   // String encryptedSiteID = encryptText(widget.site.id);
   //   // if (kDebugMode) {
   //   //   print('UserUID: ${user.uid}');
   //   //   print('Encrypted UserID: $encryptedUserID');
   //   //   print('Decrypted UserID: ${decryptText(encryptedUserID)}');
-  //   //   print('SiteUID: ${widget.site.uID}');
+  //   //   print('SiteUID: ${widget.site.id}');
   //   //   print('Encrypted SiteID: $encryptedSiteID');
   //   //   print('Decrypted SiteID: ${decryptText(encryptedSiteID)}');
   //   // }
@@ -1082,7 +1067,7 @@ class _SiteStatusState extends State<SiteStatus> {
   //   try {
   //     // Bypassing the encryption as it is not decrupting properly!
   //     //link = (await createDynamicLinkForThisSite(encryptedUserID, encryptedSiteID)).toString();
-  //     link = (await createDynamicLinkForThisSite(user!.uid, widget.site.uID)).toString();
+  //     link = (await createDynamicLinkForThisSite(user!.uid, widget.site.id)).toString();
   //   } on PlatformException catch(e){
   //     link = '';
   //     if (kDebugMode) print('**************************** - Platform Exception oCcured : ${e.details}');
@@ -1197,14 +1182,14 @@ class SiteText extends StatelessWidget {
             height: 1.0,
             width: 150.0,
           ),
-          Text('Manager: ${site.ownerName}',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-              fontSize: 14.0,
-              fontWeight: FontWeight.w500,
-              fontStyle: FontStyle.normal,
-              fontFamily: "Roboto-Bold.ttf")),
-          //Text('Creator Name: ${site.ownerName}', style: smallStyle),
+          // TODO: ownerName removed from NEW Site model - fetch from Profile if needed
+          // Text('Manager: ${site.ownerName}',
+          //     overflow: TextOverflow.ellipsis,
+          //     style: const TextStyle(
+          //     fontSize: 14.0,
+          //     fontWeight: FontWeight.w500,
+          //     fontStyle: FontStyle.normal,
+          //     fontFamily: "Roboto-Bold.ttf")),
         ],
       ),
     );
@@ -1217,11 +1202,18 @@ class SiteImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // NEW Site model uses imageLocalPath (file path) instead of image (base64)
+    final hasLocalImage = site.imageLocalPath != null &&
+        site.imageLocalPath!.isNotEmpty &&
+        File(site.imageLocalPath!).existsSync();
+
     return Container(
       width: MediaQuery.of(context).size.width / 3,
       decoration: BoxDecoration(
           image: DecorationImage(
-              image: site.image.isNotEmpty ? MemoryImage(base64Decode(site.image)) : const AssetImage('images/1024LowPoly.png') as ImageProvider,
+              image: hasLocalImage
+                  ? FileImage(File(site.imageLocalPath!))
+                  : const AssetImage('images/1024LowPoly.png') as ImageProvider,
               fit: BoxFit.cover)),
     );
   }
