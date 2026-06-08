@@ -364,7 +364,7 @@ CREATE TABLE sites (
 );
 ```
 
-#### 4.4.2 Snags Table
+#### 4.4.2 Snags Table (Updated 2026-06-08)
 ```sql
 CREATE TABLE snags (
   -- Identity
@@ -372,45 +372,33 @@ CREATE TABLE snags (
   site_uid TEXT NOT NULL,
   owner_email TEXT NOT NULL,
   creator_email TEXT NOT NULL,
-  
+
   -- Core Data
-  title TEXT NOT NULL,
-  description TEXT,
-  location TEXT,
-  priority INTEGER,
-  due_date INTEGER,
+  title TEXT NOT NULL,              -- MUST be empty string (reserved for future use)
+  description TEXT,                 -- max 5000 chars
+  location TEXT,                    -- max 200 chars
+  asset TEXT,                       -- max 200 chars (asset name/tag/room number)
+  priority TEXT,                    -- Priority code from owner's profile (e.g., "CAT1", "OK")
+  due_date INTEGER,                 -- Stored as UTC midnight
   creation_date INTEGER NOT NULL,
   snag_category TEXT,
-  
+
   -- Assignment
   assigned_email TEXT,
   assigned_name TEXT,
-  
-  -- Problem Images (Paths)
-  image_main1_local_path TEXT,
-  image_main1_firebase_path TEXT,
-  image2_local_path TEXT,
-  image2_firebase_path TEXT,
-  image3_local_path TEXT,
-  image3_firebase_path TEXT,
-  image4_local_path TEXT,
-  image4_firebase_path TEXT,
-  
-  -- Fix Documentation
+
+  -- Problem Images (6 slots as JSON array)
+  -- Each slot: {localPath, firebasePath, needsSync, markedForDeletion, version}
+  images TEXT NOT NULL,             -- JSON: List<ImageSlot> (6 slots)
+
+  -- Fix Documentation (6 slots as JSON array)
   snag_fix_description TEXT,
-  snag_fix_main_image_local_path TEXT,
-  snag_fix_main_image_firebase_path TEXT,
-  snag_fix_image1_local_path TEXT,
-  snag_fix_image1_firebase_path TEXT,
-  snag_fix_image2_local_path TEXT,
-  snag_fix_image2_firebase_path TEXT,
-  snag_fix_image3_local_path TEXT,
-  snag_fix_image3_firebase_path TEXT,
-  
-  -- Status
-  snag_status BOOLEAN DEFAULT TRUE,       -- true=open
-  snag_confirmed_status BOOLEAN DEFAULT TRUE, -- true=pending
-  
+  fix_images TEXT NOT NULL,         -- JSON: List<ImageSlot> (6 slots)
+
+  -- Status (Two-boolean system)
+  snag_status BOOLEAN DEFAULT TRUE,       -- true=open, false=completed by FIXER
+  snag_confirmed_status BOOLEAN DEFAULT TRUE, -- true=pending, false=confirmed by owner
+
   -- Tracking
   last_modified_by TEXT,
   last_modified_date INTEGER,
@@ -418,18 +406,28 @@ CREATE TABLE snags (
   rejection_reason TEXT,
   rejection_count INTEGER DEFAULT 0,
   cost_estimate REAL,
-  
+
   -- Sync Management
   needs_snag_sync BOOLEAN DEFAULT FALSE,
   needs_images_sync BOOLEAN DEFAULT FALSE,
+  needs_fix_images_sync BOOLEAN DEFAULT FALSE,
   last_sync_time INTEGER,
-  
+
   -- Versioning
   local_version INTEGER DEFAULT 1,
   firebase_version INTEGER DEFAULT 0,
-  
+
   FOREIGN KEY (site_uid) REFERENCES sites(id)
 );
+
+-- ImageSlot JSON structure (per slot):
+-- {
+--   "localPath": "SnagSnapper/{uid}/Sites/{siteId}/Snags/{snagId}/0.jpg",
+--   "firebasePath": "Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/0.jpg",
+--   "needsSync": true,
+--   "markedForDeletion": false,
+--   "version": 1
+-- }
 ```
 
 ### 4.5 User Flows
@@ -458,17 +456,21 @@ CREATE TABLE snags (
 6. Background sync when navigating away
 ```
 
-#### 4.5.2 Snag Creation Flow
+#### 4.5.2 Snag Creation Flow (Updated 2026-06-08)
 ```
 1. User opens site detail screen
 2. Taps "Add Snag" button
 3. Form appears:
-   - Title (required)
-   - All other fields optional
+   - Description (optional, max 5000 chars)
+   - Location (optional, max 200 chars)
+   - Asset (optional, max 200 chars)
+   - Priority selector (5 levels from owner's profile)
+   - Due Date picker
    - Category dropdown from site categories
+   - Problem photos (up to 6)
 4. User can:
-   - Quick save with just title
-   - Add photos (up to 4)
+   - Quick save with minimal info
+   - Add photos (up to 6 problem photos)
    - Fill detailed information
 5. System:
    - Generates UUID locally

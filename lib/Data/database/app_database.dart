@@ -47,58 +47,37 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Database schema version
-  /// Version 2: Added Sites table for site management
-  /// Version 3: Added Snags table for offline-first snag management
+  /// Schema version 1: All tables (Profiles, Sites, Snags)
+  /// Note: App is in development - reinstall for schema changes
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 1;
 
-  /// Migration strategy for database upgrades
+  /// Migration strategy for database
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
-        // Create all tables
+        // Create all tables (Profiles, Sites, Snags)
         await m.createAll();
-        
+
         // Enable foreign keys
         await customStatement('PRAGMA foreign_keys = ON');
-        
+
         if (kDebugMode) {
           print('Database created with version $schemaVersion');
         }
       },
-      onUpgrade: (Migrator m, int from, int to) async {
-        // Handle migrations between versions
-        if (from < 2) {
-          // Migration from version 1 to 2: Add Sites table
-          await m.create(sites);
-          if (kDebugMode) {
-            print('Added Sites table in migration to version 2');
-          }
-        }
-
-        if (from < 3) {
-          // Migration from version 2 to 3: Add Snags table
-          await m.create(snags);
-          if (kDebugMode) {
-            print('Added Snags table in migration to version 3');
-          }
-        }
-        
-        if (kDebugMode) {
-          print('Database upgraded from version $from to $to');
-        }
-      },
+      // No migrations needed - app is in development, reinstall for schema changes
       beforeOpen: (details) async {
         // Enable foreign keys on every open
         await customStatement('PRAGMA foreign_keys = ON');
-        
+
         // Set journal mode to WAL for better performance
         await customStatement('PRAGMA journal_mode = WAL');
-        
+
         // Set busy timeout to 5 seconds
         await customStatement('PRAGMA busy_timeout = 5000');
-        
+
         if (kDebugMode) {
           print('Database opened, version: ${details.versionNow}');
         }

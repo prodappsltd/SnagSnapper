@@ -1,6 +1,6 @@
 # Phase Completion Guidelines - UPDATED
-**Last Updated**: 2025-06-06
-**Status**: Profile and Sites modules implemented with sync architecture
+**Last Updated**: 2026-06-08
+**Status**: Profile, Sites complete. Snags Phase 1 (Data Layer) complete.
 
 ---
 
@@ -48,15 +48,39 @@
 
 #### Phase 4: Image Handling ✅ (2025-06-06)
 - ✅ Instant image operations (no Save button dependency)
-- ✅ Fixed paths (sites/{ownerUID}/{siteId}/site.jpg)
+- ✅ Fixed paths (Profile/{ownerUID}/Sites/{siteId}/site.jpg)
 - ✅ imageMarkedForDeletion for replace scenarios
 - ✅ Orphan cleanup on Back for unsaved new sites
 - ✅ imageCache.clear() for UI refresh
 
 ---
 
-### Snags Module 🔲 NOT STARTED
-- Planned after Sites module stabilization
+### Snags Module 🔄 IN PROGRESS (Phase 1 Complete)
+
+#### Phase 1: Database Setup ✅ (2026-06-08)
+- ✅ ImageSlot model (lib/Data/models/image_slot.dart)
+- ✅ Snag model updated with ImageSlot lists (lib/Data/models/snag.dart)
+- ✅ Snags table (lib/Data/database/tables/snags_table.dart)
+- ✅ SnagDao with full CRUD operations (lib/Data/database/daos/snag_dao.dart)
+- ✅ Priority system data layer (PriorityLevel in AppUser)
+- ✅ SnagImagePaths helper (lib/services/snag_image_paths.dart)
+- ✅ SnagSyncHandler (lib/services/sync/handlers/snag_sync_handler.dart)
+
+#### Phase 2: UI Integration ❌ PENDING
+- ❌ Create/Edit snag screen with ImageSlot UI
+- ❌ Per-slot image Pick/Remove operations
+- ❌ Dynamic priority chips from owner's profile
+- ❌ Snag list views (AllSnags, by site)
+
+#### Phase 3: Sync Service ❌ PENDING
+- ✅ SnagSyncHandler created (data + images)
+- ❌ Integration testing with Firebase
+- ❌ Download handler for shared users
+
+#### Phase 4: Image Handling ❌ PENDING
+- ❌ Full Pick/Remove UI flow
+- ❌ Version counter for race conditions
+- ❌ Download for collaborators
 
 ---
 
@@ -94,7 +118,7 @@ A module phase is ONLY complete when:
 |--------|----------|----|----- |---------|
 | Profile | ✅ 100% | ✅ 100% | ✅ 100% | ✅ Complete |
 | Sites | ✅ 100% | ✅ 100% | ✅ 100% | ✅ Complete |
-| Snags | 🔲 0% | 🔲 0% | 🔲 0% | Not Started |
+| Snags | ✅ 100% | 🔲 20% | 🔲 50% | 🔄 In Progress |
 
 ### Key Architecture Patterns Established:
 1. **Offline-First**: Drift SQLite as source of truth
@@ -118,7 +142,9 @@ A module phase is ONLY complete when:
 ### Module Documentation (Claude/02-MODULES/):
 - `Sites/SITE_CONSOLIDATION_PLAN.md` - Site module migration plan
 - `Sites/SITE_IMAGE_HANDLING_PLAN.md` - Image handling specifications
+- `Snags/SNAG_IMAGE_HANDLING_PLAN.md` - Snag image handling (6 slots)
+- `Snags/PRIORITY_SYSTEM_PLAN.md` - Priority system implementation
 
 ---
 
-**Status**: Profile and Sites modules complete. Snags module next.
+**Status**: Profile and Sites complete. Snags Phase 1 (Data Layer) complete, UI pending.

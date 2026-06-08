@@ -60,10 +60,9 @@ class SiteGridTile extends StatelessWidget {
 
               // Content overlay
               Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[
-                  // Shared indicator
+                  // Shared indicator at top
                   if (isShared)
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -76,22 +75,23 @@ class SiteGridTile extends StatelessWidget {
                           size: 18,
                         ),
                       ),
-                    )
-                  else
-                    const SizedBox.shrink(),
-
-                  // Debug ID in debug mode
-                  if (kDebugMode)
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        color: Colors.black54,
-                        child: Text(
-                          site.id.substring(0, 5),
-                          style: const TextStyle(color: Colors.white, fontSize: 10),
-                        ),
-                      ),
                     ),
+
+                  // Flexible spacer with optional debug ID
+                  Expanded(
+                    child: kDebugMode
+                        ? Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              color: Colors.black54,
+                              child: Text(
+                                site.id.substring(0, 5),
+                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
 
                   // Bottom info bar
                   Container(

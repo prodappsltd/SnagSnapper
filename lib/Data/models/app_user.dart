@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:snagsnapper/Data/colleague.dart';
+import 'package:snagsnapper/Data/models/priority_level.dart';
 
 /// AppUser model for offline-first profile management
 /// Implements PRD Section 4.2.1 specifications
@@ -46,10 +46,11 @@ class AppUser {
   final int localVersion;
   final int firebaseVersion;
 
-  // Business Logic Fields (from legacy model)
-  // TODO: These will be refactored when implementing Sites module
-  final List<Colleague>? listOfALLColleagues; // List of colleagues for this user
-  final Map<String, String>? mapOfSitePaths; // Map of <SiteID, OwnerID> for shared sites
+  // Priority Settings
+  // User-defined priority levels for snags (applies to all sites owned by this user)
+  // Stored as JSON in database, synced to Firebase
+  // Defaults to PriorityLevel.defaults if not set
+  final List<PriorityLevel> priorities;
 
   const AppUser({
     required this.id,
@@ -76,8 +77,7 @@ class AppUser {
     required this.updatedAt,
     this.localVersion = 1,
     this.firebaseVersion = 0,
-    this.listOfALLColleagues,
-    this.mapOfSitePaths,
+    this.priorities = const [],
   });
 
   /// Create AppUser from database map
@@ -111,10 +111,10 @@ class AppUser {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int),
       localVersion: map['local_version'] as int? ?? 1,
       firebaseVersion: map['firebase_version'] as int? ?? 0,
-      // Note: Colleagues and site paths are not stored in the database
-      // They come from Firebase and are managed separately
-      listOfALLColleagues: null,
-      mapOfSitePaths: null,
+      // Priorities are stored as JSON string in database
+      priorities: map['priorities'] != null
+          ? PriorityLevel.listFromJson(map['priorities'] as List<dynamic>)
+          : PriorityLevel.defaults,
     );
   }
 
@@ -145,6 +145,7 @@ class AppUser {
       'updated_at': updatedAt.millisecondsSinceEpoch,
       'local_version': localVersion,
       'firebase_version': firebaseVersion,
+      'priorities': PriorityLevel.listToJson(priorities),
     };
   }
 
@@ -202,13 +203,10 @@ class AppUser {
       // Versioning
       localVersion: json['version'] ?? json['localVersion'] ?? 1,
       firebaseVersion: json['firebaseVersion'] ?? json['version'] ?? 1,
-      // Business logic fields
-      listOfALLColleagues: json['colleagues'] != null
-          ? (json['colleagues'] as List<dynamic>)
-              .map((e) => Colleague.fromJson(e as Map<String, dynamic>))
-              .toList()
-          : null,
-      mapOfSitePaths: null, // Not used yet
+      // Parse priorities from Firebase, default to PriorityLevel.defaults if not present
+      priorities: json['priorities'] != null
+          ? PriorityLevel.listFromJson(json['priorities'] as List<dynamic>)
+          : PriorityLevel.defaults,
     );
   }
 
@@ -238,6 +236,7 @@ class AppUser {
     DateTime? updatedAt,
     int? localVersion,
     int? firebaseVersion,
+    List<PriorityLevel>? priorities,
   }) {
     // Check if profile data changed
     bool profileChanged = (name != null && name != this.name) ||
@@ -270,8 +269,6 @@ class AppUser {
       imageFirebasePath: imageFirebasePath != null ? imageFirebasePath() : this.imageFirebasePath,
       signatureLocalPath: signatureLocalPath != null ? signatureLocalPath() : this.signatureLocalPath,
       signatureFirebasePath: signatureFirebasePath != null ? signatureFirebasePath() : this.signatureFirebasePath,
-      // CRITICAL: Must preserve colleagues but avoid reference sharing
-      listOfALLColleagues: this.listOfALLColleagues,  // PRESERVE COLLEAGUES!
       imageMarkedForDeletion: imageMarkedForDeletion ?? this.imageMarkedForDeletion,
       signatureMarkedForDeletion: signatureMarkedForDeletion ?? this.signatureMarkedForDeletion,
       needsProfileSync: needsProfileSync ?? (profileChanged ? true : this.needsProfileSync),
@@ -284,6 +281,7 @@ class AppUser {
       updatedAt: updatedAt ?? (anyChange ? DateTime.now() : this.updatedAt),
       localVersion: localVersion ?? this.localVersion,
       firebaseVersion: firebaseVersion ?? this.firebaseVersion,
+      priorities: priorities ?? this.priorities,
     );
   }
 
@@ -417,7 +415,8 @@ class AppUser {
           needsProfileSync == other.needsProfileSync &&
           needsImageSync == other.needsImageSync &&
           needsSignatureSync == other.needsSignatureSync &&
-          currentDeviceId == other.currentDeviceId;
+          currentDeviceId == other.currentDeviceId &&
+          listEquals(priorities, other.priorities);
 
   @override
   int get hashCode =>
@@ -438,7 +437,8 @@ class AppUser {
       needsProfileSync.hashCode ^
       needsImageSync.hashCode ^
       needsSignatureSync.hashCode ^
-      currentDeviceId.hashCode;
+      currentDeviceId.hashCode ^
+      priorities.hashCode;
 
   @override
   String toString() {

@@ -23,7 +23,8 @@ import 'package:snagsnapper/Screens/moreOptions.dart';
 import 'package:snagsnapper/Screens/pdfReportFormat.dart';
 // import 'package:snagsnapper/Screens/profile_cleaned.dart'; // TODO: DELETE - Was used for UI reference, now matched in profile_screen_ui_matched.dart
 // import 'package:snagsnapper/Screens/profile.dart' as original_profile; // TODO: DELETE - Original Firebase implementation, replaced by offline-first
-import 'package:snagsnapper/screens/profile/profile_screen_ui_matched.dart';
+// import 'package:snagsnapper/screens/profile/profile_screen_ui_matched.dart'; // BACKUP - old profile screen
+import 'package:snagsnapper/screens/profile/profile_screen_v2.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Screens/shareScreen.dart';
 import 'package:snagsnapper/Subscriptions/upSellSiteSharing.dart';
@@ -211,7 +212,7 @@ class MySubAppState extends State<MySubApp> {
           // Use the database singleton instance
           final database = AppDatabase.instance;
           final userId = FirebaseAuth.instance.currentUser?.uid ?? 'default_user';
-          return ProfileScreen(
+          return ProfileScreenV2(
             database: database,
             userId: userId,
           );

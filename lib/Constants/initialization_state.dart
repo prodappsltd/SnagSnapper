@@ -93,9 +93,9 @@ enum InitializationState {
       case InitializationState.deviceReplaced:
         return '/login';
       case InitializationState.profileFound:
-        return '/mainMenu';
       case InitializationState.profileNotFound:
-        return '/profile';
+        // Both go to mainMenu - My Sites will prompt to create profile if needed
+        return '/mainMenu';
       default:
         return null;
     }

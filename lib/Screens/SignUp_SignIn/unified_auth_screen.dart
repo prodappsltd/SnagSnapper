@@ -196,9 +196,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
                 (route) => false,
               );
             } else if (profileResult == 'Profile Not Found') {
-              // No profile - navigate directly to profile screen
+              // No profile - go to main menu, My Sites will prompt to create profile
               Navigator.of(context).pushNamedAndRemoveUntil(
-                '/profile',
+                '/mainMenu',
                 (route) => false,
               );
             } else {
@@ -438,9 +438,9 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
               (route) => false,
             );
           } else if (profileResult == 'Profile Not Found') {
-            // No profile - navigate directly to profile screen
+            // No profile - go to main menu, My Sites will prompt to create profile
             Navigator.of(context).pushNamedAndRemoveUntil(
-              '/profile',
+              '/mainMenu',
               (route) => false,
             );
           } else {
@@ -452,11 +452,14 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
           }
         }
       } else {
-        // Show error
+        // Show error only if not cancelled by user
         if (kDebugMode) {
           print('UnifiedAuthScreen._handleGoogleSignIn: Google auth error - ${result.message}');
         }
-        _showErrorMessage(result.message);
+        // Don't show error snackbar if user cancelled
+        if (result.message != 'CANCELLED') {
+          _showErrorMessage(result.message);
+        }
       }
     } catch (e) {
       // Unexpected error
@@ -465,10 +468,21 @@ class _UnifiedAuthScreenState extends State<UnifiedAuthScreen>
       } else {
         FirebaseCrashlytics.instance.recordError(e, null);
       }
-      if (kDebugMode) {
-        print('UnifiedAuthScreen._handleGoogleSignIn: Unexpected error - Failed to sign in with Google');
+      // Check if user cancelled
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('cancel') ||
+          errorString.contains('dismissed') ||
+          errorString.contains('aborted')) {
+        if (kDebugMode) {
+          print('UnifiedAuthScreen._handleGoogleSignIn: User cancelled sign-in');
+        }
+        // Don't show error - user intentionally cancelled
+      } else {
+        if (kDebugMode) {
+          print('UnifiedAuthScreen._handleGoogleSignIn: Unexpected error - Failed to sign in with Google');
+        }
+        _showErrorMessage('Unable to sign in. Please try again.');
       }
-      _showErrorMessage('Failed to sign in with Google. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

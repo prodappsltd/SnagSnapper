@@ -196,7 +196,7 @@ class BackgroundSyncService {
       ),
       backoffPolicy: BackoffPolicy.exponential,
       backoffPolicyDelay: Duration(seconds: 10),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
     );
     
     // Save sync preferences

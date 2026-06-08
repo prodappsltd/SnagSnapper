@@ -354,7 +354,7 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
   Future<void> addUserToSite(
     String siteId,
     String userEmail,
-    String permission, // VIEW, FIXER, or CONTRIBUTOR
+    String permission, // VIEW, WORKING, or CONTRIBUTOR
   ) async {
     final site = await getSiteById(siteId);
     if (site == null) return;
@@ -397,6 +397,8 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
       pictureQuality: Value(site.pictureQuality),
       archive: Value(site.archive),
       sharedWith: Value(jsonEncode(site.sharedWith)),
+      workingCanSeeAllSnags: Value(site.workingCanSeeAllSnags),
+      contributorCanEditOthers: Value(site.contributorCanEditOthers),
       totalSnags: Value(site.totalSnags),
       openSnags: Value(site.openSnags),
       closedSnags: Value(site.closedSnags),
@@ -451,6 +453,8 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
       pictureQuality: entry.pictureQuality,
       archive: entry.archive,
       sharedWith: Map<String, String>.from(sharedWithMap),
+      workingCanSeeAllSnags: entry.workingCanSeeAllSnags,
+      contributorCanEditOthers: entry.contributorCanEditOthers,
       totalSnags: entry.totalSnags,
       openSnags: entry.openSnags,
       closedSnags: entry.closedSnags,

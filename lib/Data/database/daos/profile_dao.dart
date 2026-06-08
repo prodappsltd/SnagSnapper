@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../app_database.dart';
 import '../tables/profile_table.dart';
 import '../../models/app_user.dart';
-import '../../colleague.dart';
+import '../../models/priority_level.dart';
+// Colleague import removed - site sharing uses email-based sharedWith map
 
 part 'profile_dao.g.dart';
 
@@ -39,14 +40,14 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         dateFormat: user.dateFormat,
       );
 
-      // Convert colleagues list to JSON string
-      String? colleaguesJson;
-      if (user.listOfALLColleagues != null && user.listOfALLColleagues!.isNotEmpty) {
-        colleaguesJson = json.encode(
-          user.listOfALLColleagues!.map((c) => c.toJson()).toList()
-        );
+      // Colleagues removed - site sharing uses email-based sharedWith map
+
+      // Convert priorities list to JSON string
+      String? prioritiesJson;
+      if (user.priorities.isNotEmpty) {
+        prioritiesJson = json.encode(PriorityLevel.listToJson(user.priorities));
       }
-      
+
       // Convert AppUser to ProfilesCompanion for Drift
       final companion = ProfilesCompanion(
         id: Value(user.id),
@@ -61,7 +62,8 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         imageFirebasePath: Value(user.imageFirebasePath),
         signatureLocalPath: Value(user.signatureLocalPath),
         signatureFirebasePath: Value(user.signatureFirebasePath),
-        colleagues: Value(colleaguesJson),
+        colleagues: const Value(null), // Colleagues removed
+        priorities: Value(prioritiesJson),
         imageMarkedForDeletion: Value(user.imageMarkedForDeletion),
         signatureMarkedForDeletion: Value(user.signatureMarkedForDeletion),
         needsProfileSync: Value(user.needsProfileSync),
@@ -161,20 +163,12 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         dateFormat: updatedUser.dateFormat,
       );
 
-      // Convert colleagues list to JSON string
-      String? colleaguesJson;
-      if (updatedUser.listOfALLColleagues != null && updatedUser.listOfALLColleagues!.isNotEmpty) {
-        colleaguesJson = json.encode(
-          updatedUser.listOfALLColleagues!.map((c) => c.toJson()).toList()
-        );
-        if (kDebugMode) {
-          print('ProfileDao.updateProfile: Saving ${updatedUser.listOfALLColleagues!.length} colleagues');
-          print('ProfileDao.updateProfile: Colleagues JSON: $colleaguesJson');
-        }
-      } else {
-        if (kDebugMode) {
-          print('ProfileDao.updateProfile: No colleagues to save');
-        }
+      // Colleagues removed - site sharing uses email-based sharedWith map
+
+      // Convert priorities list to JSON string
+      String? prioritiesJson;
+      if (updatedUser.priorities.isNotEmpty) {
+        prioritiesJson = json.encode(PriorityLevel.listToJson(updatedUser.priorities));
       }
 
       // Create update companion
@@ -190,7 +184,8 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
         imageFirebasePath: Value(updatedUser.imageFirebasePath),
         signatureLocalPath: Value(updatedUser.signatureLocalPath),
         signatureFirebasePath: Value(updatedUser.signatureFirebasePath),
-        colleagues: Value(colleaguesJson),
+        colleagues: const Value(null), // Colleagues removed
+        priorities: Value(prioritiesJson),
         imageMarkedForDeletion: Value(updatedUser.imageMarkedForDeletion),
         signatureMarkedForDeletion: Value(updatedUser.signatureMarkedForDeletion),
         needsProfileSync: Value(updatedUser.needsProfileSync),
@@ -765,21 +760,22 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
   /// Private helper to convert ProfileEntry to AppUser
   /// Handles the conversion between database model and domain model
   AppUser _profileEntryToAppUser(ProfileEntry entry) {
-    // Parse colleagues from JSON string
-    List<Colleague>? colleagues;
-    if (entry.colleagues != null && entry.colleagues!.isNotEmpty) {
+    // Colleagues removed - site sharing uses email-based sharedWith map
+
+    // Parse priorities from JSON string
+    List<PriorityLevel> priorities = PriorityLevel.defaults;
+    if (entry.priorities != null && entry.priorities!.isNotEmpty) {
       try {
-        final List<dynamic> colleaguesJson = json.decode(entry.colleagues!);
-        colleagues = colleaguesJson
-            .map((json) => Colleague.fromJson(json as Map<String, dynamic>))
-            .toList();
+        final List<dynamic> prioritiesJson = json.decode(entry.priorities!);
+        priorities = PriorityLevel.listFromJson(prioritiesJson);
       } catch (e) {
         if (kDebugMode) {
-          print('ProfileDao: Error parsing colleagues JSON: $e');
+          print('ProfileDao: Error parsing priorities JSON: $e');
         }
+        // Keep defaults on parse error
       }
     }
-    
+
     return AppUser(
       id: entry.id,
       name: entry.name,
@@ -793,7 +789,7 @@ class ProfileDao extends DatabaseAccessor<AppDatabase> with _$ProfileDaoMixin {
       imageFirebasePath: entry.imageFirebasePath,
       signatureLocalPath: entry.signatureLocalPath,
       signatureFirebasePath: entry.signatureFirebasePath,
-      listOfALLColleagues: colleagues,
+      priorities: priorities,
       imageMarkedForDeletion: entry.imageMarkedForDeletion,
       signatureMarkedForDeletion: entry.signatureMarkedForDeletion,
       needsProfileSync: entry.needsProfileSync,

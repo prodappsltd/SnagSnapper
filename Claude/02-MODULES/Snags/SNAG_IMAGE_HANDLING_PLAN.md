@@ -4,7 +4,7 @@
 
 This document defines the image handling architecture for Snags in SnagSnapper. The approach follows the same patterns established in Site image handling, with adaptations for multiple image slots (6 per snag).
 
-**Last Updated:** 2026-06-06
+**Last Updated:** 2026-06-08
 
 ---
 
@@ -139,27 +139,31 @@ class ImageSlot {
 
 ## Storage Paths
 
+**SYNC: Firebase paths must match `storage.rules` rules structure**
+
 ### Problem Photos (Documenting the defect)
 
 | Slot | Local Path | Firebase Path |
 |------|------------|---------------|
-| 0 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/0.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/0.jpg` |
-| 1 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/1.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/1.jpg` |
-| 2 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/2.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/2.jpg` |
-| 3 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/3.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/3.jpg` |
-| 4 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/4.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/4.jpg` |
-| 5 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/5.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/5.jpg` |
+| 0 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/0.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/0.jpg` |
+| 1 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/1.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/1.jpg` |
+| 2 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/2.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/2.jpg` |
+| 3 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/3.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/3.jpg` |
+| 4 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/4.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/4.jpg` |
+| 5 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/5.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/5.jpg` |
 
 ### Fix Photos (Documenting the repair)
 
 | Slot | Local Path | Firebase Path |
 |------|------------|---------------|
-| 0 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/fix/0.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/fix/0.jpg` |
-| 1 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/fix/1.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/fix/1.jpg` |
+| 0 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/fix/0.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/fix/0.jpg` |
+| 1 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/fix/1.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/fix/1.jpg` |
 | ... | ... | ... |
-| 5 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/fix/5.jpg` | `sites/{ownerUID}/{siteId}/snags/{snagId}/fix/5.jpg` |
+| 5 | `SnagSnapper/{userId}/Sites/{siteId}/Snags/{snagId}/fix/5.jpg` | `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/fix/5.jpg` |
 
 ### Path Helper Functions
+
+**File:** `lib/services/snag_image_paths.dart`
 
 ```dart
 class SnagImagePaths {
@@ -182,7 +186,7 @@ class SnagImagePaths {
     bool isFix = false,
   }) {
     final fixSegment = isFix ? '/fix' : '';
-    return 'sites/$ownerUID/$siteId/snags/$snagId$fixSegment/$index.jpg';
+    return 'Profile/$ownerUID/Sites/$siteId/Snags/$snagId$fixSegment/$index.jpg';
   }
 }
 ```
@@ -705,7 +709,7 @@ Since file paths are static (`0.jpg`, `1.jpg`, etc.), we cannot detect content c
 | Storage | Single fields | List<ImageSlot> |
 | Path pattern | `site.jpg` | `{index}.jpg` |
 | Local base | `Sites/{siteId}/` | `Sites/{siteId}/Snags/{snagId}/` |
-| Firebase base | `sites/{uid}/{sid}/` | `sites/{uid}/{sid}/snags/{snagId}/` |
+| Firebase base | `Profile/{uid}/Sites/{sid}/` | `Profile/{uid}/Sites/{sid}/Snags/{snagId}/` |
 | Instant operations | Yes | Yes |
 | Save independence | Yes | Yes |
 | No direct replace | Yes | Yes |
@@ -735,20 +739,25 @@ Since file paths are static (`0.jpg`, `1.jpg`, etc.), we cannot detect content c
 - [x] Update `app_database.dart` (register table + DAO, migration v3)
 - [x] Run build_runner to generate .g.dart files
 
-### 4. Create SnagImagePaths Helper
-- [ ] `localPath(userId, siteId, snagId, index, isFix)` - computes local path
-- [ ] `firebasePath(ownerUID, siteId, snagId, index, isFix)` - computes Firebase path
+### 4. Create SnagImagePaths Helper ✅ DONE
+- [x] `localPath(userId, siteId, snagId, index, isFix)` - computes local path
+- [x] `firebasePath(ownerUID, siteId, snagId, index, isFix)` - computes Firebase path
+- [x] File: `lib/services/snag_image_paths.dart`
 
-### 5. Create SnagImageService
+### 5. Create SnagImageService ✅ DONE (Basic)
+- [x] `getAbsolutePath()` - resolve relative paths
 - [ ] `pickImage(snagId, slotIndex, isFix)` - handles pick flow
 - [ ] `removeImage(snagId, slotIndex, isFix)` - handles remove flow
 - [ ] `downloadImage(snagId, slotIndex, isFix)` - for shared users
+- [x] File: `lib/services/snag_image_service.dart`
 
-### 6. Update Sync Handler
-- [ ] Add `syncSnagImages(snag)` method
-- [ ] Add `syncSnagFixImages(snag)` method
-- [ ] Handle per-slot sync with error handling
-- [ ] Use version comparison before clearing flags (race condition fix)
+### 6. Update Sync Handler ✅ DONE
+- [x] Add `syncSnagData(snagId)` method - uploads snag text data
+- [x] Add `syncSnagImages(snagId)` method - uploads problem images
+- [x] Add `syncSnagFixImages(snagId)` method - uploads fix images
+- [x] Handle per-slot sync with error handling
+- [x] Use version comparison before clearing flags (race condition fix)
+- [x] File: `lib/services/sync/handlers/snag_sync_handler.dart`
 
 ### 7. Add Download Handler
 - [ ] `downloadSnagImages(snag)` - for shared users

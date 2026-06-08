@@ -5,12 +5,12 @@
 - **No Legacy Users**: There are NO existing/legacy users to migrate
 - **No Backward Compatibility Required**: We can make breaking changes as needed
 
-## Module Status (Updated 2025-06-06)
+## Module Status (Updated 2026-06-08)
 | Module | Status | Notes |
 |--------|--------|-------|
 | Profile | ✅ Complete | Full sync with image/signature |
 | Sites | ✅ Complete | NEW Site model, instant image ops |
-| Snags | 🔲 Not Started | Planned next |
+| Snags | 🔄 In Progress | ImageSlot model, database layer, sync handler complete |
 
 ## Key Decisions
 1. **Profile Collection**: Always use 'Profile' (capital P), never 'profiles' or 'users'
@@ -21,13 +21,16 @@
 ## Firebase Configuration
 - **Region**: Europe-west1 (not US-central)
 - **Realtime Database URL**: https://snagsnapperpro-default-rtdb.europe-west1.firebasedatabase.app/
-- **Firestore Collections**:
+- **Firestore Collections (Profile-centric structure)**:
   - `Profile/{userId}` - User profiles
-  - `Profile/{userId}/Sites/{siteId}` - Sites (subcollection)
-- **Storage Paths**:
-  - `users/{userId}/profile.jpg` - Profile images
-  - `users/{userId}/signature.jpg` - Signatures
-  - `sites/{ownerUID}/{siteId}/site.jpg` - Site images
+  - `Profile/{ownerUID}/Sites/{siteId}` - Sites (subcollection)
+  - `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}` - Snags (subcollection)
+- **Storage Paths (Profile-centric structure)**:
+  - `Profile/{userId}/profile.jpg` - Profile images
+  - `Profile/{userId}/signature.jpg` - Signatures (also .png for legacy)
+  - `Profile/{ownerUID}/Sites/{siteId}/site.jpg` - Site images
+  - `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/{0-5}.jpg` - Snag problem photos
+  - `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/fix/{0-5}.jpg` - Snag fix photos
 
 ## Architecture
 - **Offline-First**: Local SQLite (Drift) database is source of truth

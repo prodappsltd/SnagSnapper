@@ -15,7 +15,8 @@ import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/site.dart';
-import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart';
+// import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart'; // BACKUP - legacy UI
+import 'package:snagsnapper/Screens/Sites/SiteInfo/site_info_v2.dart';
 // import 'package:snagsnapper/Screens/Sites/SiteInfo/siteStatus.dart'; // BACKUP - legacy UI
 import 'package:snagsnapper/Screens/Sites/SiteInfo/site_status_v2.dart';
 import 'package:snagsnapper/Widgets/site_grid_tile.dart';
@@ -139,11 +140,11 @@ class _OwnedSitesState extends State<OwnedSites> {
   }
 
   void _onCreateSite() {
-    // Navigate to SiteInfo for creating a new site
-    // SiteInfo(null) creates a new site
+    // Navigate to SiteInfoV2 for creating a new site (2026 modern design)
+    // SiteInfoV2(null) creates a new site
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SiteInfo(null)),
+      MaterialPageRoute(builder: (context) => const SiteInfoV2(null)),
     ).then((value) {
       // TODO: Handle return value when SiteStatus is updated
       if (value != null && kDebugMode) {
@@ -272,13 +273,18 @@ class _OwnedSitesState extends State<OwnedSites> {
   }
 
   Widget _buildGridView(List<Site> sites, ThemeData theme) {
+    // Responsive grid columns:
+    // - Phones (< 600): 2 columns
+    // - iPad portrait (600-1000): 3 columns
+    // - iPad landscape (> 1000): 4 columns
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth > 1000 ? 4 : (screenWidth > 600 ? 3 : 2);
+
     return GridView.builder(
       padding: const EdgeInsets.all(8),
       itemCount: sites.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.of(context).size.width > 420
-            ? MediaQuery.of(context).size.width > 550 ? 4 : 3
-            : 2,
+        crossAxisCount: crossAxisCount,
       ),
       itemBuilder: (context, index) {
         final site = sites[index];

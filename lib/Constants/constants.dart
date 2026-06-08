@@ -63,7 +63,7 @@ const String EMAIL = 'EMAIL';
 const String PHONE = 'PHONE';
 const String POSTCODE_AREA = 'POSTCODE_AREA';
 const String COMPANY_IMAGE = 'COMPANY_IMAGE';
-const String LIST_OF_COLLEAGUES = 'LIST_OF_COLLEAGUES';
+// LIST_OF_COLLEAGUES removed - site sharing uses email-based sharedWith map
 const String LIST_OF_SITE_PATHS = 'LIST_OF_SITE_PATHS';
 
 const String PICTURE_QUALITY = 'PICTURE_QUALITY';
@@ -94,9 +94,7 @@ const String DATE_CREATED = 'DATE_CREATED';
 const String SHARED_WITH = 'SHARED_WITH';
 const int FRACTION = 4;
 
-/// Maximum number of colleagues allowed per user.
-/// This limit is enforced in both Profile and Create Site screens.
-const int MAX_COLLEAGUES = 13;
+// MAX_COLLEAGUES removed - site sharing uses email-based sharedWith map
 
 double getProportionalHeightForTopImage(BuildContext context, int fractionOfScreen) =>
     MediaQuery.of(context).size.height / fractionOfScreen;

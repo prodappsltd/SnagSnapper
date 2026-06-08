@@ -22,10 +22,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:snagsnapper/Constants/constants.dart';
-import 'package:snagsnapper/Data/colleague.dart';
+// Colleague model removed - site sharing uses email-based sharedWith map
+// See Claude/00-CORE/SHARING_ARCHITECTURE.md
 // TODO: OLD Site model - commented out, use SiteDao + NEW Site model instead
 // import 'package:snagsnapper/Data/site.dart';
-import 'package:snagsnapper/Data/snag.dart';
+// TODO: OLD Snag model deleted - migrate to NEW Snag model (lib/Data/models/snag.dart)
+// import 'package:snagsnapper/Data/snag.dart';
 import 'package:snagsnapper/services/sync_service.dart';
 import 'package:snagsnapper/services/sync/handlers/profile_sync_handler.dart';
 import 'package:snagsnapper/services/sync/device_manager.dart';
@@ -46,7 +48,8 @@ class CP extends ChangeNotifier {
   // final Map<String, Site> _ownedSites = {}; //SiteUID, Site
   // final Map<String, Site> _sharedSites = {}; //SiteUID, Site
   final Map<String, String> _sharedSitedata = {}; //SiteUID, Site
-  final Map<String, Map<String, Snag>> _snags = {}; //SiteUID > Map<SnagUID, Snag>
+  // NOTE: Snags now use SnagDAO (SQLite) instead of in-memory map
+  // Access snags via: AppDatabase.instance.snagDao
 
   /// Device session listener subscription (cancelled on signout)
   StreamSubscription<DatabaseEvent>? _deviceSessionSubscription;
@@ -280,7 +283,7 @@ class CP extends ChangeNotifier {
     // _ownedSites.clear();
     // _sharedSites.clear();
     _sharedSitedata.clear();
-    _snags.clear();
+    // NOTE: Snags cleared via SnagDAO when needed
     if (kDebugMode) print('DATA-L_RV: END');
   }
 
@@ -297,88 +300,9 @@ class CP extends ChangeNotifier {
 
 
 
-  Future updateSnag(Snag snag) async {
-    //TODO - Just update what is required
-    if (kDebugMode) print('DATA-F_US: Update Snag....\n');
-    await addSnag(snag);
-    if (kDebugMode) print('DATA-L_US: END Update Snag....\n');
-  }
-
-  Future addSnag(Snag snag) async {
-    if (kDebugMode) print('DATA-F_ASnag: Add Snag....');
-    //-- FIREBASE UPDATE START--
-    bool isOwner = snag.ownerEmail.toLowerCase() == FirebaseAuth.instance.currentUser!.email!.toLowerCase();
-    String? ownerID = isOwner ? FirebaseAuth.instance.currentUser!.uid : _appUser!.mapOfSitePaths![snag.siteUID];
-    try {
-      if (kDebugMode) print('DATA_ASnag: FIREBASE update starting...');
-      await FirebaseFirestore.instance.collection('Profile/$ownerID/Sites/${snag.siteUID}/Snags').doc(snag.uID).set(snag.toJson()).then((onValue) {
-        bool hasSite = _snags.containsKey(snag.siteUID);
-        if (kDebugMode) print('DATA_ASnag: Added Snag....');
-        //if (!hasSite) _snags.putIfAbsent(snag.uID, () => null); // TODO - This was uncommented before
-        addToLocalSnags(snag);
-      }); //Update firebase first
-    } on Exception catch (e) {
-      if (kDebugMode) print('DATA_ASnag: Error adding Snag - detail: ${e}');
-    }
-    if (kDebugMode) print('DATA-L_ASnag: END Adding Snag...');
-  }
-
-  addToLocalSnags(Snag snag) {
-    if (kDebugMode) print('DATA-F_ALS: Add To Local Snags....');
-    Map<String, Snag>? map = _snags[snag.siteUID];
-    if (map == null) {
-      _snags[snag.siteUID] = {};
-      map = _snags[snag.siteUID];
-    }
-    map![snag.uID] = snag;
-    notifyListeners();
-//    if (kDebugMode) print('DATA_ALS: Notifying Listeners');
-    if (kDebugMode) print('DATA-L_ALS: END Adding LOCAL Snags');
-  }
-
-  void removeFromLocalSnags(Snag snag) {
-    if (kDebugMode) print('DATA-F_RFLS: Remove From Local Snags...');
-    Map<String, Snag>? map = _snags[snag.siteUID];
-    if (map == null) {
-      if (kDebugMode) print('DATA_RFLS: Map of SNAG does not exist');
-      if (kDebugMode) print('DATA-L_RFLS: END');
-      return;
-    } //Site does not exist, so nothing to remove.
-    if (map != null && kDebugMode) print('DATA_RFLS: Length of map before removing: ${map.length}');
-    map.remove(snag.uID);
-    if (map != null && kDebugMode) print('DATA_RFLS: Length of map before removing: ${map.length}');
-    if (map != null && kDebugMode) print('DATA-L_RFLS: Notifying Listeners');
-    if (map != null && kDebugMode) print('DATA-L_RFLS: END');
-    notifyListeners();
-  }
-
-  Future deleteSnag(Snag snag) async {
-    if (kDebugMode) print('DATA-F_DSnag: Delete Snag');
-    String? ownerID;
-    bool isOwner = snag.ownerEmail.toLowerCase() == FirebaseAuth.instance.currentUser!.email!.toLowerCase();
-    if (kDebugMode) print('DATA_DSnag : Snag Owner Email: ${snag.ownerEmail} : Site Owner UID: ${_appUser!.mapOfSitePaths![snag.siteUID]}');
-    if (!isOwner) {
-      ownerID = _appUser!.mapOfSitePaths![snag.siteUID]!;
-      if (kDebugMode) print('DATA_DSnag: Snag NOT Found in the List');
-      if (kDebugMode) print('DATA-L_DSnag: END');
-      if (ownerID == null) return;
-    } else {
-      ownerID = FirebaseAuth.instance.currentUser!.uid;
-    }
-    //-- FIREBASE UPDATE START--
-    if (kDebugMode) print('DATA_DSnag: FIREBASE Deleting Snag - ${snag.location}');
-    try {
-      FirebaseFirestore.instance.collection('Profile/$ownerID/Sites/${snag.siteUID}/Snags').doc(snag.uID).delete().then((onValue) {
-        if (kDebugMode) print('DATA_DSnag: Deleted Snag - ${snag.location}');
-        _snags[snag.siteUID]!.remove(snag.siteUID);
-        if (kDebugMode) print('DATA_DSnag: Notifying Listeners');
-        notifyListeners();
-      }); //Update firebase first
-    } on PlatformException catch (e) {
-      if (kDebugMode) print('DATA_DSnag: Error Deleting Snag - Details: ${e.code}');
-    }
-    if (kDebugMode) print('DATA_DSnag: END deleting Snag');
-  }
+  // REMOVED: Snag methods (updateSnag, addSnag, addToLocalSnags, removeFromLocalSnags, deleteSnag)
+  // Use SnagDAO + SnagSyncHandler instead (offline-first architecture)
+  // Access snags via: AppDatabase.instance.snagDao
 
   // TODO: OLD Site methods - commented out, use SiteDao + SiteService instead
   // Future deleteSite(Site site) async {
@@ -426,96 +350,12 @@ class CP extends ChangeNotifier {
   //   return _sharedSites;
   // }
 
-  List<Snag> getListOfSnags(String siteUID) {
-    if (kDebugMode) print('DATA-F_GLOS: Get List Of All Snags');
-    if (_snags[siteUID] != null) {
-      if (kDebugMode) print('DATA-L_GLOS: END Returning List of Snags');
-      return _snags[siteUID]!.values.toList();
-    } else {
-      if (kDebugMode) print('DATA-L_GLOS: END Returning NEW List');
-      return <Snag>[];
-    }
-  }
+  // REMOVED: getListOfSnags() - Use SnagDAO.watchSnagsForSite() instead
 
-  List<Colleague> getListOFColleagues() {
-    //if (kDebugMode) print('DATA-F-L_GLC: Get List of Colleagues');
-    return _appUser?.listOfALLColleagues ?? [];
-  }
-
-  Future<bool> addColleague(Colleague colleague2BAdded) async {
-    if (kDebugMode) print('DATA-F_AC: Add Colleague');
-    bool result = false;
-    bool alreadyExists = false;
-    final colleagues = _appUser?.listOfALLColleagues ?? [];
-    for (var colleague in colleagues) {
-      colleague.email == colleague2BAdded.email ? alreadyExists = true : false;
-    }
-    if (alreadyExists && kDebugMode) print('DATA-L_AC: --Colleague ALREADY exists--');
-    if (alreadyExists) return true;
-    //-- FIREBASE UPDATE START--
-
-      if (kDebugMode) print('DATA_AC: FIREBASE Adding Colleague');
-      await FirebaseFirestore.instance.collection('Profile').doc(FirebaseAuth.instance.currentUser!.uid).update({
-        LIST_OF_COLLEAGUES: FieldValue.arrayUnion([colleague2BAdded.toJson()])
-      }).then((onValue) {
-        if (kDebugMode) print('DATA_AC: Colleague Added');
-        _appUser?.listOfALLColleagues?.add(colleague2BAdded);
-        if (kDebugMode) print('DATA_AC: Notifying Listeners');
-        notifyListeners();
-        result = true;
-      })
-    .onError((e,StackTrace s){
-        if (kDebugMode) print('DATA_AC: Error adding Colleague - Details: $s');
-        result = false;
-      }); //Update firebase first
-
-    //--FIREBASE UPDATE FINISH--
-    if (kDebugMode) print('DATA-L_AC: END Colleague Added: $result');
-    return result;
-  }
-
-  Future<bool> updateColleague(Colleague person) async {
-    if (kDebugMode) print('DATA-F_UC: Update Colleague');
-    bool result = false;
-    //-- FIREBASE UPDATE START--
-    final DocumentReference postRef = FirebaseFirestore.instance.collection('Profile').doc(FirebaseAuth.instance.currentUser!.uid);
-    try {
-      if (kDebugMode) print('DATA_UC: FIREBASE Getting existing profile first');
-      await FirebaseFirestore.instance.runTransaction((Transaction tx) async {
-        DocumentSnapshot postSnapshot = await tx.get(postRef);
-        if (postSnapshot.exists) {
-          if (kDebugMode) print('DATA_UC: Profile Exists');
-          AppUser user = AppUser.fromJson(postSnapshot.data() as Map<String, dynamic>);
-          Colleague? oldColleague;
-          user.listOfALLColleagues!.forEach((value) {
-            if (value.uniqueID == person.uniqueID) {
-              oldColleague = value;
-              if (kDebugMode) print('DATA_UC: previous entry is found!');
-            }
-          });
-          if (kDebugMode) print('DATA_UC: FIREBASE Removing from existing Array');
-          //Remove the Old instance from the array
-          tx.update(postRef, {
-            LIST_OF_COLLEAGUES: FieldValue.arrayRemove([oldColleague?.toJson()])
-          });
-          if (kDebugMode) print('DATA_UC: FIREBASE Adding NEW to existing Array');
-          await tx.update(postRef, {
-            LIST_OF_COLLEAGUES: FieldValue.arrayUnion([person.toJson()])
-          });
-        }
-      });
-      //--FIREBASE UPDATE FINISH--
-    } on PlatformException catch (e) {
-      if (kDebugMode) print('DATA_UC: Error Updating Colleague - Details: ' + e.details);
-    }
-    getAppUser()!.listOfALLColleagues!.removeWhere((value) => value.uniqueID == person.uniqueID);
-    getAppUser()!.listOfALLColleagues!.add(person);
-    if (kDebugMode) print('DATA_UC: Notifying Listener');
-    notifyListeners();
-    result = true;
-    if (kDebugMode) print('DATA-L_UC: END Colleague Updated: $result');
-    return result;
-  }
+  // REMOVED: Colleague methods (getListOFColleagues, addColleague, updateColleague, removeColleague)
+  // Site sharing now uses email-based sharedWith map on Site model
+  // Email autocomplete uses sharing history from owned sites
+  // See Claude/00-CORE/SHARING_ARCHITECTURE.md
 
   Future<bool> updateProfileImage() async {
     if (kDebugMode) print('DATA-F_UPI: Update Profile Image');
@@ -560,29 +400,6 @@ class CP extends ChangeNotifier {
     return result;
   }
 
-  Future<bool> removeColleague(Colleague colleague) async {
-    if (kDebugMode) print('DATA-F_RC: Remove Colleague');
-    bool result = false;
-
-      if (kDebugMode) print('DATA_RC: Firebase update starting');
-      await FirebaseFirestore.instance.collection('Profile').doc(FirebaseAuth.instance.currentUser!.uid).update({
-        LIST_OF_COLLEAGUES: FieldValue.arrayRemove([colleague.toJson()])
-      }).then((onValue) {
-        if (kDebugMode) print('DATA_RC: Remove Colleague Successful');
-        _appUser!.listOfALLColleagues!.remove(colleague);
-        result = true;
-        if (kDebugMode) print('DATA_RC: Notifying Listeners');
-        notifyListeners();
-      }).onError((error, stack) {
-        result = false;
-        if (kDebugMode) print('DATA_RC: Error updating profile image - Details:  $stack');
-      }); //Update firebase first
-
-    //--FIREBASE UPDATE FINISH--
-    if (kDebugMode) print('DATA-L_RC: END Colleague Removed? $result');
-    return result;
-  }
-
   AppUser? getAppUser() {
     //if (kDebugMode) print('DATA-F-L_GS: Get user');
     return _appUser;
@@ -591,10 +408,6 @@ class CP extends ChangeNotifier {
   void setAppUser(AppUser? user) {
     if (kDebugMode) print('DATA-F_SS: Set Profile user');
     _appUser = user;
-    // Note: listOfALLColleagues and mapOfSitePaths are initialized in AppUser model
-    // They are optional fields for future modules and don't need initialization here
-    //if (kDebugMode) print('DATA_SS: Notifying Listeners');
-    //notifyListeners();
     if (kDebugMode) print('DATA-L_SS: END set user');
   }
 

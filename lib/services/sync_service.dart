@@ -8,6 +8,8 @@ import 'package:snagsnapper/Data/models/sync_result.dart';
 import 'package:snagsnapper/Data/models/sync_queue_item.dart';
 import 'package:snagsnapper/services/sync/handlers/profile_sync_handler.dart';
 import 'package:snagsnapper/services/sync/handlers/site_sync_handler.dart';
+import 'package:snagsnapper/services/sync/handlers/snag_sync_handler.dart';
+import 'package:snagsnapper/services/snag_image_service.dart';
 import 'package:snagsnapper/services/sync/network_monitor.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:snagsnapper/services/sync/queue_manager.dart';
@@ -28,6 +30,7 @@ class SyncService {
   late AppDatabase _database;
   late ProfileSyncHandler _profileHandler;
   late SiteSyncHandler _siteHandler;
+  late SnagSyncHandler _snagHandler;
   late NetworkMonitor _networkMonitor;
   late SyncQueueManager _queueManager;
   late DeviceManager _deviceManager;
@@ -85,6 +88,13 @@ class SyncService {
       firestore: FirebaseFirestore.instance,
       storage: FirebaseStorage.instance,
       imageStorage: ImageStorageService.instance,
+    );
+
+    _snagHandler = SnagSyncHandler(
+      database: _database,
+      firestore: FirebaseFirestore.instance,
+      storage: FirebaseStorage.instance,
+      snagImageService: SnagImageService.instance,
     );
 
     _queueManager = SyncQueueManager(
@@ -341,6 +351,74 @@ class SyncService {
 
         if (kDebugMode) {
           print('SyncService.syncNow: Synced $sitesSynced/${sitesNeedingSync.length} sites');
+        }
+      }
+
+      // Check cancellation
+      if (_isCancelled) {
+        if (kDebugMode) {
+          print('SyncService.syncNow: Sync cancelled');
+        }
+        return SyncResult.cancelled();
+      }
+
+      // Upload snags that need syncing
+      updateProgress(0.5);
+      final snagsNeedingSync = await _database.snagDao.getSnagsNeedingSync();
+      if (snagsNeedingSync.isNotEmpty) {
+        if (kDebugMode) {
+          print('SyncService.syncNow: Found ${snagsNeedingSync.length} snags needing sync');
+        }
+
+        int snagsSynced = 0;
+        for (final snag in snagsNeedingSync) {
+          // Check cancellation between snags
+          if (_isCancelled) {
+            if (kDebugMode) {
+              print('SyncService.syncNow: Sync cancelled during snag upload');
+            }
+            return SyncResult.cancelled();
+          }
+
+          if (kDebugMode) {
+            print('SyncService.syncNow: Syncing snag ${snag.id} - ${snag.title}');
+          }
+
+          // Sync snag data if needed
+          if (snag.needsSnagSync) {
+            final snagSuccess = await _snagHandler.syncSnagData(snag.id);
+            if (kDebugMode) {
+              print('SyncService.syncNow: Snag data sync result: $snagSuccess');
+            }
+          }
+
+          // Sync snag images if needed
+          if (snag.needsImagesSync) {
+            final imagesSuccess = await _snagHandler.syncSnagImages(snag.id);
+            if (kDebugMode) {
+              print('SyncService.syncNow: Snag images sync result: $imagesSuccess');
+            }
+            // Also sync fix images if any
+            final fixImagesSuccess = await _snagHandler.syncSnagFixImages(snag.id);
+            if (kDebugMode) {
+              print('SyncService.syncNow: Snag fix images sync result: $fixImagesSuccess');
+            }
+
+            // Clear the needsImagesSync flag if all images synced
+            if (imagesSuccess && fixImagesSuccess) {
+              await _database.snagDao.clearImagesSyncFlag(snag.id);
+            }
+          }
+
+          snagsSynced++;
+        }
+
+        if (snagsSynced > 0) {
+          syncedItems.add('snags:$snagsSynced');
+        }
+
+        if (kDebugMode) {
+          print('SyncService.syncNow: Synced $snagsSynced/${snagsNeedingSync.length} snags');
         }
       }
 

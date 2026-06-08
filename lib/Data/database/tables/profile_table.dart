@@ -22,6 +22,11 @@ class Profiles extends Table {
   
   // Colleagues list (stored as JSON string)
   TextColumn get colleagues => text().named('colleagues').nullable()();
+
+  // Priority levels (stored as JSON string)
+  // User-defined priority levels for snags, synced to Firebase
+  // Format: [{"code": "CAT1", "description": "..."}, ...]
+  TextColumn get priorities => text().named('priorities').nullable()();
   
   // Deletion flags for offline sync
   BoolColumn get imageMarkedForDeletion => boolean().named('image_marked_for_deletion').withDefault(const Constant(false))();

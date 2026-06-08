@@ -5,14 +5,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/site.dart';
-import 'package:snagsnapper/Data/snag.dart';
-import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart';
+import 'package:snagsnapper/Data/models/snag.dart';
+import 'package:snagsnapper/Data/models/priority_level.dart';
+// import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart'; // BACKUP - legacy UI
+import 'package:snagsnapper/Screens/Sites/SiteInfo/site_info_v2.dart';
 // import 'package:snagsnapper/Screens/Snags/CreateEditSnag.dart'; // BACKUP - legacy UI
 import 'package:snagsnapper/Screens/Snags/create_snag_v2.dart';
-import 'package:snagsnapper/Screens/Snags/snagDetailedView.dart';
+import 'package:snagsnapper/Widgets/share_site_dialog.dart';
 
 /// Modern SiteStatus screen with improved UX and visual design
 /// This replaces the legacy siteStatus.dart while keeping that file as backup
@@ -77,7 +82,7 @@ class _SiteStatusV2State extends State<SiteStatusV2>
     super.dispose();
   }
 
-  void _loadSnags() {
+  void _loadSnags() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -85,8 +90,12 @@ class _SiteStatusV2State extends State<SiteStatusV2>
     _isOwner = widget.site.ownerEmail.toLowerCase() == user.email!.toLowerCase();
     _viewAccess = widget.site.sharedWith[appUser?.email.toLowerCase()] == 'VIEW';
 
+    // Load snags from SnagDao
+    final snags = await AppDatabase.instance.snagDao.getSnagsBySite(widget.site.id);
+    if (!mounted) return;
+
     setState(() {
-      _allSnags = Provider.of<CP>(context, listen: false).getListOfSnags(widget.site.id);
+      _allSnags = snags;
       _calculateCounters();
       _filterSnags(_selectedFilter);
     });
@@ -168,6 +177,7 @@ class _SiteStatusV2State extends State<SiteStatusV2>
           // Snags List
           _displaySnags.isEmpty
               ? SliverFillRemaining(
+                  hasScrollBody: false,  // Prevents overflow when keyboard appears
                   child: _buildEmptyState(colorScheme),
                 )
               : SliverPadding(
@@ -200,10 +210,6 @@ class _SiteStatusV2State extends State<SiteStatusV2>
   }
 
   Widget _buildSliverHeader(ColorScheme colorScheme) {
-    final hasImage = widget.site.imageLocalPath != null &&
-        widget.site.imageLocalPath!.isNotEmpty &&
-        File(widget.site.imageLocalPath!).existsSync();
-
     return SliverAppBar(
       expandedHeight: 280,
       pinned: true,
@@ -212,6 +218,7 @@ class _SiteStatusV2State extends State<SiteStatusV2>
       surfaceTintColor: Colors.transparent,
       leading: _buildBackButton(colorScheme),
       actions: [
+        if (_isOwner) _buildShareButton(colorScheme),
         if (_isOwner) _buildEditButton(colorScheme),
         if (_isOwner) _buildMoreButton(colorScheme),
       ],
@@ -223,31 +230,11 @@ class _SiteStatusV2State extends State<SiteStatusV2>
         background: Stack(
           fit: StackFit.expand,
           children: [
-            // Background Image
-            hasImage
-                ? Image.file(
-                    File(widget.site.imageLocalPath!),
-                    fit: BoxFit.cover,
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          colorScheme.primaryContainer,
-                          colorScheme.primary.withOpacity(0.7),
-                        ],
-                      ),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.domain_rounded,
-                        size: 80,
-                        color: colorScheme.onPrimaryContainer.withOpacity(0.3),
-                      ),
-                    ),
-                  ),
+            // Background Image - handles both absolute and relative paths
+            _SiteHeaderImage(
+              imageLocalPath: widget.site.imageLocalPath,
+              colorScheme: colorScheme,
+            ),
 
             // Gradient Overlay
             Container(
@@ -367,6 +354,62 @@ class _SiteStatusV2State extends State<SiteStatusV2>
     );
   }
 
+  Widget _buildShareButton(ColorScheme colorScheme) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.3),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        icon: const Icon(Icons.people_alt_rounded, size: 20),
+        color: Colors.white,
+        onPressed: () => _showShareSheet(),
+      ),
+    );
+  }
+
+  void _showShareSheet() async {
+    // Fetch latest site data from database to ensure sharedWith is current
+    final currentSite = await AppDatabase.instance.siteDao.getSiteById(widget.site.id);
+    if (currentSite == null || !mounted) return;
+
+    final newSharedWith = await showShareSiteSheet(
+      context: context,
+      site: currentSite,
+    );
+
+    // If user saved changes
+    if (newSharedWith != null) {
+      // Update the site with new sharing permissions
+      final updatedSite = currentSite.copyWith(
+        sharedWith: newSharedWith,
+        needsSiteSync: true,
+        updatedAt: DateTime.now(),
+      );
+
+      // Save to database
+      await AppDatabase.instance.siteDao.updateSite(updatedSite);
+
+      if (kDebugMode) {
+        print('SiteStatusV2: Updated site sharing - ${newSharedWith.length} collaborators');
+      }
+
+      // Show confirmation
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sharing updated - ${newSharedWith.length} collaborator${newSharedWith.length == 1 ? '' : 's'}'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildEditButton(ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -380,7 +423,7 @@ class _SiteStatusV2State extends State<SiteStatusV2>
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => SiteInfo(widget.site)),
+            MaterialPageRoute(builder: (context) => SiteInfoV2(widget.site)),
           ).then((_) => _loadSnags());
         },
       ),
@@ -509,21 +552,28 @@ class _SiteStatusV2State extends State<SiteStatusV2>
     final isClosed = !snag.snagConfirmedStatus && !snag.snagStatus;
     final isForReview = snag.snagConfirmedStatus && !snag.snagStatus;
 
-    // Priority color
+    // Priority color based on code
     Color priorityColor = Colors.grey;
-    String priorityLabel = 'Low';
-    if (snag.priority == 1) {
-      priorityColor = Colors.orange;
-      priorityLabel = 'Medium';
-    } else if (snag.priority >= 2) {
-      priorityColor = Colors.red;
-      priorityLabel = 'High';
+    String priorityLabel = snag.priority ?? 'None';
+    final priorityCode = snag.priority;
+    if (priorityCode != null) {
+      // Find priority in defaults to determine color based on severity
+      final index = PriorityLevel.defaults.indexWhere((p) => p.code == priorityCode);
+      switch (index) {
+        case 0: priorityColor = Colors.green; break;      // OK
+        case 1: priorityColor = Colors.blue; break;       // OBS
+        case 2: priorityColor = Colors.orange; break;     // CAT3
+        case 3: priorityColor = Colors.deepOrange; break; // CAT2
+        case 4: priorityColor = Colors.red; break;        // CAT1
+        default: priorityColor = Colors.grey;
+      }
     }
 
     // Due date status
+    // TIMEZONE: Convert UTC midnight to local for comparison
     Color? dueDateColor;
     if (!isClosed && snag.dueDate != null) {
-      final daysUntilDue = snag.dueDate!.difference(DateTime.now()).inDays;
+      final daysUntilDue = snag.dueDate!.toLocal().difference(DateTime.now()).inDays;
       final cp = Provider.of<CP>(context, listen: false);
       if (daysUntilDue >= cp.greenCondition) {
         dueDateColor = Colors.green;
@@ -535,7 +585,7 @@ class _SiteStatusV2State extends State<SiteStatusV2>
     }
 
     return Dismissible(
-      key: Key(snag.uID),
+      key: Key(snag.id),
       direction: _viewAccess ? DismissDirection.none : DismissDirection.endToStart,
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -758,24 +808,31 @@ class _SiteStatusV2State extends State<SiteStatusV2>
   }
 
   Widget _buildSnagImage(Snag snag, ColorScheme colorScheme) {
-    // Try to decode base64 image
-    if (snag.imageMain1 != null && snag.imageMain1!.isNotEmpty) {
-      try {
-        final bytes = Uri.parse(snag.imageMain1!).data?.contentAsBytes();
-        if (bytes != null) {
-          return Image.memory(bytes, fit: BoxFit.cover);
-        }
-        // Try base64 decode
-        return Image.memory(
-          Uri.parse('data:image/jpeg;base64,${snag.imageMain1}').data!.contentAsBytes(),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildPlaceholderImage(colorScheme),
-        );
-      } catch (_) {
-        return _buildPlaceholderImage(colorScheme);
-      }
+    // Check if first image slot has an image (NEW model uses file-based images)
+    final firstSlot = snag.images.isNotEmpty ? snag.images[0] : null;
+    if (firstSlot == null || !firstSlot.hasImage) {
+      return _buildPlaceholderImage(colorScheme);
     }
-    return _buildPlaceholderImage(colorScheme);
+
+    // Load image from local file path
+    return FutureBuilder<String>(
+      future: _getAbsolutePath(firstSlot.localPath!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return _buildPlaceholderImage(colorScheme);
+        }
+        final file = File(snapshot.data!);
+        if (!file.existsSync()) {
+          return _buildPlaceholderImage(colorScheme);
+        }
+        return Image.file(file, fit: BoxFit.cover);
+      },
+    );
+  }
+
+  Future<String> _getAbsolutePath(String relativePath) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return '${appDir.path}/$relativePath';
   }
 
   Widget _buildPlaceholderImage(ColorScheme colorScheme) {
@@ -793,9 +850,10 @@ class _SiteStatusV2State extends State<SiteStatusV2>
 
   Widget _buildEmptyState(ColorScheme colorScheme) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,  // Don't expand to fill available space
+          children: [
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
@@ -830,6 +888,7 @@ class _SiteStatusV2State extends State<SiteStatusV2>
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -1116,22 +1175,25 @@ class _SiteStatusV2State extends State<SiteStatusV2>
   }
 
   void _deleteSnag(Snag snag) async {
-    await Provider.of<CP>(context, listen: false).deleteSnag(snag);
+    // Delete via SnagDao (sync handler will delete from Firebase)
+    await AppDatabase.instance.snagDao.deleteSnag(snag.id);
     setState(() {
-      _allSnags.remove(snag);
-      _displaySnags.remove(snag);
+      _allSnags.removeWhere((s) => s.id == snag.id);
+      _displaySnags.removeWhere((s) => s.id == snag.id);
       _calculateCounters();
     });
   }
 
   void _openSnagDetail(Snag snag) {
+    // Navigate directly to edit screen (skip intermediate detail view)
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => SnagDetailedView(
+        builder: (context) => CreateSnagV2(
           snag: snag,
           siteID: widget.site.id,
           siteOwnersEmail: widget.site.ownerEmail,
+          siteOwnerUID: widget.site.ownerUID,
         ),
       ),
     ).then((_) => _loadSnags());
@@ -1145,14 +1207,17 @@ class _SiteStatusV2State extends State<SiteStatusV2>
           snag: null,
           siteID: widget.site.id,
           siteOwnersEmail: widget.site.ownerEmail,
+          siteOwnerUID: widget.site.ownerUID,
         ),
       ),
     ).then((_) => _loadSnags());
   }
 
+  // TIMEZONE: Convert UTC midnight to local for display
   String _formatDate(DateTime date) {
+    final localDate = date.toLocal();
     final now = DateTime.now();
-    final diff = date.difference(now).inDays;
+    final diff = localDate.difference(now).inDays;
 
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Tomorrow';
@@ -1162,9 +1227,9 @@ class _SiteStatusV2State extends State<SiteStatusV2>
     final cp = Provider.of<CP>(context, listen: false);
     final dateFormat = cp.getDateFormat();
     if (dateFormat.contains('MM-dd')) {
-      return '${date.month}/${date.day}/${date.year}';
+      return '${localDate.month}/${localDate.day}/${localDate.year}';
     }
-    return '${date.day}/${date.month}/${date.year}';
+    return '${localDate.day}/${localDate.month}/${localDate.year}';
   }
 }
 
@@ -1271,6 +1336,79 @@ class _FilterHeaderDelegate extends SliverPersistentHeaderDelegate {
             color: colorScheme.outlineVariant.withOpacity(0.3),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Widget for loading site header image from local file path
+/// Handles both absolute and relative paths
+class _SiteHeaderImage extends StatelessWidget {
+  final String? imageLocalPath;
+  final ColorScheme colorScheme;
+
+  const _SiteHeaderImage({
+    required this.imageLocalPath,
+    required this.colorScheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageLocalPath == null || imageLocalPath!.isEmpty) {
+      return _buildPlaceholder();
+    }
+
+    // If it's an absolute path, use directly
+    if (imageLocalPath!.startsWith('/')) {
+      final file = File(imageLocalPath!);
+      if (file.existsSync()) {
+        return Image.file(file, fit: BoxFit.cover);
+      }
+      return _buildPlaceholder();
+    }
+
+    // For relative paths, resolve from app documents directory
+    return FutureBuilder<String>(
+      future: _resolveRelativePath(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+          final file = File(snapshot.data!);
+          if (file.existsSync()) {
+            return Image.file(file, fit: BoxFit.cover);
+          }
+        }
+        return _buildPlaceholder();
+      },
+    );
+  }
+
+  Future<String> _resolveRelativePath() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      return p.join(appDir.path, imageLocalPath!);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  Widget _buildPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colorScheme.primaryContainer,
+            colorScheme.primary.withOpacity(0.7),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.domain_rounded,
+          size: 80,
+          color: colorScheme.onPrimaryContainer.withOpacity(0.3),
+        ),
       ),
     );
   }

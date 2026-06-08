@@ -32,8 +32,11 @@ class Snags extends Table {
   /// Location within the site (Optional)
   TextColumn get location => text().named('location').nullable()();
 
-  /// Priority level 1-5 (Optional)
-  IntColumn get priority => integer().named('priority').nullable()();
+  /// Asset name, tag, or room number (Optional)
+  TextColumn get asset => text().named('asset').nullable()();
+
+  /// Priority code from site owner's profile (e.g., "CAT1", "OK") (Optional)
+  TextColumn get priority => text().named('priority').nullable()();
 
   /// Due date for fixing (Optional)
   DateTimeColumn get dueDate => dateTime().named('due_date').nullable()();

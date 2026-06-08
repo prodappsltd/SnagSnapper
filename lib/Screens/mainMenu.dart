@@ -16,6 +16,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:snagsnapper/Screens/SignUp_SignIn/unified_auth_screen.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:rate_my_app/rate_my_app.dart';
+import 'package:in_app_review/in_app_review.dart';
 import 'package:snagsnapper/services/sync_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
@@ -36,16 +37,19 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   String message1='';
   String message2='';
   
-  // Rate my app feature
+  // Rate my app feature - Industry standard timing
   final RateMyApp _rateMyApp = RateMyApp(
     preferencesPrefix: 'rateMyApp_snagSnapper',
-    minDays: 0,  // TODO: Change back to 4 for production
-    minLaunches: 0,  // TODO: Change back to 10 for production
-    remindDays: 7,
-    remindLaunches: 8,
+    minDays: kDebugMode ? 0 : 7,        // 7 days in production (user needs time to experience app)
+    minLaunches: kDebugMode ? 0 : 15,   // 15 launches in production (meaningful usage)
+    remindDays: 30,                      // Monthly reminder max (don't nag)
+    remindLaunches: 15,                  // 15 more launches before reminding
     googlePlayIdentifier: 'uk.co.productiveapps.snagsnapper',
     appStoreIdentifier: '6748839667',
   );
+
+  // Native in-app review (higher conversion than store redirect)
+  final InAppReview _inAppReview = InAppReview.instance;
   
   // Sync service and connectivity
   late SyncService _syncService;
@@ -54,8 +58,10 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
   bool _isSyncInitialized = false;
   bool _profileNeedsSync = false;
   bool _sitesNeedSync = false;
+  bool _snagsNeedSync = false;
   StreamSubscription? _profileSyncSubscription;
   StreamSubscription? _siteSyncSubscription;
+  StreamSubscription? _snagSyncSubscription;
   
   // Animation controllers
   late AnimationController _fadeController;
@@ -79,6 +85,7 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       _setupConnectivityListener();
       _setupProfileSyncListener();
       _setupSiteSyncListener();
+      _setupSnagSyncListener();
       // Check for pending sync after listeners are setup
       Future.delayed(const Duration(milliseconds: 500), () {
         _checkForPendingSync();
@@ -95,6 +102,37 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     } catch (e) {
       if (kDebugMode) print('Error initializing RateMyApp: $e');
     }
+  }
+
+  void _showProfileRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.person_outline, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            Text('Profile Required'),
+          ],
+        ),
+        content: Text(
+          'Please complete your profile first. Your profile information is required before creating sites.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/profile');
+            },
+            child: Text('Go to Profile'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showCustomRateDialog() {
@@ -192,15 +230,31 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                     ),
                     const SizedBox(height: 24),
 
-                    // Rate Now Button (Primary)
+                    // Rate Now Button (Primary) - Uses native in-app review
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.of(context).pop();
-                          // TODO: Uncomment when app is published to stores
-                          // _rateMyApp.launchStore();
-                          if (kDebugMode) print('User chose to rate the app - store link not yet available');
+                          _rateMyApp.callEvent(RateMyAppEventType.rateButtonPressed);
+
+                          // Try native in-app review first (higher conversion)
+                          try {
+                            if (await _inAppReview.isAvailable()) {
+                              await _inAppReview.requestReview();
+                              if (kDebugMode) print('In-app review requested');
+                            } else {
+                              // Fallback to store page
+                              await _inAppReview.openStoreListing(
+                                appStoreId: '6748839667',
+                              );
+                              if (kDebugMode) print('Opened store listing');
+                            }
+                          } catch (e) {
+                            if (kDebugMode) print('Error requesting review: $e');
+                            // Final fallback
+                            _rateMyApp.launchStore();
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -250,6 +304,30 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+
+                    // No Thanks button (Don't ask again)
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _rateMyApp.callEvent(RateMyAppEventType.noButtonPressed);
+                          if (kDebugMode) print('User chose no thanks - will not ask again');
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        child: Text(
+                          'No Thanks',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                           ),
                         ),
                       ),
@@ -409,7 +487,32 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       }
     });
   }
-  
+
+  /// Setup listener for snag sync status changes
+  void _setupSnagSyncListener() {
+    final database = AppDatabase.instance;
+
+    // Listen to snags that need syncing (upload to Firebase)
+    _snagSyncSubscription = database.snagDao.watchSnagsNeedingSync().listen((snagsNeedingSync) {
+      if (mounted) {
+        final needsSync = snagsNeedingSync.isNotEmpty;
+
+        setState(() {
+          _snagsNeedSync = needsSync;
+        });
+
+        if (kDebugMode) {
+          print('MainMenu: Snag sync status changed - ${snagsNeedingSync.length} snags need sync');
+        }
+
+        // Trigger sync when snags need uploading
+        if (needsSync) {
+          _checkForPendingSync();
+        }
+      }
+    });
+  }
+
   /// Check for pending sync items in background
   Future<void> _checkForPendingSync() async {
     if (!_isSyncInitialized) return;
@@ -433,6 +536,10 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       final sitesNeedingSync = await database.siteDao.getSitesNeedingSync();
       final sitesNeedUpload = sitesNeedingSync.isNotEmpty;
 
+      // Check if snags need upload
+      final snagsNeedingSync = await database.snagDao.getSnagsNeedingSync();
+      final snagsNeedUpload = snagsNeedingSync.isNotEmpty;
+
       // Check if sites need download (no local owned sites)
       final localOwnedSites = await database.siteDao.getOwnedSites(userId);
       final sitesNeedDownload = localOwnedSites.isEmpty;
@@ -442,14 +549,15 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
         setState(() {
           _profileNeedsSync = profileNeedsSync;
           _sitesNeedSync = sitesNeedUpload;
-          _hasPendingSync = profileNeedsSync || sitesNeedUpload || sitesNeedDownload;
+          _snagsNeedSync = snagsNeedUpload;
+          _hasPendingSync = profileNeedsSync || sitesNeedUpload || snagsNeedUpload || sitesNeedDownload;
         });
       }
 
       // Trigger sync if upload OR download needed
-      if ((profileNeedsSync || sitesNeedUpload || sitesNeedDownload) && mounted) {
+      if ((profileNeedsSync || sitesNeedUpload || snagsNeedUpload || sitesNeedDownload) && mounted) {
         if (kDebugMode) {
-          print('MainMenu: Pending sync - profile: $profileNeedsSync, upload: ${sitesNeedingSync.length}, download: $sitesNeedDownload');
+          print('MainMenu: Pending sync - profile: $profileNeedsSync, sites: ${sitesNeedingSync.length}, snags: ${snagsNeedingSync.length}, download: $sitesNeedDownload');
         }
 
         // Trigger sync in background (non-blocking)
@@ -586,6 +694,7 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     _connectivitySubscription?.cancel();
     _profileSyncSubscription?.cancel();
     _siteSyncSubscription?.cancel();
+    _snagSyncSubscription?.cancel();
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
@@ -838,6 +947,12 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                             scale: _pulseAnimation.value,
                             child: GestureDetector(
                               onTap: () {
+                                final appUser = Provider.of<CP>(context, listen: false).getAppUser();
+                                if (appUser == null) {
+                                  // Show dialog for new users without a profile
+                                  _showProfileRequiredDialog();
+                                  return;
+                                }
                                 Navigator.pushNamed(context, '/mySites');
                               },
                               child: Container(
@@ -1040,36 +1155,37 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
                                     ),
                                   ),
                                 ),
-                                // Sync indicator badge
-                                if (_profileNeedsSync)
-                                  Positioned(
-                                    top: -3,
-                                    right: -3,
-                                    child: Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: theme.colorScheme.error,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: theme.colorScheme.surface,
-                                          width: 2,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: theme.colorScheme.error.withValues(alpha: 0.3),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(
-                                        Icons.sync,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
+                                // TODO: Sync indicator badge - disabled due to UI timing issue
+                                // The sync completes but the icon doesn't clear reliably
+                                // if (_profileNeedsSync)
+                                //   Positioned(
+                                //     top: -3,
+                                //     right: -3,
+                                //     child: Container(
+                                //       width: 32,
+                                //       height: 32,
+                                //       decoration: BoxDecoration(
+                                //         color: theme.colorScheme.error,
+                                //         shape: BoxShape.circle,
+                                //         border: Border.all(
+                                //           color: theme.colorScheme.surface,
+                                //           width: 2,
+                                //         ),
+                                //         boxShadow: [
+                                //           BoxShadow(
+                                //             color: theme.colorScheme.error.withValues(alpha: 0.3),
+                                //             blurRadius: 4,
+                                //             offset: const Offset(0, 2),
+                                //           ),
+                                //         ],
+                                //       ),
+                                //       child: const Icon(
+                                //         Icons.sync,
+                                //         color: Colors.white,
+                                //         size: 18,
+                                //       ),
+                                //     ),
+                                //   ),
                               ],
                             ),
                           ),

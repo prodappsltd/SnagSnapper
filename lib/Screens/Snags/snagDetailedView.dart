@@ -5,638 +5,405 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
-import 'package:snagsnapper/Data/snag.dart';
-import 'package:snagsnapper/Screens/Sites/SiteInfo/siteStatus.dart';
-// import 'package:snagsnapper/Screens/Snags/CreateEditSnag.dart'; // BACKUP - legacy UI
+import 'package:snagsnapper/Data/database/app_database.dart';
+import 'package:snagsnapper/Data/models/snag.dart';
+import 'package:snagsnapper/Data/models/priority_level.dart';
 import 'package:snagsnapper/Screens/Snags/create_snag_v2.dart';
-import 'package:snagsnapper/Screens/showFullScreenImage.dart';
-import 'package:snagsnapper/Widgets/markedImageStack.dart';
-import 'package:snagsnapper/Widgets/smallImageSnags.dart';
 
+/// Simplified Snag Detail View
+///
+/// TODO: M7 Migration - This is a temporary simplified version
+/// Full migration needed:
+/// - Display images from snag.images[0-5] using file-based ImageSlot
+/// - Display fix images from snag.fixImages[0-5]
+/// - Update snag status using SnagDao (immutable model)
+/// - Add image viewer for file-based images
 class SnagDetailedView extends StatefulWidget {
   final Snag snag;
   final String siteID;
   final String siteOwnersEmail;
-  const SnagDetailedView({Key? key, required this.snag, required this.siteID, required this.siteOwnersEmail}) : super(key: key);
+  final String siteOwnerUID;
+
+  const SnagDetailedView({
+    Key? key,
+    required this.snag,
+    required this.siteID,
+    required this.siteOwnersEmail,
+    required this.siteOwnerUID,
+  }) : super(key: key);
 
   @override
   State<SnagDetailedView> createState() => _SnagDetailedViewState();
 }
 
 class _SnagDetailedViewState extends State<SnagDetailedView> {
-  String getPhone(String assignedEmail, context) {
-    String? phone;
-    Provider.of<CP>(context, listen: false).getListOFColleagues().forEach((colleague) {
-      if (colleague.email == assignedEmail) phone = colleague.phone;
-    });
-    return phone!;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      //backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(TITLE_BAR_HEIGHT),
-        child: AppBar(
-          //backgroundColor: Theme.of(context).colorScheme.primary,
-          title: Text('SNAG DETAILS', style: GoogleFonts.montserrat( textStyle: TextStyle(color: Theme.of(context).colorScheme.onBackground)),),
-          leading: IconButton(icon: Icon(Icons.arrow_back), color: Theme.of(context).colorScheme.onBackground, onPressed: ()=> Navigator.pop(context),),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: MediaQuery.of(context).size.height),
-            child: IntrinsicHeight(
-              child: Container(
-                margin: const EdgeInsets.only(left: 10.0, right: 10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    MarkImageStack(
-                      widget.snag.imageMain1!,
-                      () async {
-                        if (widget.snag.imageMain1!.isNotEmpty) {
-                          Navigator.push(
-                              context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(widget.snag.imageMain1!)));
-                        }
-                      },
-                      (onValue) {},
-                      false, //Don't show any annotation
-                      'No main image found',
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: <Widget>[
-                        SmallImageSnags(
-                          b64Image: widget.snag.image2!,
-                          callBackFunc: () async {
-                            if (widget.snag.image2 !.isNotEmpty) {
-                              Navigator.push(
-                                  context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(widget.snag.image2!)));
-                            }
-                          },
-                          showAnnotation: false,
-                          callBackMarkupIcon: () {},
-                        ),
-                        SmallImageSnags(
-                          b64Image: widget.snag.image3!,
-                          callBackFunc: () async {
-                            if (widget.snag.image3 !.isNotEmpty) {
-                              Navigator.push(
-                                  context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(widget.snag.image3!)));
-                            }
-                          },
-                          showAnnotation: false,
-                          callBackMarkupIcon: () {},
-                        ),
-                        SmallImageSnags(
-                          b64Image: widget.snag.image4!,
-                          callBackFunc: () async {
-                            if (widget.snag.image4 !.isNotEmpty) {
-                              Navigator.push(
-                                  context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(widget.snag.image4!)));
-                            }
-                          },
-                          showAnnotation: false,
-                          callBackMarkupIcon: () {},
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    const Center(child: Text('BRIEF')),
-                    const SizedBox(
-                      height: 10.0,
-                    ),
-                    Container(
-                      decoration: const BoxDecoration(
-                        borderRadius: BorderRadius.all(Radius.circular(10.0)),
-                        color: Colors.white,
-                      ),
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: <Widget>[
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.location_on,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  Text(widget.snag.location, style: TextStyle(fontFamily:'Roboto-Regular.ttf',color: Theme.of(context).colorScheme.primary)),
-                                ],
-                              ),
-
-
-                              Row(
-                                children: [
-                                  Icon(Icons.assignment_ind, color: Theme.of(context).colorScheme.primary),
-                                  Text(widget.snag.assignedName!.isNotEmpty
-                                      ? (widget.snag.assignedName!)
-                                      : 'Not assigned',
-                                    style: TextStyle(fontFamily:'Roboto-Regular.ttf',color: Theme.of(context).colorScheme.primary),
-                                  ),
-                                ],
-                              ),
-
-                              (widget.snag.creatorEmail == Provider.of<CP>(context, listen: false).getAppUser()!.email.toLowerCase() &&
-                                  (widget.snag.assignedEmail!.isEmpty)) ||
-                                  (widget.snag.ownerEmail == Provider.of<CP>(context, listen: false).getAppUser()!.email.toLowerCase())
-                                  ? GestureDetector(
-                                      onTap: () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                              builder: (context) => CreateSnagV2(
-                                                    snag: widget.snag,
-                                                    siteID: widget.siteID,
-                                                    siteOwnersEmail: widget.siteOwnersEmail,
-                                                  ))).then((value) => setState((){})),
-                                      child: const CircleAvatar(
-                                        backgroundColor: Colors.black,
-                                        radius: 13.0,
-                                        child: Icon(
-                                          Icons.edit,
-                                          size: 18.0,
-                                          color: Colors.white,
-                                        ),
-                                      ))
-                                  : const Text('')
-                            ],
-                          ),
-                          const Divider(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: <Widget>[
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.hourglass_empty,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  Text(
-                                      widget.snag.dueDate != null
-                                          ? DateFormat(Provider.of<CP>(context, listen: false).getDateFormat()).format(widget.snag.dueDate!)
-                                          : ' No due-date ',
-                                      style: TextStyle(
-                                          fontFamily:'Roboto-Regular.ttf',
-                                          fontWeight: FontWeight.bold,
-                                          color: // GREATER THAN 5 DAYS
-                                              widget.snag.dueDate == null
-                                                  ? Colors.white
-                                                  : widget.snag.dueDate!.difference(DateTime.now()).inDays >=
-                                                          Provider.of<CP>(context, listen: false).greenCondition
-                                                      ? Colors.green // LESS THAN 5 DAYS && GREATER THAN 2
-                                                      : widget.snag.dueDate!.difference(DateTime.now()).inDays <=
-                                                                  Provider.of<CP>(context, listen: false).greenCondition &&
-                                                              widget.snag.dueDate!.difference(DateTime.now()).inDays >=
-                                                                  Provider.of<CP>(context, listen: false).orangeCondition
-                                                          ? Colors.orangeAccent // LESS THAN 2 DAYS
-                                                          : widget.snag.dueDate!.difference(DateTime.now()).inDays <=
-                                                                  Provider.of<CP>(context, listen: false).orangeCondition
-                                                              ? Colors.red
-                                                              : Colors.white,
-                                          backgroundColor: widget.snag.dueDate == null
-                                              ? Theme.of(context).colorScheme.primary
-                                              : widget.snag.dueDate!.difference(DateTime.now()).inDays >=
-                                                      Provider.of<CP>(context, listen: false).greenCondition
-                                                  ? Colors.black // LESS THAN 5 DAYS && GREATER THAN 2
-                                                  : widget.snag.dueDate!.difference(DateTime.now()).inDays <=
-                                                              Provider.of<CP>(context, listen: false).greenCondition &&
-                                                          widget.snag.dueDate!.difference(DateTime.now()).inDays >=
-                                                              Provider.of<CP>(context, listen: false).orangeCondition
-                                                      ? Colors.black // LESS THAN 2 DAYS
-                                                      : widget.snag.dueDate!.difference(DateTime.now()).inDays <=
-                                                              Provider.of<CP>(context, listen: false).orangeCondition
-                                                          ? Colors.black
-                                                          : Colors.black)),
-                                ],
-                              ),
-
-
-                              Row(
-                                children: [
-                                  Icon(Icons.priority_high, color: widget.snag.priority == 2 ? Colors.red[800] : Theme.of(context).colorScheme.primary),
-                                  Text(
-                                    widget.snag.priority == 2 ? 'HIGH' : widget.snag.priority == 1 ? 'MEDIUM' : 'LOW',
-                                    style: TextStyle(
-                                        fontFamily:'Roboto-Regular.ttf',
-                                        color: widget.snag.priority == 2
-                                            ? Colors.red[800]
-                                            : widget.snag.priority == 1 ? Colors.deepOrangeAccent : Theme.of(context).colorScheme.primary,
-                                        fontWeight:
-                                            widget.snag.priority == 2 || widget.snag.priority == 1 ? FontWeight.bold : FontWeight.normal),
-                                  ),
-                                ],
-                              ),
-
-
-                              Row(
-                                children: [
-                                  Icon(Icons.add_circle_outline, color: Theme.of(context).colorScheme.primary,),
-                                  Text(
-                                    DateFormat(Provider.of<CP>(context, listen: false).getDateFormat()).format(widget.snag.creationDate),
-                                    style: TextStyle(
-                                        fontFamily:'Roboto-Regular.ttf',
-                                        color: Theme.of(context).colorScheme.primary,
-                                        fontWeight: FontWeight.normal),
-                                  ),
-                                ],
-                              ),
-
-                            ],
-                          ),
-                          const Divider(),
-                          Row(children: <Widget>[
-                            Text('Title: ',style: TextStyle(fontFamily:'Roboto-Regular.ttf',color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-                            Text(widget.snag.title.isEmpty ? 'No title assigned' : widget.snag.title,
-                                style: TextStyle(fontFamily:'Roboto-Regular.ttf',color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.normal)),
-                          ]),
-                          const Divider(),
-                          Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                            Text('Description: ',style: TextStyle(fontFamily:'Roboto-Regular.ttf',color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
-                            Flexible(
-                              child: Text(widget.snag.description.isEmpty ? '...' : widget.snag.description,
-                                  style: TextStyle(
-                                    fontFamily:'Roboto-Regular.ttf',
-                                    color: Theme.of(context).colorScheme.primary,
-                                  )),
-                            ),
-                          ]),
-                          kDebugMode
-                              ? Column(
-                            children: <Widget>[
-                              const Divider(),
-                              Row(crossAxisAlignment: CrossAxisAlignment.center, children: <Widget>[
-                                Icon(
-                                  Icons.person,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                Flexible(
-                                  child: Text('Site Owner: ${widget.snag.ownerEmail}',
-                                      style: TextStyle(
-                                        color: Theme.of(context).colorScheme.primary,
-                                      )),
-                                ),
-                              ]),
-                              Row(crossAxisAlignment: CrossAxisAlignment.center, children: <Widget>[
-                                Icon(
-                                  Icons.person,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                Flexible(
-                                  child: Text('Snag Creator: ${widget.snag.creatorEmail}',
-                                      style: TextStyle(
-                                        color: Theme.of(context).colorScheme.primary,
-                                      )),
-                                ),
-                              ]),
-                              const Divider(),
-                              Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.person,
-                                      color: Theme.of(context).colorScheme.primary,
-                                    ),
-                                    Flexible(
-                                      child: Text(widget.snag.assignedEmail !=null && widget.snag.assignedEmail!.isNotEmpty? 'Assigned: ${widget.snag.assignedEmail}' : 'Not assigned to anyone',
-                                          style: TextStyle(
-                                            color: Theme.of(context).colorScheme.primary,
-                                          )),
-                                    ),
-                                  ]),
-                              Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.person,
-                                      color: Theme.of(context).colorScheme.primary,
-                                    ),
-                                    Flexible(
-                                      child: Text('Logged-in: ${Provider.of<CP>(context, listen: false).getAppUser()!.email}',
-                                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ])
-                            ],
-                          )
-                              : const SizedBox(),
-                        ],
-                      ),
-                    ),
-                    kDebugMode ? const Divider() : const Text('') ,
-                    widget.snag.assignedEmail?.toLowerCase() == Provider.of<CP>(context, listen: false).getAppUser()!.email.toLowerCase() ||
-                        widget.snag.ownerEmail.toLowerCase() == Provider.of<CP>(context, listen: false).getAppUser()!.email.toLowerCase() ||
-                        viewPermission
-                        ? SnagFixImages(widget.snag)
-                        : const Center(child: Text('This snag is not assigned to you')),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SnagFixImages extends StatefulWidget {
-  final Snag snag;
-  const SnagFixImages(this.snag, {Key? key}) : super(key: key);
-
-  @override
-  _SnagFixImagesState createState() => _SnagFixImagesState();
-}
-
-class _SnagFixImagesState extends State<SnagFixImages> {
-  late Snag snag;
-  List<bool> showAnnotation = [false, false, false, false];
-  String snagFixDescription = '';
-  String snagFixMainImage = '';
-  String snagFixImage1 = '';
-  String snagFixImage2 = '';
-  String snagFixImage3 = '';
-  bool snagStatus = false;
-  final _formKey = GlobalKey<FormState>();
+  late Snag _snag;
 
   @override
   void initState() {
     super.initState();
-    snag = widget.snag;
-    snagFixDescription = snag.snagFixDescription!;
-    snagFixMainImage = snag.snagFixMainImage!;
-    snagFixImage1 = snag.snagFixImage1!;
-    snagFixImage2 = snag.snagFixImage2!;
-    snagFixImage3 = snag.snagFixImage3!;
-    snagStatus = snag.snagStatus;
-    if (snagFixMainImage.isNotEmpty) showAnnotation[0] = true;
-    if (snagFixImage1.isNotEmpty) showAnnotation[1] = true;
-    if (snagFixImage2.isNotEmpty) showAnnotation[2] = true;
-    if (snagFixImage3.isNotEmpty) showAnnotation[3] = true;
+    _snag = widget.snag;
+  }
+
+  void _refreshSnag() async {
+    final updated = await AppDatabase.instance.snagDao.getSnagById(_snag.id);
+    if (updated != null && mounted) {
+      setState(() => _snag = updated);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.all(10.0),
-          child: Center(child: Text(viewPermission? 'VIEW SNAG STATUS':'PLEASE COMPLETE THE WORKSHEET BELOW', style: const TextStyle(fontFamily:'Roboto-Regular.ttf',fontWeight: FontWeight.bold),)),
-        ),
-        MarkImageStack(
-          snagFixMainImage,
-          viewPermission? (){}:() async {
-            String image;
-            snagFixMainImage.isEmpty
-                ? image = await optionsDialogBox(context, 1000)?? snagFixMainImage
-                : image = await optionsDialogBoxWithDEL(context, () {
-                    setState(() {
-                      image = '';
-                      snagFixMainImage = '';
-                      showAnnotation[0] = false;
-                    });
-                    Navigator.pop(context);
-                  })?? snagFixMainImage;
-            if (image.isNotEmpty) {
-              setState(() => snagFixMainImage = image);
-              setState(() => showAnnotation[0] = true);
-            }
-          },
-          (onValue) {
-            if (onValue != null) snagFixMainImage = onValue;
-          },
-          snagFixMainImage .isEmpty ? false : true, //Don't show any annotation
-          viewPermission? 'No image to show':'Click to add Image',
-        ),
-        Container(
-          padding: const EdgeInsets.all(20.0),
-          margin: const EdgeInsets.only(left: 0.0, right: 0.0, top: 10.0, bottom: 15.0),
-          decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.all(Radius.circular(5.0)),
-              boxShadow: [
-                BoxShadow(color: Colors.grey, offset: Offset(0.0, 0.0), blurRadius: 5.0, spreadRadius: 1.0)
-              ]),
-          child: Column(
-            children: <Widget>[
-              Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: <Widget>[
-                    TextFormField(
-                      validator: (value) {
-                        return !snagStatus? value.toString().isEmpty ? '* Required *' : null : null;
-                      },
-                      readOnly: viewPermission? true:false,
-                    onChanged: (value) => viewPermission? null:snagFixDescription = value.toString().trim(),
-                    autocorrect: true,
-                      style: const TextStyle(fontFamily:'Roboto-Regular.ttf',),
-                    initialValue: snagFixDescription,
-                    decoration: InputDecoration(
-                        labelText: 'Description',
-                        prefixIcon: Icon(
-                          Icons.description,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+    final colorScheme = Theme.of(context).colorScheme;
+    final cp = Provider.of<CP>(context, listen: false);
+    final appUser = cp.getAppUser();
+
+    final isOwner = _snag.ownerEmail.toLowerCase() == appUser?.email.toLowerCase();
+    final isCreator = _snag.creatorEmail.toLowerCase() == appUser?.email.toLowerCase();
+    final isAssignee = _snag.assignedEmail?.toLowerCase() == appUser?.email.toLowerCase();
+    final canEdit = (isCreator && (_snag.assignedEmail?.isEmpty ?? true)) || isOwner;
+
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(TITLE_BAR_HEIGHT),
+        child: AppBar(
+          title: Text(
+            'SNAG DETAILS',
+            style: GoogleFonts.montserrat(
+              textStyle: TextStyle(color: colorScheme.onBackground),
+            ),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            color: colorScheme.onBackground,
+            onPressed: () => Navigator.pop(context),
+          ),
+          actions: [
+            if (canEdit)
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CreateSnagV2(
+                        snag: _snag,
+                        siteID: widget.siteID,
+                        siteOwnersEmail: widget.siteOwnersEmail,
+                        siteOwnerUID: widget.siteOwnerUID,
+                      ),
                     ),
-                    maxLines: 1,
-                    textCapitalization: TextCapitalization.words,
-                    keyboardType: TextInputType.text,
-                  ),
-                      const SizedBox(
-                        height: 30.0,
-                      ),
-                      Column(
-                        children: <Widget>[
-                          Text(viewPermission? 'Supporting photos':'Add supporting photos (Optional)'),
-                          const Divider(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: <Widget>[
-                              SmallImageSnags(
-                                b64Image: snagFixImage1,
-                                callBackFunc: viewPermission? (){}:() async {
-                                  String image;
-                                  snagFixImage1 .isEmpty
-                                      ? image = await optionsDialogBox(context, 1000)?? snagFixImage1
-                                      : image = await optionsDialogBoxWithDEL(context, () {
-                                          image = '';
-                                          snagFixImage1 = '';
-                                          setState(() => snagFixImage1);
-                                          setState(() => showAnnotation[1] = false);
-                                          Navigator.pop(context);
-                                        })?? snagFixImage1;
-                                  if (image.isNotEmpty) {
-                                    setState(() => snagFixImage1 = image);
-                                    setState(() => showAnnotation[1] = true);
-                                  }
-                                },
-                                showAnnotation: snagFixImage1.isEmpty ? false : true,
-                                callBackMarkupIcon: () {
-                                  Navigator.push(
-                                      context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(snagFixImage1)));
-//                                    Navigator.push(
-//                                            context, MaterialPageRoute(builder: (context) => Markup(snagFixImage1)))
-//                                        .then((onValue) => (onValue != null) ? snagFixImage1 = onValue : null);
-                                },
-                              ),
-                              SmallImageSnags(
-                                b64Image: snagFixImage2,
-                                callBackFunc: viewPermission? (){}:() async {
-                                  String image;
-                                  snagFixImage2.isEmpty
-                                      ? image = await optionsDialogBox(context, 1000)?? snagFixImage2
-                                      : image = await optionsDialogBoxWithDEL(context, () {
-                                          image = '';
-                                          setState(() => snagFixImage2 = '');
-                                          setState(() => showAnnotation[2] = false);
-                                          Navigator.pop(context);
-                                        })?? snagFixImage2;
-                                  if (image.isNotEmpty) {
-                                    setState(() => snagFixImage2 = image);
-                                    setState(() => showAnnotation[2] = true);
-                                  }
-                                },
-                                showAnnotation: snagFixImage2.isEmpty ? false : true,
-                                callBackMarkupIcon: () {
-                                  Navigator.push(
-                                      context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(snagFixImage2)));
-
-                                  //                                    Navigator.push(
-//                                            context, MaterialPageRoute(builder: (context) => Markup(snagFixImage2)))
-//                                        .then((onValue) => (onValue != null) ? snagFixImage2 = onValue : null);
-                                },
-                              ),
-                              SmallImageSnags(
-                                b64Image: snagFixImage3,
-                                callBackFunc: viewPermission? (){}:() async {
-                                  String image;
-                                  snagFixImage3 .isEmpty
-                                      ? image = await optionsDialogBox(context, 1000)?? snagFixImage3
-                                      : image = await optionsDialogBoxWithDEL(context, () {
-                                          image = '';
-                                          setState(() => snagFixImage3 = '');
-                                          setState(() => showAnnotation[3] = false);
-                                          Navigator.pop(context);
-                                        })?? snagFixImage3;
-                                  if (image.isEmpty) {
-                                    setState(() => snagFixImage3 = image);
-                                    setState(() => showAnnotation[3] = true);
-                                  }
-                                },
-                                showAnnotation: snagFixImage3.isEmpty ? false : true,
-                                callBackMarkupIcon: () {
-                                  Navigator.push(
-                                      context, MaterialPageRoute(builder: (context) => ShowFullScreenImage(snagFixImage3)));
-
-//                                    Navigator.push(
-//                                            context, MaterialPageRoute(builder: (context) => Markup(snagFixImage3)))
-//                                        .then((onValue) => (onValue != null) ? snagFixImage3 = onValue : null);
-                                },
-                              ),
-                            ],
-                          ),
-                          const SizedBox(
-                            height: 20.0,
-                          ),
-                          Text('Snag Status', style: GoogleFonts.montserrat(textStyle: const TextStyle(fontSize: 22)),),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: <Widget>[
-                              TextButton(
-                                onPressed: viewPermission? (){}:() {
-                                  FocusScope.of(context).unfocus();
-                                  setState(() {
-                                    snagStatus = true;
-                                  });
-                                },
-                                // color: snagStatus == true ? Provider.of<UserData>(context, listen: false).getMainColor() : Colors.white,
-                                // shape: RoundedRectangleBorder(
-                                //   borderRadius: const BorderRadius.only(
-                                //       topLeft: Radius.circular(10.0), bottomLeft: Radius.circular(10.0)),
-                                //   side: BorderSide(color: Provider.of<UserData>(context, listen: false).getMainColor(), width: 1.0),
-                                // ),
-                                child: Text(
-                                  'OPEN',
-                                  style: GoogleFonts.roboto(textStyle: TextStyle(fontSize: snagStatus? 22:16, fontWeight: snagStatus? FontWeight.w800 : FontWeight.normal,color: snagStatus? Colors.black : Theme.of(context).colorScheme.primary)),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: viewPermission? (){}:() {
-                                  FocusScope.of(context).unfocus();
-                                  setState(() {
-                                    snagStatus = false;
-                                  });
-                                },
-                                // color: snagStatus == false ? Provider.of<UserData>(context, listen: false).getMainColor() : Colors.white,
-                                // shape: RoundedRectangleBorder(
-                                //   borderRadius: const BorderRadius.only(
-                                //       topRight: Radius.circular(10.0), bottomRight: Radius.circular(10.0)),
-                                //   side: BorderSide(color: Provider.of<UserData>(context, listen: false).getMainColor(), width: 1.0),
-                                // ),
-                                child: Text(
-                                  'CLOSE',
-                                  style: GoogleFonts.roboto(textStyle: TextStyle(fontSize: !snagStatus? 22:16,fontWeight: !snagStatus? FontWeight.w800 : FontWeight.normal,color: !snagStatus? Colors.black : Theme.of(context).colorScheme.primary)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  )),
-              const SizedBox(
-                height: 10.0,
-              ),
-              GestureDetector(
-                onTap: viewPermission? (){Navigator.pop(context);}:() {
-                  FocusScope.of(context).requestFocus(FocusNode());
-                  if (_formKey.currentState!.validate()) {
-
-
-                    if (snagFixMainImage != snag.snagFixMainImage) snag.snagFixMainImage = snagFixMainImage;
-                    if (snagFixImage1 != snag.snagFixImage1) snag.snagFixImage1 = snagFixImage1;
-                    if (snagFixImage2 != snag.snagFixImage2) snag.snagFixImage2 = snagFixImage2;
-                    if (snagFixImage3 != snag.snagFixImage3) snag.snagFixImage3 = snagFixImage3;
-                    if (snagFixDescription != snag.snagFixDescription) snag.snagFixDescription = snagFixDescription;
-                    if (snagStatus != snag.snagStatus) snag.snagStatus = snagStatus;
-                    if (Provider.of<CP>(context, listen: false).getAppUser()!.email.toLowerCase() == snag.ownerEmail.toLowerCase()){
-                      if (!snag.snagStatus) snag.snagConfirmedStatus = false;
-                      if (snag.snagStatus && !snag.snagConfirmedStatus) snag.snagConfirmedStatus = true;
-                    }
-
-                    Provider.of<CP>(context, listen: false).updateSnag(snag);
-                    if(kDebugMode) print('SNAG-status: ${snag.snagStatus}');
-                    if(kDebugMode) print('SNAG-Confirmed-status: ${snag.snagConfirmedStatus}');
-
-                    Navigator.pop(context);
-                  }
+                  ).then((_) => _refreshSnag());
                 },
-                child: Container(
-                  decoration: BoxDecoration(color: activeBTN, borderRadius: const BorderRadius.all(Radius.circular(10.0))),
-                  padding: const EdgeInsets.all(20.0),
-                  margin: const EdgeInsets.only(left: 20.0, right: 20.0, top: 10.0),
-                  width: double.infinity,
-                  child: Center(
-                      child: Text(
-                        viewPermission? 'GO BACK':Provider.of<CP>(context, listen: false).getAppUser()!.email.toString().toLowerCase().trim() != snag.ownerEmail.toLowerCase().trim()? 'SAVE':'CONFIRM',
-                    style: const TextStyle(fontFamily:'Roboto-Regular.ttf',color: Colors.white, fontSize: 20.0),
-                  )),
-                ),
-              )
+              ),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Image placeholder
+              _buildImagePlaceholder(colorScheme),
+              const SizedBox(height: 16),
+
+              // Status card
+              _buildStatusCard(colorScheme, cp),
+              const SizedBox(height: 16),
+
+              // Details card
+              _buildDetailsCard(colorScheme, cp),
+              const SizedBox(height: 16),
+
+              // Fix section placeholder
+              if (isAssignee || isOwner)
+                _buildFixSectionPlaceholder(colorScheme),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePlaceholder(ColorScheme colorScheme) {
+    final hasImage = _snag.images.isNotEmpty && _snag.images[0].hasImage;
+
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              hasImage ? Icons.image : Icons.image_not_supported,
+              size: 48,
+              color: colorScheme.onSurfaceVariant.withOpacity(0.5),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              hasImage
+                ? 'TODO: Display ${_snag.images.where((s) => s.hasImage).length} image(s)'
+                : 'No images',
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
+            if (kDebugMode && hasImage)
+              Text(
+                'Path: ${_snag.images[0].localPath}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(ColorScheme colorScheme, CP cp) {
+    final isClosed = !_snag.snagConfirmedStatus && !_snag.snagStatus;
+    final isPendingReview = _snag.snagConfirmedStatus && !_snag.snagStatus;
+
+    Color statusColor = colorScheme.primary;
+    String statusText = 'Open';
+    if (isClosed) {
+      statusColor = Colors.green;
+      statusText = 'Closed';
+    } else if (isPendingReview) {
+      statusColor = Colors.amber;
+      statusText = 'Pending Review';
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.location_on, color: colorScheme.primary, size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      _snag.location ?? 'No location',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildInfoItem(
+                  Icons.person,
+                  _snag.assignedName?.isNotEmpty == true
+                      ? _snag.assignedName!
+                      : 'Unassigned',
+                  colorScheme,
+                ),
+                _buildInfoItem(
+                  Icons.flag,
+                  _getPriorityLabel(_snag.priority),
+                  colorScheme,
+                  color: _getPriorityColor(_snag.priority),
+                ),
+                _buildInfoItem(
+                  Icons.calendar_today,
+                  _snag.dueDate != null
+                      // TIMEZONE: Display UTC midnight as local date
+                      ? DateFormat(cp.getDateFormat()).format(_snag.dueDate!.toLocal())
+                      : 'No due date',
+                  colorScheme,
+                  color: _getDueDateColor(_snag.dueDate, cp),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(IconData icon, String text, ColorScheme colorScheme, {Color? color}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color ?? colorScheme.primary),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: color ?? colorScheme.onSurface,
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildDetailsCard(ColorScheme colorScheme, CP cp) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Details',
+              style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildDetailRow('Title', _snag.title.isEmpty ? 'No title' : _snag.title),
+            const SizedBox(height: 8),
+            _buildDetailRow(
+              'Description',
+              _snag.description?.isEmpty ?? true ? 'No description' : _snag.description!,
+            ),
+            const SizedBox(height: 8),
+            _buildDetailRow(
+              'Created',
+              DateFormat(cp.getDateFormat()).format(_snag.creationDate),
+            ),
+            if (kDebugMode) ...[
+              const Divider(),
+              _buildDetailRow('Owner', _snag.ownerEmail),
+              _buildDetailRow('Creator', _snag.creatorEmail),
+              _buildDetailRow('ID', _snag.id),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            '$label:',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+        Expanded(
+          child: Text(value),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFixSectionPlaceholder(ColorScheme colorScheme) {
+    final hasFixImages = _snag.fixImages.any((s) => s.hasImage);
+
+    return Card(
+      color: Colors.amber.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.build, color: Colors.amber.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  'Fix Section',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            Text(
+              'TODO: Migrate fix section to use NEW Snag model',
+              style: TextStyle(color: Colors.amber.shade800),
+            ),
+            if (_snag.snagFixDescription?.isNotEmpty == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Fix description: ${_snag.snagFixDescription}',
+                  style: TextStyle(color: Colors.amber.shade900),
+                ),
+              ),
+            if (hasFixImages)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Fix images: ${_snag.fixImages.where((s) => s.hasImage).length}',
+                  style: TextStyle(color: Colors.amber.shade900),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Get label for priority code (e.g., "CAT1" -> "CAT1")
+  /// Returns the code itself for display, or "None" if not set
+  String _getPriorityLabel(String? priority) {
+    if (priority == null || priority.isEmpty) return 'None';
+    return priority;
+  }
+
+  /// Get color for priority code based on severity
+  /// Maps priority codes to colors (higher severity = warmer colors)
+  Color _getPriorityColor(String? priority) {
+    if (priority == null || priority.isEmpty) return Colors.grey;
+
+    // Find priority in defaults to determine color based on index (severity)
+    final index = PriorityLevel.defaults.indexWhere((p) => p.code == priority);
+    switch (index) {
+      case 0: return Colors.green;     // OK - no action required
+      case 1: return Colors.blue;      // OBS - observation
+      case 2: return Colors.orange;    // CAT3 - improvement required
+      case 3: return Colors.deepOrange; // CAT2 - potentially dangerous
+      case 4: return Colors.red;       // CAT1 - significant risk
+      default: return Colors.grey;
+    }
+  }
+
+  // TIMEZONE: Convert UTC midnight to local for comparison
+  Color? _getDueDateColor(DateTime? dueDate, CP cp) {
+    if (dueDate == null) return null;
+    final daysLeft = dueDate.toLocal().difference(DateTime.now()).inDays;
+    if (daysLeft >= cp.greenCondition) return Colors.green;
+    if (daysLeft >= cp.orangeCondition) return Colors.orange;
+    return Colors.red;
   }
 }

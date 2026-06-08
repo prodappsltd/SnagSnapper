@@ -14,10 +14,11 @@ class Snag {
   final String creatorEmail; // Who created the snag
   
   // Core Fields (Owner-editable, Colleague read-only)
-  final String title; // Required - Snag title
+  final String title; // Required but MUST be empty string - reserved for future use (see firestore.rules)
   final String? description; // Optional - Problem description
   final String? location; // Optional - Location in site
-  final int? priority; // Optional - Priority level (1-5)
+  final String? asset; // Optional - Asset name, tag, or room number
+  final String? priority; // Optional - Priority code (e.g., "CAT1", "OK") from site owner's profile
   final DateTime? dueDate; // Optional - Due date
   final DateTime creationDate; // Auto-set creation date
   final String? snagCategory; // Optional - Category from site list
@@ -67,6 +68,7 @@ class Snag {
     required this.title,
     this.description,
     this.location,
+    this.asset,
     this.priority,
     this.dueDate,
     required this.creationDate,
@@ -103,7 +105,8 @@ class Snag {
     required String title,
     String? description,
     String? location,
-    int? priority,
+    String? asset,
+    String? priority,
     DateTime? dueDate,
     String? snagCategory,
   }) {
@@ -116,6 +119,7 @@ class Snag {
       title: title,
       description: description,
       location: location,
+      asset: asset,
       priority: priority,
       dueDate: dueDate,
       creationDate: now,
@@ -135,7 +139,8 @@ class Snag {
     String? title,
     String? description,
     String? location,
-    int? priority,
+    String? asset,
+    String? priority,
     DateTime? dueDate,
     DateTime? creationDate,
     String? snagCategory,
@@ -168,6 +173,7 @@ class Snag {
       title: title ?? this.title,
       description: description ?? this.description,
       location: location ?? this.location,
+      asset: asset ?? this.asset,
       priority: priority ?? this.priority,
       dueDate: dueDate ?? this.dueDate,
       creationDate: creationDate ?? this.creationDate,
@@ -243,6 +249,7 @@ class Snag {
       'title': title,
       'description': description,
       'location': location,
+      'asset': asset,
       'priority': priority,
       'dueDate': dueDate?.millisecondsSinceEpoch,
       'creationDate': creationDate.millisecondsSinceEpoch,
@@ -280,7 +287,8 @@ class Snag {
       title: json['title'] as String,
       description: json['description'] as String?,
       location: json['location'] as String?,
-      priority: json['priority'] as int?,
+      asset: json['asset'] as String?,
+      priority: json['priority'] as String?,
       dueDate: json['dueDate'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['dueDate'] as int)
           : null,
@@ -324,6 +332,7 @@ class Snag {
       'title': title,
       'description': description,
       'location': location,
+      'asset': asset,
       'priority': priority,
       'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
       'creationDate': Timestamp.fromDate(creationDate),
@@ -361,7 +370,8 @@ class Snag {
       title: data['title'] as String,
       description: data['description'] as String?,
       location: data['location'] as String?,
-      priority: data['priority'] as int?,
+      asset: data['asset'] as String?,
+      priority: data['priority'] as String?,
       dueDate: data['dueDate'] != null
           ? (data['dueDate'] as Timestamp).toDate()
           : null,

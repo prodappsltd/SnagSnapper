@@ -24,31 +24,31 @@ service firebase.storage {
     }
 
     // ============== Profile Images ==============
-    // Path: users/{userId}/profile.jpg
-    match /users/{userId}/profile.jpg {
+    // Path: Profile/{userId}/profile.jpg
+    match /Profile/{userId}/profile.jpg {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
       allow delete: if isOwner(userId) && isEmailVerified();
     }
 
     // ============== Profile Signatures ==============
-    // Path: users/{userId}/signature.jpg
-    match /users/{userId}/signature.jpg {
+    // Path: Profile/{userId}/signature.jpg
+    match /Profile/{userId}/signature.jpg {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
       allow delete: if isOwner(userId) && isEmailVerified();
     }
 
     // Legacy signature path (png)
-    match /users/{userId}/signature.png {
+    match /Profile/{userId}/signature.png {
       allow read: if isOwner(userId);
       allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
       allow delete: if isOwner(userId) && isEmailVerified();
     }
 
     // ============== Site Images ==============
-    // Path: sites/{ownerUID}/{siteId}/site.jpg
-    match /sites/{ownerUID}/{siteId}/site.jpg {
+    // Path: Profile/{ownerUID}/Sites/{siteId}/site.jpg
+    match /Profile/{ownerUID}/Sites/{siteId}/site.jpg {
       // Only owner can read/write their site images
       allow read: if isOwner(ownerUID);
       allow write: if isOwner(ownerUID) && isEmailVerified() && isValidImage();
@@ -59,9 +59,9 @@ service firebase.storage {
       // - VIEW, FIXER, CONTRIBUTOR can read
     }
 
-    // ============== Snag Images ==============
-    // Path: snags/{ownerUID}/{siteId}/{snagId}/{fileName}
-    match /snags/{ownerUID}/{siteId}/{snagId}/{fileName} {
+    // ============== Snag Problem Photos ==============
+    // Path: Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/{fileName}
+    match /Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/{fileName} {
       // Only owner can read/write snag images
       allow read: if isOwner(ownerUID);
       allow write: if isOwner(ownerUID) && isEmailVerified() && isValidImage();
@@ -73,17 +73,15 @@ service firebase.storage {
       // - VIEW can only read
     }
 
-    // ============== Legacy Paths (backward compatibility) ==============
-    match /Profile/{userId}/ProfileImage/{fileName} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
-      allow delete: if isOwner(userId) && isEmailVerified();
-    }
+    // ============== Snag Fix Photos ==============
+    // Path: Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/fix/{fileName}
+    match /Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/fix/{fileName} {
+      // Only owner can read/write fix images
+      allow read: if isOwner(ownerUID);
+      allow write: if isOwner(ownerUID) && isEmailVerified() && isValidImage();
+      allow delete: if isOwner(ownerUID) && isEmailVerified();
 
-    match /Profile/{userId}/Signature/{fileName} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId) && isEmailVerified() && isValidImage();
-      allow delete: if isOwner(userId) && isEmailVerified();
+      // TODO: Add shared user access for fixers
     }
 
     // ============== Block all other access ==============

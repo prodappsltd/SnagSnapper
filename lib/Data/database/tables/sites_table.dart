@@ -61,6 +61,15 @@ class Sites extends Table {
   /// Map of user emails to permissions (stored as JSON)
   /// Format: {"email@example.com": "VIEW", "email2@example.com": "CONTRIBUTOR"}
   TextColumn get sharedWith => text().named('shared_with').withDefault(const Constant('{}'))();
+
+  // ============== Permission Settings (Owner-configurable) ==============
+  /// Whether WORKING members can see all snags (true) or only assigned (false)
+  /// Default: true - provides context without risk
+  BoolColumn get workingCanSeeAllSnags => boolean().named('working_can_see_all_snags').withDefault(const Constant(true))();
+
+  /// Whether CONTRIBUTOR members can edit snags created by others
+  /// Default: false - protects others' work
+  BoolColumn get contributorCanEditOthers => boolean().named('contributor_can_edit_others').withDefault(const Constant(false))();
   
   // ============== Statistics ==============
   /// Total number of snags in this site

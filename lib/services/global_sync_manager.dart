@@ -275,7 +275,7 @@ class GlobalSyncManager {
           print('GlobalSyncManager: No connection available, skipping sync - $reason');
         }
         // Notify UI that sync is waiting for connection
-        SyncEventBus.notifyStatus(SyncStatus.waitingForNetwork);
+        SyncEventBus.notifyStatus(SyncStatus.pending);
         return;
       }
       
@@ -297,7 +297,7 @@ class GlobalSyncManager {
           print('GlobalSyncManager: No sync needed - $reason');
         }
         // Notify UI that everything is up to date
-        SyncEventBus.notifyStatus(SyncStatus.success);
+        SyncEventBus.notifyStatus(SyncStatus.synced);
         return;
       }
       
@@ -321,31 +321,29 @@ class GlobalSyncManager {
       if (result.success) {
         if (kDebugMode) {
           print('GlobalSyncManager: Sync completed successfully');
-          print('  - Items synced: ${result.itemsSynced}');
-          print('  - Duration: ${result.duration?.inMilliseconds}ms');
+          print('  - Items synced: ${result.succeeded}');
         }
-        
+
         // Notify UI of success
-        SyncEventBus.notifyStatus(SyncStatus.success);
-        
+        SyncEventBus.notifyStatus(SyncStatus.synced);
+
         // Clear last sync attempt on success
         _lastSyncAttempt = null;
-        
+
       } else {
         if (kDebugMode) {
           print('GlobalSyncManager: Sync failed');
-          print('  - Error: ${result.error?.message}');
-          print('  - Code: ${result.error?.code}');
+          print('  - Error: ${result.message}');
         }
-        
+
         // Notify UI of error
-        final errorMessage = result.error?.message ?? 'Sync failed';
+        final errorMessage = result.message.isEmpty ? 'Sync failed' : result.message;
         SyncEventBus.notifyError(errorMessage);
         SyncEventBus.notifyStatus(SyncStatus.error);
-        
-        // Retry logic for certain error codes
-        if (result.error?.code == 'network_error' || 
-            result.error?.code == 'timeout') {
+
+        // Retry logic for certain conditions
+        if (result.message.contains('network') ||
+            result.message.contains('timeout')) {
           // Schedule retry with exponential backoff
           final retryDelay = Duration(seconds: 10);
           if (kDebugMode) {

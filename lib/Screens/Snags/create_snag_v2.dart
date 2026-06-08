@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:datetime_picker_formfield_new/datetime_picker_formfield.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,9 +8,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:snagsnapper/Data/colleague.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
-import 'package:snagsnapper/Data/snag.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
+import 'package:snagsnapper/Data/models/snag.dart';
+import 'package:snagsnapper/Data/models/image_slot.dart';
+import 'package:snagsnapper/Data/models/priority_level.dart';
+import 'package:snagsnapper/services/snag_image_service.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 /// Modern CreateSnag screen with improved UX and visual design
@@ -20,12 +23,14 @@ class CreateSnagV2 extends StatefulWidget {
   final Snag? snag;
   final String siteID;
   final String siteOwnersEmail;
+  final String siteOwnerUID;
 
   const CreateSnagV2({
     super.key,
     required this.snag,
     required this.siteID,
     required this.siteOwnersEmail,
+    required this.siteOwnerUID,
   });
 
   @override
@@ -42,17 +47,17 @@ class _CreateSnagV2State extends State<CreateSnagV2>
 
   // Form fields
   final _locationController = TextEditingController();
+  final _assetController = TextEditingController();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  // Images (base64)
-  String _mainImage = '';
-  String _image2 = '';
-  String _image3 = '';
-  String _image4 = '';
+  // Images - 6 slots using ImageSlot model (file-based, not base64)
+  late List<ImageSlot> _images;
+  late String _snagId; // Generated once for new snags, used for image paths
 
   // Other fields
-  int _priority = 0;
+  int _priority = 0; // Index into _priorities list
+  List<PriorityLevel> _priorities = PriorityLevel.defaults;
   DateTime? _dueDate;
   String _assignedEmail = '';
   String _assignedName = '';
@@ -64,6 +69,7 @@ class _CreateSnagV2State extends State<CreateSnagV2>
 
   // Focus nodes
   final _locationFocus = FocusNode();
+  final _assetFocus = FocusNode();
   final _titleFocus = FocusNode();
   final _descriptionFocus = FocusNode();
 
@@ -71,6 +77,12 @@ class _CreateSnagV2State extends State<CreateSnagV2>
   void initState() {
     super.initState();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+    // Initialize snagId - use existing or generate new
+    _snagId = widget.snag?.id ?? const Uuid().v4();
+
+    // Initialize images - 6 empty slots (will be populated in _initializeForm)
+    _images = List.generate(6, (_) => ImageSlot.empty);
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -89,17 +101,23 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     final appUser = Provider.of<CP>(context, listen: false).getAppUser();
     _isOwner = appUser?.email.toLowerCase() == widget.siteOwnersEmail.toLowerCase();
 
+    // Load priorities from user's profile (or use defaults)
+    if (appUser?.priorities != null && appUser!.priorities!.isNotEmpty) {
+      _priorities = appUser.priorities!;
+    } else {
+      _priorities = PriorityLevel.defaults;
+    }
+
     if (widget.snag != null) {
       _isNewSnag = false;
       final snag = widget.snag!;
       _locationController.text = snag.location ?? '';
+      _assetController.text = snag.asset ?? '';
       _titleController.text = snag.title;
       _descriptionController.text = snag.description ?? '';
-      _mainImage = snag.imageMain1 ?? '';
-      _image2 = snag.image2 ?? '';
-      _image3 = snag.image3 ?? '';
-      _image4 = snag.image4 ?? '';
-      _priority = snag.priority;
+      // Load images from NEW model (List<ImageSlot>)
+      _images = List.from(snag.images);
+      _priority = _priorityCodeToIndex(snag.priority);
       _dueDate = snag.dueDate;
       _assignedEmail = snag.assignedEmail ?? '';
       _assignedName = snag.assignedName ?? '';
@@ -111,9 +129,11 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     _animationController.dispose();
     _scrollController.dispose();
     _locationController.dispose();
+    _assetController.dispose();
     _titleController.dispose();
     _descriptionController.dispose();
     _locationFocus.dispose();
+    _assetFocus.dispose();
     _titleFocus.dispose();
     _descriptionFocus.dispose();
     super.dispose();
@@ -133,11 +153,11 @@ class _CreateSnagV2State extends State<CreateSnagV2>
           // App Bar
           _buildAppBar(colorScheme),
 
-          // Main Image Section
+          // Image Grid Section (6 slots)
           SliverToBoxAdapter(
             child: FadeTransition(
               opacity: _fadeAnimation,
-              child: _buildMainImageSection(colorScheme),
+              child: _buildImageGrid(colorScheme),
             ),
           ),
 
@@ -146,14 +166,6 @@ class _CreateSnagV2State extends State<CreateSnagV2>
             child: FadeTransition(
               opacity: _fadeAnimation,
               child: _buildFormSection(colorScheme),
-            ),
-          ),
-
-          // Supporting Images Section
-          SliverToBoxAdapter(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: _buildSupportingImagesSection(colorScheme),
             ),
           ),
 
@@ -263,109 +275,198 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     );
   }
 
-  Widget _buildMainImageSection(ColorScheme colorScheme) {
+  Widget _buildImageGrid(ColorScheme colorScheme) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             children: [
-              Icon(
-                Icons.camera_alt_rounded,
-                size: 20,
-                color: colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Main Photo',
-                style: GoogleFonts.montserrat(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  'Required',
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onPrimaryContainer,
-                  ),
+                child: Icon(
+                  Icons.photo_library_rounded,
+                  color: colorScheme.onPrimaryContainer,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Problem Photos',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      'Add up to 6 photos documenting the issue',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () => _pickMainImage(),
-            child: Container(
-              height: 220,
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: _mainImage.isEmpty
-                      ? colorScheme.primary.withValues(alpha: 0.3)
-                      : Colors.transparent,
-                  width: 2,
-                  strokeAlign: BorderSide.strokeAlignOutside,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.shadow.withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: _mainImage.isNotEmpty
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _buildBase64Image(_mainImage),
-                          Positioned(
-                            top: 12,
-                            right: 12,
-                            child: Row(
-                              children: [
-                                _buildImageActionButton(
-                                  icon: Icons.edit_rounded,
-                                  onTap: () => _pickMainImage(),
-                                  colorScheme: colorScheme,
-                                ),
-                                const SizedBox(width: 8),
-                                _buildImageActionButton(
-                                  icon: Icons.delete_rounded,
-                                  onTap: () => setState(() => _mainImage = ''),
-                                  colorScheme: colorScheme,
-                                  isDestructive: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    : _buildEmptyImagePlaceholder(
-                        icon: Icons.add_a_photo_rounded,
-                        label: 'Add main photo of the snag',
-                        colorScheme: colorScheme,
-                      ),
-              ),
+          const SizedBox(height: 16),
+          // 2x3 Grid of image slots
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1,
+            ),
+            itemCount: 6,
+            itemBuilder: (context, index) => _buildImageSlot(
+              index: index,
+              colorScheme: colorScheme,
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildImageSlot({
+    required int index,
+    required ColorScheme colorScheme,
+  }) {
+    final slot = _images[index];
+    final hasImage = slot.hasImage;
+
+    return GestureDetector(
+      onTap: () => _pickImageForSlot(index),
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: hasImage
+                ? Colors.transparent
+                : colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: hasImage
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildFileImage(slot.localPath!),
+                    // Slot number badge
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Delete button
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () => _removeImageFromSlot(index),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.9),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_rounded,
+                      size: 28,
+                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${index + 1}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  /// Build image from local file path
+  Widget _buildFileImage(String relativePath) {
+    return FutureBuilder<String>(
+      future: _getAbsolutePath(relativePath),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        final file = File(snapshot.data!);
+        if (!file.existsSync()) {
+          return _buildBrokenImagePlaceholder();
+        }
+        return Image.file(
+          file,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildBrokenImagePlaceholder(),
+        );
+      },
+    );
+  }
+
+  Future<String> _getAbsolutePath(String relativePath) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return '${appDir.path}/$relativePath';
   }
 
   Widget _buildFormSection(ColorScheme colorScheme) {
@@ -420,44 +521,51 @@ class _CreateSnagV2State extends State<CreateSnagV2>
             const SizedBox(height: 24),
 
             // Location Field
+            // SYNC: Firebase rules enforce max 200 chars. Update firestore.rules if changed.
             _buildTextField(
               controller: _locationController,
               focusNode: _locationFocus,
-              label: 'Location / Room No.',
+              label: 'Location',
               hint: 'e.g., Kitchen, Bedroom 1, Bathroom',
               icon: Icons.location_on_rounded,
-              required: true,
+              required: false,
               colorScheme: colorScheme,
               textInputAction: TextInputAction.next,
-              onSubmitted: (_) => _titleFocus.requestFocus(),
+              onSubmitted: (_) => _assetFocus.requestFocus(),
+              maxLength: 200,
             ),
             const SizedBox(height: 16),
 
-            // Title Field
+            // Asset Field
+            // SYNC: Firebase rules enforce max 200 chars. Update firestore.rules if changed.
             _buildTextField(
-              controller: _titleController,
-              focusNode: _titleFocus,
-              label: 'Title',
-              hint: 'Brief description of the issue',
-              icon: Icons.title_rounded,
-              required: true,
+              controller: _assetController,
+              focusNode: _assetFocus,
+              label: 'Asset / Room No.',
+              hint: 'e.g., Boiler #123, Room 101, Window W-5',
+              icon: Icons.inventory_2_rounded,
+              required: false,
               colorScheme: colorScheme,
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => _descriptionFocus.requestFocus(),
+              maxLength: 200,
             ),
             const SizedBox(height: 16),
 
-            // Description Field
+            // Description Field (adaptive height, multiline)
+            // SYNC: Firebase rules enforce max 5000 chars. Update firestore.rules if changed.
             _buildTextField(
               controller: _descriptionController,
               focusNode: _descriptionFocus,
-              label: 'Detailed Description',
-              hint: 'Provide more details about the snag...',
+              label: 'Description',
+              hint: 'Describe the snag in detail...',
               icon: Icons.notes_rounded,
               required: false,
               colorScheme: colorScheme,
-              maxLines: 4,
-              textInputAction: TextInputAction.done,
+              maxLines: null, // Unlimited lines
+              minLines: 3,
+              maxLength: 5000,
+              textInputAction: TextInputAction.newline, // Enter creates new line
             ),
           ],
         ),
@@ -473,7 +581,9 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     required IconData icon,
     required bool required,
     required ColorScheme colorScheme,
-    int maxLines = 1,
+    int? maxLines = 1,
+    int? minLines,
+    int? maxLength,
     TextInputAction? textInputAction,
     void Function(String)? onSubmitted,
   }) {
@@ -507,6 +617,9 @@ class _CreateSnagV2State extends State<CreateSnagV2>
           controller: controller,
           focusNode: focusNode,
           maxLines: maxLines,
+          minLines: minLines,
+          maxLength: maxLength,
+          keyboardType: maxLines == null ? TextInputType.multiline : TextInputType.text,
           textInputAction: textInputAction,
           textCapitalization: TextCapitalization.sentences,
           onFieldSubmitted: onSubmitted,
@@ -556,166 +669,11 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     );
   }
 
-  Widget _buildSupportingImagesSection(ColorScheme colorScheme) {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.photo_library_rounded,
-                  color: colorScheme.onSecondaryContainer,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Supporting Photos',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Add up to 3 additional photos',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildSmallImagePicker(
-                  image: _image2,
-                  onPick: () => _pickSupportingImage(2),
-                  onDelete: () => setState(() => _image2 = ''),
-                  colorScheme: colorScheme,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSmallImagePicker(
-                  image: _image3,
-                  onPick: () => _pickSupportingImage(3),
-                  onDelete: () => setState(() => _image3 = ''),
-                  colorScheme: colorScheme,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSmallImagePicker(
-                  image: _image4,
-                  onPick: () => _pickSupportingImage(4),
-                  onDelete: () => setState(() => _image4 = ''),
-                  colorScheme: colorScheme,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSmallImagePicker({
-    required String image,
-    required VoidCallback onPick,
-    required VoidCallback onDelete,
-    required ColorScheme colorScheme,
-  }) {
-    return GestureDetector(
-      onTap: image.isEmpty ? onPick : null,
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: Container(
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: image.isNotEmpty
-                ? Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _buildBase64Image(image),
-                      Positioned(
-                        top: 4,
-                        right: 4,
-                        child: GestureDetector(
-                          onTap: onDelete,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.close_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.add_photo_alternate_rounded,
-                        size: 28,
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Add',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildPrioritySection(ColorScheme colorScheme) {
+    final selectedPriority = _priorities.isNotEmpty && _priority < _priorities.length
+        ? _priorities[_priority]
+        : null;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
@@ -729,6 +687,7 @@ class _CreateSnagV2State extends State<CreateSnagV2>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             children: [
               Container(
@@ -755,88 +714,131 @@ class _CreateSnagV2State extends State<CreateSnagV2>
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildPriorityChip(
-                  label: 'Low',
-                  value: 0,
-                  color: Colors.green,
-                  colorScheme: colorScheme,
-                ),
+
+          // Segmented button bar
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colorScheme.outlineVariant,
+                width: 1,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildPriorityChip(
-                  label: 'Medium',
-                  value: 1,
-                  color: Colors.orange,
-                  colorScheme: colorScheme,
-                ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: Row(
+                children: List.generate(_priorities.length, (index) {
+                  return Expanded(
+                    child: _buildPrioritySegment(
+                      priority: _priorities[index],
+                      index: index,
+                      isFirst: index == 0,
+                      isLast: index == _priorities.length - 1,
+                      colorScheme: colorScheme,
+                    ),
+                  );
+                }),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildPriorityChip(
-                  label: 'High',
-                  value: 2,
-                  color: Colors.red,
-                  colorScheme: colorScheme,
-                ),
-              ),
-            ],
+            ),
           ),
+
+          // Description info box
+          if (selectedPriority != null) ...[
+            const SizedBox(height: 12),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _getPriorityColor(_priority).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _getPriorityColor(_priority).withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: _getPriorityColor(_priority),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      selectedPriority.description,
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        color: colorScheme.onSurface,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildPriorityChip({
-    required String label,
-    required int value,
-    required Color color,
+  /// Get color for priority based on severity index
+  /// Index 0 = lowest severity (green), Index 4 = highest severity (red)
+  Color _getPriorityColor(int index) {
+    switch (index) {
+      case 0:
+        return const Color(0xFF4CAF50); // Green - OK
+      case 1:
+        return const Color(0xFF8BC34A); // Light Green - OBS
+      case 2:
+        return const Color(0xFFFFC107); // Amber - CAT3
+      case 3:
+        return const Color(0xFFFF9800); // Orange - CAT2
+      case 4:
+        return const Color(0xFFF44336); // Red - CAT1
+      default:
+        return const Color(0xFF9E9E9E); // Grey
+    }
+  }
+
+  Widget _buildPrioritySegment({
+    required PriorityLevel priority,
+    required int index,
+    required bool isFirst,
+    required bool isLast,
     required ColorScheme colorScheme,
   }) {
-    final isSelected = _priority == value;
+    final isSelected = _priority == index;
+    final color = _getPriorityColor(index);
+
     return GestureDetector(
-      onTap: () => setState(() => _priority = value),
+      onTap: () => setState(() => _priority = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
           color: isSelected ? color : colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected ? color : colorScheme.outlineVariant,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+          border: Border(
+            right: isLast
+                ? BorderSide.none
+                : BorderSide(
+                    color: colorScheme.outlineVariant,
+                    width: 1,
                   ),
-                ]
-              : null,
+          ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.flag_rounded,
-              size: 18,
-              color: isSelected ? Colors.white : color,
+        child: Center(
+          child: Text(
+            priority.code,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.white : colorScheme.onSurface,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : colorScheme.onSurface,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -890,8 +892,14 @@ class _CreateSnagV2State extends State<CreateSnagV2>
               fontSize: 15,
               color: colorScheme.onSurface,
             ),
-            initialValue: _dueDate,
-            onChanged: (date) => setState(() => _dueDate = date),
+            // Display in local time (UTC midnight shows correct date in all timezones)
+            initialValue: _dueDate?.toLocal(),
+            // TIMEZONE: Normalize to UTC midnight for cross-timezone consistency
+            onChanged: (date) => setState(() {
+              _dueDate = date != null
+                  ? DateTime.utc(date.year, date.month, date.day)
+                  : null;
+            }),
             decoration: InputDecoration(
               hintText: 'Select due date',
               hintStyle: GoogleFonts.inter(
@@ -929,7 +937,7 @@ class _CreateSnagV2State extends State<CreateSnagV2>
               return showDatePicker(
                 context: context,
                 firstDate: DateTime.now(),
-                initialDate: _dueDate ?? DateTime.now(),
+                initialDate: _dueDate?.toLocal() ?? DateTime.now(),
                 lastDate: DateTime(2100),
                 builder: (context, child) {
                   return Theme(
@@ -1042,7 +1050,7 @@ class _CreateSnagV2State extends State<CreateSnagV2>
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '${_countImages()}/4',
+                  '${_countImages()}/6',
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.w600,
                     color: colorScheme.onSurface,
@@ -1081,89 +1089,6 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     );
   }
 
-  Widget _buildImageActionButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    required ColorScheme colorScheme,
-    bool isDestructive = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: isDestructive
-              ? Colors.red.withValues(alpha: 0.9)
-              : Colors.black.withValues(alpha: 0.5),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: Colors.white, size: 20),
-      ),
-    );
-  }
-
-  Widget _buildEmptyImagePlaceholder({
-    required IconData icon,
-    required String label,
-    required ColorScheme colorScheme,
-  }) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: colorScheme.primary.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            icon,
-            size: 40,
-            color: colorScheme.primary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            color: colorScheme.onSurfaceVariant,
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: colorScheme.primary,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            'Tap to add',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: colorScheme.onPrimary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBase64Image(String base64String) {
-    try {
-      final bytes = base64Decode(base64String);
-      return Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildBrokenImagePlaceholder(),
-      );
-    } catch (e) {
-      return _buildBrokenImagePlaceholder();
-    }
-  }
-
   Widget _buildBrokenImagePlaceholder() {
     return Container(
       color: Colors.grey[200],
@@ -1173,37 +1098,92 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     );
   }
 
-  // Image picking methods
-  Future<void> _pickMainImage() async {
-    final result = await _showImagePickerSheet();
-    if (result != null) {
-      setState(() => _mainImage = result);
-    }
-  }
+  // Image picking methods using SnagImageService
+  Future<void> _pickImageForSlot(int index) async {
+    final source = await _showImageSourceSheet();
+    if (source == null || !mounted) return;
 
-  Future<void> _pickSupportingImage(int index) async {
-    final result = await _showImagePickerSheet();
-    if (result != null) {
-      setState(() {
-        switch (index) {
-          case 2:
-            _image2 = result;
-            break;
-          case 3:
-            _image3 = result;
-            break;
-          case 4:
-            _image4 = result;
-            break;
+    try {
+      final cp = Provider.of<CP>(context, listen: false);
+      final appUser = cp.getAppUser();
+      if (appUser == null) return;
+
+      final snagImageService = SnagImageService.instance;
+
+      // For NEW snags + Gallery: use multi-pick to fill available slots
+      if (_isNewSnag && source == ImageSource.gallery) {
+        final results = await snagImageService.pickMultipleImages(
+          userId: appUser.id,
+          siteId: widget.siteID,
+          snagId: _snagId,
+          ownerUID: widget.siteOwnerUID,
+          currentSlots: _images,
+          isFix: false,
+        );
+
+        if (results.isNotEmpty && mounted) {
+          setState(() {
+            for (final (slotIndex, slot) in results) {
+              _images[slotIndex] = slot;
+            }
+          });
         }
-      });
+        return;
+      }
+
+      // For EXISTING snags or Camera: single pick
+      final updatedSlot = await snagImageService.pickImage(
+        source: source,
+        snag: widget.snag, // null for new snag, existing for edit
+        slotIndex: index,
+        isFix: false, // Problem photos, not fix photos
+        userId: appUser.id,
+        siteId: widget.siteID,
+        snagId: _snagId,
+        ownerUID: widget.siteOwnerUID, // TODO: Should be ownerUID, not email
+      );
+
+      if (updatedSlot != null && mounted) {
+        setState(() {
+          _images[index] = updatedSlot;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     }
   }
 
-  Future<String?> _showImagePickerSheet() async {
+  Future<void> _removeImageFromSlot(int index) async {
+    try {
+      final snagImageService = SnagImageService.instance;
+      final updatedSlot = await snagImageService.removeImage(
+        snag: widget.snag,
+        slotIndex: index,
+        isFix: false,
+      );
+
+      if (mounted) {
+        setState(() {
+          _images[index] = updatedSlot;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error removing image: $e');
+    }
+  }
+
+  Future<ImageSource?> _showImageSourceSheet() async {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return showModalBottomSheet<String>(
+    return showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
@@ -1239,13 +1219,13 @@ class _CreateSnagV2State extends State<CreateSnagV2>
                   _buildPickerOption(
                     icon: Icons.camera_alt_rounded,
                     label: 'Camera',
-                    onTap: () => _pickImage(ImageSource.camera),
+                    onTap: () => Navigator.pop(context, ImageSource.camera),
                     colorScheme: colorScheme,
                   ),
                   _buildPickerOption(
                     icon: Icons.photo_library_rounded,
                     label: 'Gallery',
-                    onTap: () => _pickImage(ImageSource.gallery),
+                    onTap: () => Navigator.pop(context, ImageSource.gallery),
                     colorScheme: colorScheme,
                   ),
                 ],
@@ -1289,44 +1269,8 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     );
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final picker = ImagePicker();
-      final image = await picker.pickImage(
-        source: source,
-        maxWidth: 1000,
-        maxHeight: 1000,
-      );
-
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        final base64String = base64Encode(bytes);
-        if (mounted) {
-          Navigator.pop(context, base64String);
-        }
-      } else {
-        if (mounted) Navigator.pop(context);
-      }
-    } on PlatformException catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Camera/gallery permission required: ${e.message}'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
-
   int _countImages() {
-    int count = 0;
-    if (_mainImage.isNotEmpty) count++;
-    if (_image2.isNotEmpty) count++;
-    if (_image3.isNotEmpty) count++;
-    if (_image4.isNotEmpty) count++;
-    return count;
+    return _images.where((slot) => slot.hasImage).length;
   }
 
   String _formatDate(DateTime date) {
@@ -1352,9 +1296,13 @@ class _CreateSnagV2State extends State<CreateSnagV2>
               child: const Text('Keep Editing'),
             ),
             FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pop(context);
+              onPressed: () async {
+                Navigator.pop(context); // Close dialog
+
+                // Cleanup orphan images for NEW snag before navigating away
+                await _cleanupOrphanImagesIfNeeded();
+
+                if (mounted) Navigator.pop(context); // Close screen
               },
               child: const Text('Discard'),
             ),
@@ -1366,20 +1314,80 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     }
   }
 
+  /// Cleanup orphan image files for NEW snags that were never saved.
+  /// Only needed for NEW snags - EXISTING snags use instant DB operations.
+  Future<void> _cleanupOrphanImagesIfNeeded() async {
+    // Only cleanup for NEW snags with images
+    if (!_isNewSnag) {
+      if (kDebugMode) {
+        print('CreateSnagV2: Skip cleanup - editing existing snag');
+      }
+      return;
+    }
+
+    final hasImages = _images.any((slot) => slot.hasImage);
+    if (!hasImages) {
+      if (kDebugMode) {
+        print('CreateSnagV2: Skip cleanup - no images to cleanup');
+      }
+      return;
+    }
+
+    try {
+      final appUser = Provider.of<CP>(context, listen: false).getAppUser();
+      if (appUser == null) {
+        if (kDebugMode) {
+          print('CreateSnagV2: Skip cleanup - no user');
+        }
+        return;
+      }
+
+      if (kDebugMode) {
+        print('CreateSnagV2: Cleaning up orphan images for unsaved snag $_snagId');
+        print('  - userId: ${appUser.id}');
+        print('  - siteId: ${widget.siteID}');
+        print('  - images to cleanup: ${_images.where((s) => s.hasImage).length}');
+      }
+
+      await SnagImageService.instance.cleanupOrphanedImages(
+        userId: appUser.id,
+        siteId: widget.siteID,
+        snagId: _snagId,
+      );
+
+      if (kDebugMode) {
+        print('CreateSnagV2: Orphan image cleanup complete');
+      }
+    } catch (e) {
+      // Don't block navigation on cleanup failure
+      if (kDebugMode) {
+        print('CreateSnagV2: Error cleaning up orphan images: $e');
+      }
+    }
+  }
+
   bool _hasChanges() {
     if (_isNewSnag) {
       return _locationController.text.isNotEmpty ||
-          _titleController.text.isNotEmpty ||
+          _assetController.text.isNotEmpty ||
           _descriptionController.text.isNotEmpty ||
-          _mainImage.isNotEmpty;
+          _images.any((slot) => slot.hasImage);
     }
     // For editing, check if values changed from original
     final snag = widget.snag!;
+    // Check if any image slot changed
+    bool imagesChanged = false;
+    for (int i = 0; i < 6; i++) {
+      if (_images[i].localPath != snag.images[i].localPath) {
+        imagesChanged = true;
+        break;
+      }
+    }
     return _locationController.text != (snag.location ?? '') ||
-        _titleController.text != snag.title ||
+        _assetController.text != (snag.asset ?? '') ||
         _descriptionController.text != (snag.description ?? '') ||
-        _mainImage != (snag.imageMain1 ?? '') ||
-        _priority != snag.priority;
+        _priority != _priorityCodeToIndex(snag.priority) ||
+        imagesChanged;
   }
 
   Future<void> _saveSnag() async {
@@ -1390,50 +1398,89 @@ class _CreateSnagV2State extends State<CreateSnagV2>
     setState(() => _isSaving = true);
 
     try {
-      final cp = Provider.of<CP>(context, listen: false);
-      final appUser = cp.getAppUser()!;
+      final database = AppDatabase.instance;
+      final snagDao = database.snagDao;
 
-      Snag snag;
+      // Get AppUser for creator email
+      final appUser = Provider.of<CP>(context, listen: false).getAppUser();
+      if (appUser == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Get Site to obtain correct ownerUID
+      final site = await database.siteDao.getSiteById(widget.siteID);
+      if (site == null) {
+        throw Exception('Site not found');
+      }
+
+      final now = DateTime.now();
+
+      // Title field is unused - always empty
+      // SYNC: Firebase rules enforce title.size() == 0. Update firestore.rules if changed.
+      const String title = '';
+
       if (_isNewSnag) {
-        snag = Snag(
-          uID: const Uuid().v4(),
+        // === NEW SNAG: Insert with images from UI state ===
+        final snag = Snag(
+          id: _snagId,
           siteUID: widget.siteID,
-          ownerEmail: widget.siteOwnersEmail,
-          creatorEmail: appUser.email.toLowerCase(),
-          location: _locationController.text.trim(),
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
-          priority: _priority,
+          ownerEmail: site.ownerEmail,
+          creatorEmail: appUser.email,
+          title: title,
+          description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+          location: _locationController.text.isEmpty ? null : _locationController.text,
+          asset: _assetController.text.isEmpty ? null : _assetController.text,
+          priority: _indexToPriorityCode(_priority),
           dueDate: _dueDate,
-          creationDate: DateTime.now(),
-          imageMain1: _mainImage,
-          image2: _image2,
-          image3: _image3,
-          image4: _image4,
-          assignedEmail: _assignedEmail,
-          assignedName: _assignedName,
-          snagStatus: true,
-          snagConfirmedStatus: true,
+          creationDate: now,
+          images: _images, // Include images from UI state
+          fixImages: ImageSlot.emptyList(),
+          snagStatus: true, // Open
+          snagConfirmedStatus: true, // Pending
+          needsSnagSync: true, // Mark for Firebase sync
+          needsImagesSync: _images.any((s) => s.needsSync),
+          localVersion: 1,
+          firebaseVersion: 0,
+          createdAt: now,
+          updatedAt: now,
         );
-        await cp.addSnag(snag);
+
+        await snagDao.insertSnag(snag);
+
+        if (kDebugMode) {
+          print('CreateSnagV2: Created new snag $_snagId');
+          print('  - Images: ${_images.where((s) => s.hasImage).length}');
+          print('  - needsSnagSync: true, needsImagesSync: ${snag.needsImagesSync}');
+        }
       } else {
-        snag = widget.snag!;
-        snag.location = _locationController.text.trim();
-        snag.title = _titleController.text.trim();
-        snag.description = _descriptionController.text.trim();
-        snag.priority = _priority;
-        snag.dueDate = _dueDate;
-        snag.imageMain1 = _mainImage;
-        snag.image2 = _image2;
-        snag.image3 = _image3;
-        snag.image4 = _image4;
-        snag.assignedEmail = _assignedEmail;
-        snag.assignedName = _assignedName;
-        await cp.updateSnag(snag);
+        // === EXISTING SNAG: Update text fields only (images are instant) ===
+        // Fetch current snag from DB to preserve latest image state
+        final currentSnag = await snagDao.getSnagById(_snagId);
+        if (currentSnag == null) {
+          throw Exception('Snag not found');
+        }
+
+        // Apply text field changes (images preserved from DB)
+        final updatedSnag = currentSnag.copyWith(
+          title: title,
+          description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+          location: _locationController.text.isEmpty ? null : _locationController.text,
+          asset: _assetController.text.isEmpty ? null : _assetController.text,
+          priority: _indexToPriorityCode(_priority),
+          dueDate: _dueDate,
+          // Note: updateSnag() handles localVersion++, updatedAt, needsSnagSync
+        );
+
+        await snagDao.updateSnag(updatedSnag);
+
+        if (kDebugMode) {
+          print('CreateSnagV2: Updated existing snag $_snagId');
+          print('  - Images preserved: ${currentSnag.imageCount}');
+        }
       }
 
       if (mounted) {
-        Navigator.pop(context, snag);
+        Navigator.pop(context);
       }
     } catch (e) {
       if (kDebugMode) print('Error saving snag: $e');
@@ -1450,5 +1497,24 @@ class _CreateSnagV2State extends State<CreateSnagV2>
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  // ============== Priority Helpers ==============
+
+  /// Convert priority code (e.g., "CAT1") to UI index (0-4)
+  /// Uses loaded _priorities from user's profile
+  int _priorityCodeToIndex(String? code) {
+    if (code == null || code.isEmpty) return 0;
+    final index = _priorities.indexWhere((p) => p.code == code);
+    return index >= 0 ? index : 0;
+  }
+
+  /// Convert UI index (0-4) to priority code (e.g., "CAT1")
+  /// Uses loaded _priorities from user's profile
+  String _indexToPriorityCode(int index) {
+    if (index >= 0 && index < _priorities.length) {
+      return _priorities[index].code;
+    }
+    return _priorities.isNotEmpty ? _priorities[0].code : 'OK';
   }
 }

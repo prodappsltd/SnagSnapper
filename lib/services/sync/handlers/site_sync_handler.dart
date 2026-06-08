@@ -13,9 +13,11 @@ import 'package:snagsnapper/services/image_storage_service.dart';
 /// - Sync flags track what needs uploading
 /// - Background sync uploads to Firebase when online
 ///
-/// Firebase paths:
+/// Firebase paths (Profile-centric structure):
 /// - Site data: Profile/{ownerUID}/Sites/{siteID} (Firestore)
-/// - Site image: sites/{ownerUID}/{siteID}/site.jpg (Storage)
+/// - Site image: Profile/{ownerUID}/Sites/{siteID}/site.jpg (Storage)
+///
+/// SYNC: Paths must match firestore.rules and storage.rules
 class SiteSyncHandler {
   final AppDatabase database;
   final FirebaseFirestore firestore;
@@ -266,7 +268,8 @@ class SiteSyncHandler {
         }
 
         // Upload to Firebase Storage
-        final storagePath = 'sites/${site.ownerUID}/$siteId/site.jpg';
+        // SYNC: Path must match storage.rules
+        final storagePath = 'Profile/${site.ownerUID}/Sites/$siteId/site.jpg';
         final imageBytes = imageFile.readAsBytesSync();
 
         final storageRef = storage.ref(storagePath);

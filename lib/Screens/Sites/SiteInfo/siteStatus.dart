@@ -1,3 +1,5 @@
+// LEGACY FILE - Replaced by site_status_v2.dart
+// TODO: Delete this file after confirming site_status_v2.dart works in production
 import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,11 +15,14 @@ import 'package:rflutter_alert/rflutter_alert.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:snagsnapper/Constants/constants.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
+import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/site.dart';
-import 'package:snagsnapper/Data/snag.dart';
+import 'package:snagsnapper/Data/models/snag.dart';
 import 'package:snagsnapper/Helper/purchasesHelper.dart';
-import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart';
-import 'package:snagsnapper/Screens/Snags/CreateEditSnag.dart';
+// import 'package:snagsnapper/Screens/Sites/SiteInfo/siteInfo.dart'; // BACKUP - legacy UI
+import 'package:snagsnapper/Screens/Sites/SiteInfo/site_info_v2.dart';
+// import 'package:snagsnapper/Screens/Snags/CreateEditSnag.dart'; // DELETED - use CreateSnagV2
+import 'package:snagsnapper/Screens/Snags/create_snag_v2.dart';
 import 'package:snagsnapper/Screens/Snags/snagDetailedView.dart';
 import 'package:snagsnapper/Widgets/reportCardView.dart';
 import 'package:snagsnapper/Widgets/snagCardView.dart';
@@ -355,7 +360,8 @@ class _SiteStatusState extends State<SiteStatus> {
   @override
   Widget build(BuildContext context) {
     viewPermission = widget.site.sharedWith[Provider.of<CP>(context, listen:false).getAppUser()!.email.toLowerCase()] == 'VIEW';
-    snags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.id);
+    // TODO: LEGACY - snags need to be loaded asynchronously from SnagDao
+    // snags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.id);
     if (selectionText == ALL_SNAGS) setState(() => displaySnags = snags);
     viewAccess = widget.site.sharedWith[Provider.of<CP>(context, listen:false).getAppUser()!.email.toLowerCase()] == 'VIEW';
 
@@ -776,10 +782,11 @@ class _SiteStatusState extends State<SiteStatus> {
                 Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (context) => CreateSnag(
+                        builder: (context) => CreateSnagV2(
                               snag: null,
                               siteID: widget.site.id,
                               siteOwnersEmail: widget.site.ownerEmail,
+                              siteOwnerUID: widget.site.ownerUID,
                             )));
 
               },
@@ -832,7 +839,7 @@ class _SiteStatusState extends State<SiteStatus> {
               String email = FirebaseAuth.instance.currentUser!.email!;
               if (kDebugMode) print('SiteStatus: Owner Email: ${widget.site.ownerEmail} - Firebase Email: $email');
               if (widget.site.ownerEmail.toLowerCase() == email.toLowerCase()) {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => SiteInfo(widget.site)));
+                Navigator.push(context, MaterialPageRoute(builder: (context) => SiteInfoV2(widget.site)));
               }
             },
             child: SizedBox(
@@ -969,7 +976,8 @@ class _SiteStatusState extends State<SiteStatus> {
                     },
                     onDismissed: (direction) async {
                       if (direction == DismissDirection.endToStart) {
-                        await Provider.of<CP>(context, listen:false).deleteSnag(displaySnags[index]);
+                        // TODO: LEGACY - use SnagDao for deletion
+                        await AppDatabase.instance.snagDao.deleteSnag(displaySnags[index].id);
                         setState(() {
                           //snags.remove(displaySnags[index]);
                           displaySnags.removeAt(index);
@@ -977,7 +985,7 @@ class _SiteStatusState extends State<SiteStatus> {
                       }
                     },
                     child: SnagCardView(
-                        key: Key((displaySnags[index]).uID),
+                        key: Key((displaySnags[index]).id),
                         snag: displaySnags[index],
                         callBack: () {
                           Navigator.push(
@@ -987,6 +995,7 @@ class _SiteStatusState extends State<SiteStatus> {
                                         snag: displaySnags[index],
                                         siteID: widget.site.id,
                                         siteOwnersEmail: widget.site.ownerEmail,
+                                        siteOwnerUID: widget.site.ownerUID,
                                       )));
                         }),
                   );
@@ -999,7 +1008,8 @@ class _SiteStatusState extends State<SiteStatus> {
 
   _createPDFAndView(BuildContext context, int result) async {
     setState(() => createPDFInProgress = true);
-    var listOfSnags = Provider.of<CP>(context, listen:false).getListOfSnags(widget.site.id);
+    // TODO: LEGACY - load snags asynchronously from SnagDao
+    final listOfSnags = await AppDatabase.instance.snagDao.getSnagsBySite(widget.site.id);
     var listOfChosenSnags = <Snag>[];
     if (result>0) {
       listOfSnags.forEach((Snag snag) {

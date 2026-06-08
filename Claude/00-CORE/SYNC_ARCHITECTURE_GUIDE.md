@@ -1,7 +1,7 @@
 # Sync Architecture Guide
 **Version**: 1.1.0
-**Last Updated**: 2025-06-06
-**Status**: Production Ready (Profile + Sites modules implemented)
+**Last Updated**: 2026-06-08
+**Status**: Production Ready (Profile + Sites + Snags data layer implemented)
 
 ---
 
@@ -302,7 +302,7 @@ class Site {
 
   // Site Image (single image, fixed path)
   final String? imageLocalPath;       // Local: SnagSnapper/{uid}/Sites/{siteId}/site.jpg
-  final String? imageFirebasePath;    // Firebase: sites/{ownerUID}/{siteId}/site.jpg
+  final String? imageFirebasePath;    // Firebase: Profile/{ownerUID}/Sites/{siteId}/site.jpg
 
   // Sharing
   final Map<String, String> sharedWith;  // {email: VIEW|FIXER|CONTRIBUTOR}
@@ -917,6 +917,7 @@ When implementing sync for a new module:
 |---------|------|---------|
 | 1.0.0 | 2025-08-22 | Initial version based on Profile implementation |
 | 1.1.0 | 2025-06-06 | Sites module implemented with instant image ops |
+| 1.2.0 | 2026-06-08 | Snags data layer + sync handler, Profile-centric paths |
 
 ---
 
@@ -929,9 +930,16 @@ This architecture has been thoroughly tested with Profile and Sites modules:
 - Large media files ✅
 - Concurrent device usage ✅
 
-### Sites Module Implementation Notes (2025-06-06)
+### Sites Module Implementation Notes (2026-06-06)
 - **Instant Image Operations**: Pick/Remove are independent of Save button
-- **Fixed Paths**: `sites/{ownerUID}/{siteId}/site.jpg` - no orphan cleanup needed
+- **Fixed Paths**: `Profile/{ownerUID}/Sites/{siteId}/site.jpg` - no orphan cleanup needed
 - **Replace Scenario**: `imageMarkedForDeletion` flag enables Remove → Pick flow
 - **UI Refresh**: `imageCache.clear()` called after Pick to force reload
 - **No Direct Replace**: User must Remove first, then Pick new image
+
+### Snags Module Implementation Notes (2026-06-08)
+- **Data Layer Complete**: ImageSlot model, Snag model, database tables, DAOs
+- **Sync Handler Complete**: SnagSyncHandler with per-slot image sync
+- **Profile-Centric Paths**: All Firebase paths under `Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId}/`
+- **Image Slots**: 6 problem photos + 6 fix photos per snag
+- **Version Counter**: Per-slot version for race condition detection

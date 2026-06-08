@@ -6,7 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:snagsnapper/Data/database/app_database.dart';
 import 'package:snagsnapper/Data/models/app_user.dart';
-import 'package:snagsnapper/Data/colleague.dart';
+import 'package:snagsnapper/Data/models/priority_level.dart';
 import 'package:snagsnapper/services/image_storage_service.dart';
 import 'package:snagsnapper/services/signature_service.dart';
 import 'package:snagsnapper/services/image_compression_service.dart';
@@ -178,23 +178,14 @@ class ProfileSyncHandler {
   Future<void> _uploadProfile(AppUser user) async {
     final docRef = firestore.collection('Profile').doc(user.id);
     
-    // Convert colleagues list to Firestore-compatible format
-    List<Map<String, dynamic>>? colleaguesData;
-    if (user.listOfALLColleagues != null) {
-      colleaguesData = user.listOfALLColleagues!
-          .map((colleague) => colleague.toJson())
-          .toList();
-    }
-    
     // Debug logging to see what's being uploaded
     if (kDebugMode) {
       print('🔍 ProfileSyncHandler._uploadProfile: Uploading profile data:');
       print('  - userId: ${user.id}');
       print('  - imagePath: ${user.imageFirebasePath}');
       print('  - signaturePath: ${user.signatureFirebasePath}');
-      print('  - colleagues count: ${colleaguesData?.length ?? 0}');
     }
-    
+
     await docRef.set({
       'name': user.name,
       'email': user.email,
@@ -205,7 +196,8 @@ class ProfileSyncHandler {
       'dateFormat': user.dateFormat,
       'imagePath': user.imageFirebasePath,  // Store Firebase Storage path (not URL)
       'signaturePath': user.signatureFirebasePath,  // Store Firebase Storage path (not URL)
-      'colleagues': colleaguesData,  // Store colleagues list
+      // Colleagues removed - site sharing uses email-based sharedWith map
+      'priorities': PriorityLevel.listToJson(user.priorities),  // Store priority levels
       'version': user.localVersion ?? 1,
       'updatedAt': Timestamp.now(),
       'createdAt': Timestamp.fromDate(user.createdAt),
@@ -233,15 +225,15 @@ class ProfileSyncHandler {
   
   AppUser _createAppUserFromFirestore(String userId, Map<String, dynamic> data) {
     final now = DateTime.now();
-    
-    // Parse colleagues list from Firestore
-    List<Colleague>? colleagues;
-    if (data['colleagues'] != null) {
-      colleagues = (data['colleagues'] as List<dynamic>)
-          .map((colleagueData) => Colleague.fromJson(colleagueData as Map<String, dynamic>))
-          .toList();
+
+    // Colleagues removed - site sharing uses email-based sharedWith map
+
+    // Parse priorities list from Firestore
+    List<PriorityLevel> priorities = PriorityLevel.defaults;
+    if (data['priorities'] != null) {
+      priorities = PriorityLevel.listFromJson(data['priorities'] as List<dynamic>);
     }
-    
+
     return AppUser(
       id: userId,
       name: data['name'] ?? '',
@@ -255,7 +247,7 @@ class ProfileSyncHandler {
       imageFirebasePath: data['imagePath'],
       signatureLocalPath: null, // Will be downloaded separately
       signatureFirebasePath: data['signaturePath'],
-      listOfALLColleagues: colleagues,  // Restore colleagues list
+      priorities: priorities,  // Restore priority levels
       needsProfileSync: false, // Just downloaded, no need to sync back
       needsImageSync: false, // Will be downloaded separately, not uploaded
       needsSignatureSync: false, // Will be downloaded separately, not uploaded
@@ -281,15 +273,15 @@ class ProfileSyncHandler {
       }
 
       final data = docSnapshot.data()!;
-      
-      // Parse colleagues list from Firebase
-      List<Colleague>? colleagues;
-      if (data['colleagues'] != null) {
-        colleagues = (data['colleagues'] as List<dynamic>)
-            .map((colleagueData) => Colleague.fromJson(colleagueData as Map<String, dynamic>))
-            .toList();
+
+      // Colleagues removed - site sharing uses email-based sharedWith map
+
+      // Parse priorities list from Firebase
+      List<PriorityLevel> priorities = PriorityLevel.defaults;
+      if (data['priorities'] != null) {
+        priorities = PriorityLevel.listFromJson(data['priorities'] as List<dynamic>);
       }
-      
+
       // Map Firebase data to AppUser
       return AppUser(
         id: userId,
@@ -302,7 +294,7 @@ class ProfileSyncHandler {
         dateFormat: data['dateFormat'] ?? 'dd-MM-yyyy',
         imageFirebasePath: data['imagePath'],  // Use correct field name
         signatureFirebasePath: data['signaturePath'],  // Use correct field name
-        listOfALLColleagues: colleagues,  // Include colleagues!
+        priorities: priorities,  // Include priorities!
         firebaseVersion: data['version'] ?? 1,
         createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
         updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -451,7 +443,7 @@ class ProfileSyncHandler {
         
         // Try to delete from Firebase Storage in case file exists there
         try {
-          final storageRef = storage.ref('users/$userId/profile.jpg');
+          final storageRef = storage.ref('Profile/$userId/profile.jpg');
           await storageRef.delete();
           if (kDebugMode) {
             print('ProfileSyncHandler.syncProfileImage: Deleted orphaned image from Firebase Storage');
@@ -546,7 +538,7 @@ class ProfileSyncHandler {
             print('ProfileSyncHandler.syncProfileImage: Upload attempt ${attempts + 1} of 2');
           }
           
-          final storageRef = storage.ref('users/$userId/profile.jpg');
+          final storageRef = storage.ref('Profile/$userId/profile.jpg');
           
           SettableMetadata? metadata;
           if (imageBytes.length > 5000000) { // > 5MB
@@ -561,7 +553,7 @@ class ProfileSyncHandler {
           
           final snapshot = await uploadTask;
           // We don't need the download URL - only store the path
-          final storagePath = 'users/$userId/profile.jpg';
+          final storagePath = 'Profile/$userId/profile.jpg';
           
           if (kDebugMode) {
             print('ProfileSyncHandler.syncProfileImage: Upload successful, path: $storagePath');
@@ -713,7 +705,7 @@ class ProfileSyncHandler {
         
         // Try to delete from Firebase Storage in case file exists there
         try {
-          final storageRef = storage.ref('users/$userId/signature.jpg');  // JPEG format per PRD
+          final storageRef = storage.ref('Profile/$userId/signature.jpg');  // JPEG format per PRD
           await storageRef.delete();
           if (kDebugMode) {
             print('ProfileSyncHandler.syncSignatureImage: Deleted orphaned signature from Firebase Storage');
@@ -766,7 +758,7 @@ class ProfileSyncHandler {
 
       final imageBytes = signatureFile.readAsBytesSync();
       
-      final storagePath = 'users/$userId/signature.jpg';  // JPEG format per PRD
+      final storagePath = 'Profile/$userId/signature.jpg';  // JPEG format per PRD
       final storageRef = storage.ref(storagePath);
       final uploadTask = storageRef.putData(imageBytes);
       final snapshot = await uploadTask;
@@ -958,7 +950,7 @@ class ProfileSyncHandler {
         print('🔧 ProfileSyncHandler: Pre-sync fix - Setting missing imageFirebasePath');
       }
       localUser = localUser.copyWith(
-        imageFirebasePath: () => 'users/$userId/profile.jpg',
+        imageFirebasePath: () => 'Profile/$userId/profile.jpg',
       );
       pathsUpdated = true;
     }
@@ -971,7 +963,7 @@ class ProfileSyncHandler {
         print('🔧 ProfileSyncHandler: Pre-sync fix - Setting missing signatureFirebasePath');
       }
       localUser = localUser.copyWith(
-        signatureFirebasePath: () => 'users/$userId/signature.jpg',
+        signatureFirebasePath: () => 'Profile/$userId/signature.jpg',
       );
       pathsUpdated = true;
     }

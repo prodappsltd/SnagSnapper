@@ -175,13 +175,13 @@ class Auth extends BaseAuth {
       );
       final GoogleSignInAccount? account = await _googleSignIn.authenticate();
       if (account == null) {
-        // User cancelled the sign-in
+        // User cancelled the sign-in - use special marker message
         if (kDebugMode) {
           print('Auth.signInWithGoogle: User cancelled sign-in');
         }
         Information info = Information();
         info.error = true;
-        info.message = 'Sign in cancelled';
+        info.message = 'CANCELLED'; // Special marker - don't show error to user
         return info;
       }
       if (kDebugMode) {
@@ -205,7 +205,23 @@ class Auth extends BaseAuth {
       }
       Information info = Information();
       info.error = true;
-      info.message = 'Error signing in with Google: $e';
+
+      // Convert technical errors to user-friendly messages
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('cancel') ||
+          errorString.contains('dismissed') ||
+          errorString.contains('aborted')) {
+        info.message = 'CANCELLED'; // Special marker - don't show error to user
+      } else if (errorString.contains('network') ||
+                 errorString.contains('connection') ||
+                 errorString.contains('timeout')) {
+        info.message = 'Please check your internet connection and try again.';
+      } else if (errorString.contains('credential') ||
+                 errorString.contains('token')) {
+        info.message = 'Authentication failed. Please try again.';
+      } else {
+        info.message = 'Unable to sign in with Google. Please try again.';
+      }
       return info;
     }
   }

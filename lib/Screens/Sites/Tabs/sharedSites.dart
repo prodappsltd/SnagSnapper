@@ -4,6 +4,7 @@
 /// - Loads from SiteDao (local SQLite)
 /// - Supports grid/list view toggle
 /// - Memory efficient using builder widgets
+/// - "Check & Download" button to fetch shared sites from Firebase
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ import 'package:snagsnapper/Data/models/site.dart';
 import 'package:snagsnapper/Screens/Sites/SiteInfo/site_status_v2.dart';
 import 'package:snagsnapper/Widgets/site_grid_tile.dart';
 import 'package:snagsnapper/Widgets/site_list_tile.dart';
+import 'package:snagsnapper/services/shared_site_service.dart';
 
 class SharedSites extends StatefulWidget {
   final bool isGridView;
@@ -32,10 +34,87 @@ class _SharedSitesState extends State<SharedSites> {
   Stream<List<Site>>? _sitesStream;
   String? _userEmail;
 
+  /// Download state
+  bool _isDownloading = false;
+  String _downloadStatus = '';
+
   @override
   void initState() {
     super.initState();
     _initSitesStream();
+  }
+
+  /// Check and download shared sites from Firebase
+  Future<void> _checkAndDownload() async {
+    if (_isDownloading) return;
+
+    setState(() {
+      _isDownloading = true;
+      _downloadStatus = 'Checking...';
+    });
+
+    try {
+      final result = await SharedSiteService().checkAndDownloadSharedSites(
+        onProgress: (status) {
+          if (mounted) {
+            setState(() {
+              _downloadStatus = status;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadStatus = '';
+        });
+
+        // Show result snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  result.hasErrors ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(result.summary)),
+              ],
+            ),
+            backgroundColor: result.hasErrors
+                ? Colors.orange.shade700
+                : (result.isEmpty ? Colors.grey.shade700 : Colors.green.shade700),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadStatus = '';
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Error: $e')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
   }
 
   void _initSitesStream() {
@@ -74,6 +153,39 @@ class _SharedSitesState extends State<SharedSites> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       body: _buildBody(theme),
+      floatingActionButton: _buildFAB(theme),
+    );
+  }
+
+  Widget? _buildFAB(ThemeData theme) {
+    // Only show FAB when not in empty state
+    return FloatingActionButton.extended(
+      onPressed: _isDownloading ? null : _checkAndDownload,
+      backgroundColor: _isDownloading
+          ? theme.colorScheme.surfaceContainerHighest
+          : theme.colorScheme.primary,
+      foregroundColor: _isDownloading
+          ? theme.colorScheme.onSurfaceVariant
+          : theme.colorScheme.onPrimary,
+      elevation: _isDownloading ? 0 : 4,
+      icon: _isDownloading
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  theme.colorScheme.primary,
+                ),
+              ),
+            )
+          : const Icon(Icons.cloud_download_rounded),
+      label: Text(
+        _isDownloading ? _downloadStatus : 'Check & Download',
+        style: GoogleFonts.inter(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
@@ -150,19 +262,63 @@ class _SharedSitesState extends State<SharedSites> {
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
             ),
           ),
+          const SizedBox(height: 24),
+          _buildCheckAndDownloadButton(theme),
         ],
       ),
     );
   }
 
+  Widget _buildCheckAndDownloadButton(ThemeData theme) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      child: ElevatedButton.icon(
+        onPressed: _isDownloading ? null : _checkAndDownload,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 2,
+        ),
+        icon: _isDownloading
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    theme.colorScheme.onPrimary,
+                  ),
+                ),
+              )
+            : const Icon(Icons.cloud_download_rounded),
+        label: Text(
+          _isDownloading ? _downloadStatus : 'Check & Download',
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildGridView(List<Site> sites, ThemeData theme) {
+    // Responsive grid columns:
+    // - Phones (< 600): 2 columns
+    // - iPad portrait (600-1000): 3 columns
+    // - iPad landscape (> 1000): 4 columns
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth > 1000 ? 4 : (screenWidth > 600 ? 3 : 2);
+
     return GridView.builder(
       padding: const EdgeInsets.all(8),
       itemCount: sites.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: MediaQuery.of(context).size.width > 420
-            ? MediaQuery.of(context).size.width > 550 ? 4 : 3
-            : 2,
+        crossAxisCount: crossAxisCount,
       ),
       itemBuilder: (context, index) {
         final site = sites[index];

@@ -11,8 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:snagsnapper/Data/contentProvider.dart';
 // TODO: OLD Site model deleted - migrate to NEW Site model
 // import 'package:snagsnapper/Data/site.dart';
-import 'package:snagsnapper/Data/models/site.dart'; // NEW Site model (placeholder)
-import 'package:snagsnapper/Data/snag.dart';
+import 'package:snagsnapper/Data/models/site.dart';
+import 'package:snagsnapper/Data/models/snag.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -330,10 +330,11 @@ class CreatePDF {
   _getSnags(doc) {
     List<pw.Widget> widgets = [];
     for (var snag in _snags) {
-      if ((snag.snagFixImage1 == null ||
-          snag.snagFixImage1!.isEmpty) &&
-              (snag.snagFixImage2 == null ||
-          snag.snagFixImage2!.isEmpty)) {
+      // Check if fix images exist (NEW model uses fixImages array)
+      final hasFixImage1 = snag.fixImages.length > 1 && snag.fixImages[1].hasImage;
+      final hasFixImage2 = snag.fixImages.length > 2 && snag.fixImages[2].hasImage;
+
+      if (!hasFixImage1 && !hasFixImage2) {
         widgets.add(_getSingleSnag(snag, doc));
       } else {
         if (kDebugMode) print(' Snag with three PIC ROW: ${snag.location}');
@@ -345,6 +346,11 @@ class CreatePDF {
   }
 
   _getSingleSnag(Snag snag, doc) {
+    // Check for fix main image (NEW model uses fixImages[0])
+    final hasFixMainImage = snag.fixImages.isNotEmpty && snag.fixImages[0].hasImage;
+    // TODO: M8 Migration - Load fix image from file path instead of base64
+    // For now, show placeholder when fix images exist (file-based loading needed)
+
     return pw.Container(
         height: 180,
         width: double.infinity,
@@ -357,15 +363,12 @@ class CreatePDF {
               children: <pw.Widget>[
                 pw.Container(
                   height: 180,
-                  width:(snag.snagFixMainImage!=null && snag.snagFixMainImage!.isNotEmpty)
-                      ? 180 : 0,
-                  decoration: (snag.snagFixMainImage!=null && snag.snagFixMainImage!.isNotEmpty)
+                  width: hasFixMainImage ? 180 : 0,
+                  decoration: hasFixMainImage
                       ? pw.BoxDecoration(
                         color: PdfColors.green500,
-                        image: pw.DecorationImage(
-                          alignment: pw.Alignment.center,
-                          image: pw.MemoryImage(base64Decode(snag.snagFixMainImage!)),
-                          fit: pw.BoxFit.cover))
+                        // TODO: Load image from file path: snag.fixImages[0].localPath
+                        )
                   :const pw.BoxDecoration(),
                 ),
               ],
@@ -418,7 +421,7 @@ class CreatePDF {
                       alignment: pw.Alignment.topLeft,
                       padding: const pw.EdgeInsets.only(top: 5.0, left: 5.0),
                       margin: const pw.EdgeInsets.only(left: 5.0),
-                      child: pw.Text(snag.description)),
+                      child: pw.Text(snag.description ?? '')),
                 )),
                 pw.SizedBox(height: 0.0),
                 pw.Container(
@@ -429,7 +432,8 @@ class CreatePDF {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: <pw.Widget>[
                       pw.Row(children: <pw.Widget>[
-                        pw.Text('Due Date: ${snag.dueDate == null ? '--' : DateFormat(Provider.of<CP>(_context).getDateFormat()).format(snag.dueDate!)}',),
+                        // TIMEZONE: Display UTC midnight as local date
+                        pw.Text('Due Date: ${snag.dueDate == null ? '--' : DateFormat(Provider.of<CP>(_context).getDateFormat()).format(snag.dueDate!.toLocal())}',),
                       ]),
                       pw.Row(children: <pw.Widget>[
                         pw.Text('Status: ${!snag.snagConfirmedStatus && !snag.snagStatus ? 'CLOSED' : 'OPEN'}',
@@ -451,7 +455,8 @@ class CreatePDF {
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: <pw.Widget>[
-            // For picture
+            // For picture - TODO: M8 Migration - Load fix images from file paths
+            // NEW model: snag.fixImages[1], [2], [3] have localPath for file-based images
             pw.Column(
               mainAxisAlignment: pw.MainAxisAlignment.center,
               children: <pw.Widget>[
@@ -461,7 +466,8 @@ class CreatePDF {
                   decoration:pw.BoxDecoration(
                       image: pw.DecorationImage(
                           alignment: pw.Alignment.center,
-                          image: snag.snagFixImage1 != null && snag.snagFixImage1!.isNotEmpty ? pw.MemoryImage(base64Decode(snag.snagFixImage1!)) : _noPiclogo,
+                          // TODO: Load from snag.fixImages[1].localPath if hasImage
+                          image: _noPiclogo,
                           fit: pw.BoxFit.cover)),
                 ),
               ],
@@ -475,7 +481,8 @@ class CreatePDF {
                   decoration: pw.BoxDecoration(
                       image: pw.DecorationImage(
                           alignment: pw.Alignment.center,
-                          image: snag.snagFixImage2 != null && snag.snagFixImage2!.isNotEmpty ? pw.MemoryImage(base64Decode(snag.snagFixImage2!)) : _noPiclogo,
+                          // TODO: Load from snag.fixImages[2].localPath if hasImage
+                          image: _noPiclogo,
                           fit: pw.BoxFit.cover)),
                 ),
               ],
@@ -489,7 +496,8 @@ class CreatePDF {
                   decoration: pw.BoxDecoration(
                       image: pw.DecorationImage(
                           alignment: pw.Alignment.center,
-                          image: snag.snagFixImage3 !=null && snag.snagFixImage3!.isNotEmpty ? pw.MemoryImage(base64Decode(snag.snagFixImage3!)) : _noPiclogo,
+                          // TODO: Load from snag.fixImages[3].localPath if hasImage
+                          image: _noPiclogo,
                           fit: pw.BoxFit.cover)),
                 ),
               ],

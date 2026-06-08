@@ -3,14 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Site model for offline-first site management
 /// Implements PRD Section 4.2.1 specifications (updated with field review)
-/// 
+///
 /// Core data model for construction site management with the following features:
 /// - Offline-first architecture with local SQLite storage
-/// - Three-level permission system (VIEW, FIXER, CONTRIBUTOR)
+/// - Three-level permission system (VIEW, WORKING, CONTRIBUTOR)
+/// - Configurable permission settings per site
 /// - Dynamic category management for snags
 /// - Soft deletion with 7-day grace period
 /// - Automatic sync tracking and versioning
-/// 
+///
+/// Permission Levels:
+/// - VIEW: Read-only access to site and all snags
+/// - WORKING: Can work on assigned snags (visibility configurable)
+/// - CONTRIBUTOR: Can create snags, work on assigned (edit others configurable)
+///
 /// Note: Owner is identified by comparing ownerEmail with current user email,
 /// not through the permission system.
 @immutable
@@ -67,9 +73,18 @@ class Site {
   
   // ============== Sharing & Permissions ==============
   /// Map of user emails to their permission levels
-  /// Permissions: 'VIEW', 'FIXER', 'CONTRIBUTOR'
+  /// Permissions: 'VIEW', 'WORKING', 'CONTRIBUTOR'
   /// Note: Owner is NOT stored here, identified by ownerEmail match
   final Map<String, String> sharedWith;
+
+  // ============== Permission Settings (Owner-configurable) ==============
+  /// Whether WORKING members can see all snags (true) or only assigned (false)
+  /// Default: true - provides context without risk (can see but only edit assigned)
+  final bool workingCanSeeAllSnags;
+
+  /// Whether CONTRIBUTOR members can edit snags created by others
+  /// Default: false - protects others' work
+  final bool contributorCanEditOthers;
   
   // ============== Statistics ==============
   /// Total number of snags in this site (Auto-calculated)
@@ -152,6 +167,8 @@ class Site {
     this.pictureQuality = 1, // Default to medium quality
     this.archive = false,
     Map<String, String>? sharedWith,
+    this.workingCanSeeAllSnags = true,
+    this.contributorCanEditOthers = false,
     this.totalSnags = 0,
     this.openSnags = 0,
     this.closedSnags = 0,
@@ -221,6 +238,8 @@ class Site {
       needsSiteSync: true, // Mark for initial sync
       needsImageSync: hasImage, // Mark for image sync if image provided
       sharedWith: const {}, // No sharing initially (owner is not a permission)
+      workingCanSeeAllSnags: true, // Default: WORKING can see all snags
+      contributorCanEditOthers: false, // Default: CONTRIBUTOR cannot edit others' snags
     );
   }
 
@@ -242,6 +261,8 @@ class Site {
     int? pictureQuality,
     bool? archive,
     Map<String, String>? sharedWith,
+    bool? workingCanSeeAllSnags,
+    bool? contributorCanEditOthers,
     int? totalSnags,
     int? openSnags,
     int? closedSnags,
@@ -278,6 +299,8 @@ class Site {
       pictureQuality: pictureQuality ?? this.pictureQuality,
       archive: archive ?? this.archive,
       sharedWith: sharedWith ?? this.sharedWith,
+      workingCanSeeAllSnags: workingCanSeeAllSnags ?? this.workingCanSeeAllSnags,
+      contributorCanEditOthers: contributorCanEditOthers ?? this.contributorCanEditOthers,
       totalSnags: totalSnags ?? this.totalSnags,
       openSnags: openSnags ?? this.openSnags,
       closedSnags: closedSnags ?? this.closedSnags,
@@ -318,6 +341,8 @@ class Site {
       'pictureQuality': pictureQuality,
       'archive': archive,
       'sharedWith': sharedWith,
+      'workingCanSeeAllSnags': workingCanSeeAllSnags,
+      'contributorCanEditOthers': contributorCanEditOthers,
       'totalSnags': totalSnags,
       'openSnags': openSnags,
       'closedSnags': closedSnags,
@@ -368,6 +393,8 @@ class Site {
       pictureQuality: json['pictureQuality'] as int? ?? 1,
       archive: json['archive'] as bool? ?? false,
       sharedWith: Map<String, String>.from(json['sharedWith'] ?? {}),
+      workingCanSeeAllSnags: json['workingCanSeeAllSnags'] as bool? ?? true,
+      contributorCanEditOthers: json['contributorCanEditOthers'] as bool? ?? false,
       totalSnags: json['totalSnags'] as int? ?? 0,
       openSnags: json['openSnags'] as int? ?? 0,
       closedSnags: json['closedSnags'] as int? ?? 0,
@@ -416,6 +443,8 @@ class Site {
       'pictureQuality': pictureQuality,
       'archive': archive,
       'sharedWith': sharedWith,
+      'workingCanSeeAllSnags': workingCanSeeAllSnags,
+      'contributorCanEditOthers': contributorCanEditOthers,
       'totalSnags': totalSnags,
       'openSnags': openSnags,
       'closedSnags': closedSnags,
@@ -465,6 +494,8 @@ class Site {
       pictureQuality: data['pictureQuality'] as int? ?? 1,
       archive: data['archive'] as bool? ?? false,
       sharedWith: Map<String, String>.from(data['sharedWith'] ?? {}),
+      workingCanSeeAllSnags: data['workingCanSeeAllSnags'] as bool? ?? true,
+      contributorCanEditOthers: data['contributorCanEditOthers'] as bool? ?? false,
       totalSnags: data['totalSnags'] as int? ?? 0,
       openSnags: data['openSnags'] as int? ?? 0,
       closedSnags: data['closedSnags'] as int? ?? 0,
@@ -494,40 +525,116 @@ class Site {
   bool isOwnedBy(String userEmail) => ownerEmail.toLowerCase() == userEmail.toLowerCase();
   
   /// Get the permission level for a given user
-  /// 
+  ///
   /// Returns:
   /// - null if user is the owner (owners don't have permission entries)
-  /// - 'VIEW', 'FIXER', or 'CONTRIBUTOR' if user has been shared with
+  /// - 'VIEW', 'WORKING', or 'CONTRIBUTOR' if user has been shared with
   /// - null if user has no access to this site
   String? getPermissionFor(String userEmail) {
     if (isOwnedBy(userEmail)) return null; // Owner doesn't have a permission entry
     return sharedWith[userEmail.toLowerCase()];
   }
-  
+
   /// Check if user can edit site details
-  /// 
+  ///
   /// Returns true if:
   /// - User is the owner
   /// - User has CONTRIBUTOR permission
-  /// 
-  /// Note: FIXER and VIEW permissions cannot edit site details
+  ///
+  /// Note: WORKING and VIEW permissions cannot edit site details
   bool canEdit(String userEmail) {
     if (isOwnedBy(userEmail)) return true;
     final permission = getPermissionFor(userEmail);
     return permission == 'CONTRIBUTOR';
   }
-  
+
   /// Check if user can create new snags in this site
-  /// 
+  ///
   /// Returns true if:
   /// - User is the owner
   /// - User has CONTRIBUTOR permission
-  /// 
-  /// Note: FIXER can only work on assigned snags, VIEW is read-only
+  ///
+  /// Note: WORKING can only work on assigned snags, VIEW is read-only
   bool canCreateSnags(String userEmail) {
     if (isOwnedBy(userEmail)) return true;
     final permission = getPermissionFor(userEmail);
     return permission == 'CONTRIBUTOR';
+  }
+
+  /// Check if user can see a specific snag
+  ///
+  /// Returns true if:
+  /// - User is the owner (sees all)
+  /// - User has VIEW permission (sees all)
+  /// - User has CONTRIBUTOR permission (sees all)
+  /// - User has WORKING permission AND (workingCanSeeAllSnags OR snag is assigned to them)
+  ///
+  /// [assignedEmail] is the email the snag is assigned to (null if unassigned)
+  bool canSeeSnag(String userEmail, String? assignedEmail) {
+    if (isOwnedBy(userEmail)) return true;
+
+    final permission = getPermissionFor(userEmail);
+    if (permission == null) return false; // No access to site
+
+    switch (permission) {
+      case 'VIEW':
+      case 'CONTRIBUTOR':
+        return true; // Always see all snags
+      case 'WORKING':
+        // Can see all if setting allows, or if assigned to them
+        return workingCanSeeAllSnags ||
+            (assignedEmail != null &&
+                assignedEmail.toLowerCase() == userEmail.toLowerCase());
+      default:
+        return false;
+    }
+  }
+
+  /// Check if user can edit a specific snag
+  ///
+  /// [userEmail] is the current user's email
+  /// [snagCreatorEmail] is the email of who created the snag
+  /// [assignedEmail] is the email the snag is assigned to (null if unassigned)
+  ///
+  /// Returns true if:
+  /// - User is the owner (edits all)
+  /// - User is WORKING and snag is assigned to them (edit assigned only)
+  /// - User is CONTRIBUTOR and created the snag (edit own)
+  /// - User is CONTRIBUTOR and contributorCanEditOthers is true (edit any)
+  bool canEditSnag(String userEmail, String snagCreatorEmail, String? assignedEmail) {
+    if (isOwnedBy(userEmail)) return true;
+
+    final permission = getPermissionFor(userEmail);
+    if (permission == null) return false;
+
+    final userEmailLower = userEmail.toLowerCase();
+
+    switch (permission) {
+      case 'VIEW':
+        return false; // Never edit
+      case 'WORKING':
+        // Can only edit if assigned to them
+        return assignedEmail != null &&
+            assignedEmail.toLowerCase() == userEmailLower;
+      case 'CONTRIBUTOR':
+        // Can edit own snags, or others if setting allows
+        final isCreator = snagCreatorEmail.toLowerCase() == userEmailLower;
+        final isAssigned = assignedEmail != null &&
+            assignedEmail.toLowerCase() == userEmailLower;
+        return isCreator || isAssigned || contributorCanEditOthers;
+      default:
+        return false;
+    }
+  }
+
+  /// Check if user can mark a snag as complete
+  ///
+  /// Returns true if:
+  /// - User is the owner
+  /// - User is WORKING and snag is assigned to them
+  /// - User is CONTRIBUTOR (any snag they can edit)
+  bool canMarkComplete(String userEmail, String snagCreatorEmail, String? assignedEmail) {
+    return canEditSnag(userEmail, snagCreatorEmail, assignedEmail);
   }
   
   @override
