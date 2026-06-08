@@ -1,8 +1,16 @@
 # Site Sharing Architecture
 
-**Version:** 1.0.0
-**Last Updated:** 2026-06-07
-**Status:** Design Complete
+**Version:** 1.1.0
+**Last Updated:** 2026-06-09
+**Status:** Implemented
+
+---
+
+## Pending Issues
+
+| Issue | Priority | Description |
+|-------|----------|-------------|
+| **Image Download** | HIGH | Shared site/snag images not downloading from Firebase Storage. Need to implement Storage rules and client download logic for collaborator access. |
 
 ---
 
@@ -13,6 +21,7 @@ This document defines how site sharing works in SnagSnapper, including:
 - Firebase data structure
 - Discovery mechanism for shared sites
 - Cloud Function implementation
+- Snag sharing (inherits from site)
 
 ---
 
@@ -56,14 +65,15 @@ This document defines how site sharing works in SnagSnapper, including:
 ### Collections
 
 ```
-/sites/{ownerUID}/sites/{siteId}        → Site document (full data)
-/shared_access/{emailHash}/sites/{siteId} → Discovery index (lightweight)
+/Profile/{ownerUID}/Sites/{siteId}       → Site document (full data)
+/Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId} → Snag documents
+/shared_access/{emailHash}               → Single document per user (discovery index)
 ```
 
 ### Site Document
 
 ```javascript
-// /sites/{ownerUID}/sites/{siteId}
+// /Profile/{ownerUID}/Sites/{siteId}
 {
   // Core fields
   name: "Project Alpha",
@@ -84,20 +94,24 @@ This document defines how site sharing works in SnagSnapper, including:
 }
 ```
 
-### Shared Access Index (Discovery)
+### Shared Access Index (Discovery) - Single Document Structure
 
 ```javascript
-// /shared_access/{emailHash}/sites/{siteId}
+// /shared_access/{emailHash}
 {
-  ownerUID: "abc123",
-  ownerEmail: "owner@example.com",
-  siteName: "Project Alpha",
-  permission: "WORKING",
-  sharedAt: Timestamp
+  email: "john@example.com",  // For security rule verification
+  sites: {
+    "siteId1": "ownerUID1",
+    "siteId2": "ownerUID2"
+  }
 }
 ```
 
-**Purpose:** Enables O(1) discovery of sites shared with a user.
+**Why Single Document (not Subcollection)?**
+- Firestore rules can verify `resource.data.email == request.auth.token.email` on `get()` operations
+- Subcollection `list()` queries cannot evaluate `resource.data` for security
+- Single document = 1 read instead of N+1 reads
+- Attacker knowing email hash cannot access another user's document
 
 ---
 
@@ -142,12 +156,12 @@ String emailToHash(String email) {
 │    { "john@example.com": "WORKING" }                        │
 │                                                             │
 │ 2. Site syncs to Firebase                                   │
-│    /sites/{ownerUID}/sites/{siteId}                         │
+│    /Profile/{ownerUID}/Sites/{siteId}                       │
 │                                                             │
-│ 3. Cloud Function triggers on sharedWith change             │
+│ 3. Cloud Function triggers (onSiteCreated or onSiteUpdated) │
 │                                                             │
-│ 4. CF creates discovery index                               │
-│    /shared_access/{emailHash}/sites/{siteId}                │
+│ 4. CF updates shared_access document:                       │
+│    /shared_access/{emailHash} → { sites.{siteId}: ownerUID }│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -155,18 +169,23 @@ String emailToHash(String email) {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 1. Collaborator opens app                                   │
+│ 1. Collaborator taps "Check & Download" in Shared Sites tab │
 │                                                             │
-│ 2. App queries: /shared_access/{myEmailHash}/sites/         │
-│    (ONE read - O(1) discovery)                              │
+│ 2. App gets: /shared_access/{myEmailHash}                   │
+│    (ONE read - secure via email field verification)         │
 │                                                             │
-│ 3. Gets list of { siteId, ownerUID, permission }            │
+│ 3. Reads sites map: { siteId1: ownerUID1, siteId2: ownerUID2}│
 │                                                             │
-│ 4. Fetches each site: /sites/{ownerUID}/sites/{siteId}      │
+│ 4. Fetches each site: /Profile/{ownerUID}/Sites/{siteId}    │
 │    (N reads for N shared sites)                             │
 │                                                             │
-│ 5. Saves to local database                                  │
+│ 5. Fetches snags: /Profile/{ownerUID}/Sites/{siteId}/Snags/ │
+│    (Snags inherit site sharing permissions)                 │
+│                                                             │
+│ 6. Saves to local SQLite database                           │
 │    Works offline from then on                               │
+│                                                             │
+│ 7. TODO: Download images from Firebase Storage              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -178,12 +197,12 @@ String emailToHash(String email) {
 │                                                             │
 │ 2. Site syncs to Firebase                                   │
 │                                                             │
-│ 3. Cloud Function detects removal                           │
+│ 3. Cloud Function (onSiteUpdated) detects removal           │
 │                                                             │
-│ 4. CF deletes discovery index                               │
-│    /shared_access/{emailHash}/sites/{siteId}                │
+│ 4. CF removes site from shared_access:                      │
+│    /shared_access/{emailHash} → delete sites.{siteId}       │
 │                                                             │
-│ 5. Collaborator loses access on next sync                   │
+│ 5. Collaborator loses access on next "Check & Download"     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -200,133 +219,32 @@ String emailToHash(String email) {
 
 **Decision:** Cloud Function for security and reliability.
 
-### Cloud Function Code
+### Cloud Functions (Deployed)
 
+Located at: `functions/index.js`
+
+**Functions:**
+- `onSiteCreated` - Creates shared_access entries when site with sharedWith is created
+- `onSiteUpdated` - Adds/removes entries when sharedWith changes
+- `onSiteDeleted` - Removes all entries when site is deleted
+
+**Key Implementation Detail:**
 ```javascript
-const functions = require('firebase-functions');
-const admin = require('firebase-admin');
-const crypto = require('crypto');
+// Two-step approach required for nested map creation:
+// 1. set() with merge ensures document exists with email field
+// 2. update() with dot notation adds site to nested map
 
-admin.initializeApp();
-const db = admin.firestore();
+await accessRef.set({ email: email.toLowerCase().trim() }, { merge: true });
+await accessRef.update({ [`sites.${siteId}`]: ownerUID });
 
-/**
- * Triggered when a site's sharedWith field changes.
- * Creates/deletes discovery index entries in shared_access collection.
- */
-exports.onSiteSharedWithChange = functions.firestore
-  .document('sites/{ownerUID}/sites/{siteId}')
-  .onUpdate(async (change, context) => {
-    const { ownerUID, siteId } = context.params;
-
-    const beforeData = change.before.data();
-    const afterData = change.after.data();
-
-    const beforeShared = beforeData.sharedWith || {};
-    const afterShared = afterData.sharedWith || {};
-
-    const siteName = afterData.name;
-    const ownerEmail = afterData.ownerEmail;
-
-    const batch = db.batch();
-
-    // Find added shares
-    for (const [email, permission] of Object.entries(afterShared)) {
-      if (!beforeShared[email]) {
-        // New share - create access document
-        const emailHash = hashEmail(email);
-        const accessRef = db
-          .collection('shared_access')
-          .doc(emailHash)
-          .collection('sites')
-          .doc(siteId);
-
-        batch.set(accessRef, {
-          ownerUID,
-          ownerEmail,
-          siteName,
-          permission,
-          sharedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        console.log(`Created shared_access for ${email} to site ${siteId}`);
-      } else if (beforeShared[email] !== permission) {
-        // Permission changed - update access document
-        const emailHash = hashEmail(email);
-        const accessRef = db
-          .collection('shared_access')
-          .doc(emailHash)
-          .collection('sites')
-          .doc(siteId);
-
-        batch.update(accessRef, {
-          permission,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        console.log(`Updated permission for ${email} on site ${siteId}`);
-      }
-    }
-
-    // Find removed shares
-    for (const email of Object.keys(beforeShared)) {
-      if (!afterShared[email]) {
-        // Share removed - delete access document
-        const emailHash = hashEmail(email);
-        const accessRef = db
-          .collection('shared_access')
-          .doc(emailHash)
-          .collection('sites')
-          .doc(siteId);
-
-        batch.delete(accessRef);
-
-        console.log(`Deleted shared_access for ${email} from site ${siteId}`);
-      }
-    }
-
-    await batch.commit();
-  });
-
-/**
- * Triggered when a site is deleted.
- * Removes all shared_access entries for that site.
- */
-exports.onSiteDeleted = functions.firestore
-  .document('sites/{ownerUID}/sites/{siteId}')
-  .onDelete(async (snapshot, context) => {
-    const { siteId } = context.params;
-    const data = snapshot.data();
-    const sharedWith = data.sharedWith || {};
-
-    const batch = db.batch();
-
-    for (const email of Object.keys(sharedWith)) {
-      const emailHash = hashEmail(email);
-      const accessRef = db
-        .collection('shared_access')
-        .doc(emailHash)
-        .collection('sites')
-        .doc(siteId);
-
-      batch.delete(accessRef);
-    }
-
-    await batch.commit();
-    console.log(`Cleaned up shared_access for deleted site ${siteId}`);
-  });
-
-/**
- * Hash email for use as document ID.
- * SHA256 produces consistent, collision-resistant 64-char hex string.
- */
-function hashEmail(email) {
-  return crypto
-    .createHash('sha256')
-    .update(email.toLowerCase().trim())
-    .digest('hex');
-}
+// For removal, use FieldValue.delete():
+await accessRef.update({ [`sites.${siteId}`]: FieldValue.delete() });
 ```
+
+**Why two steps?**
+- `set()` with `merge: true` does NOT interpret dots as nested paths
+- `update()` DOES interpret dots as nested paths
+- Using `sites: { [siteId]: ownerUID }` with set/merge would REPLACE the entire sites map
 
 ### Deployment
 
@@ -340,66 +258,68 @@ firebase deploy --only functions
 
 ## Client Implementation
 
-### Sharing a Site
+### Sharing a Site (via Share Dialog)
+
+Located at: `lib/Widgets/share_site_dialog.dart`
 
 ```dart
-// In SiteDao or SiteSyncHandler
-Future<void> shareSite(String siteId, String email, String permission) async {
-  final site = await getSiteById(siteId);
-  if (site == null) return;
+// Called from SiteStatusV2._showShareSheet()
+final newSharedWith = await showShareSiteSheet(context: context, site: site);
 
-  final updatedSharedWith = Map<String, String>.from(site.sharedWith);
-  updatedSharedWith[email.toLowerCase()] = permission;
-
-  await updateSite(site.copyWith(
-    sharedWith: updatedSharedWith,
+if (newSharedWith != null) {
+  final updatedSite = site.copyWith(
+    sharedWith: newSharedWith,
     needsSiteSync: true,
-  ));
-
-  // Cloud Function handles creating shared_access entry
+  );
+  await AppDatabase.instance.siteDao.updateSite(updatedSite);
+  // Cloud Function handles creating shared_access entry on sync
 }
 ```
 
 ### Discovering Shared Sites
 
+Located at: `lib/services/shared_site_service.dart`
+
 ```dart
-// In SiteSyncHandler
-Future<List<Site>> discoverSharedSites(String userEmail) async {
-  final emailHash = emailToHash(userEmail);
+Future<SharedSiteDownloadResult> checkAndDownloadSharedSites() async {
+  final emailHash = _hashEmail(userEmail);
 
-  // 1. Query discovery index (ONE read)
-  final sharedAccess = await FirebaseFirestore.instance
-    .collection('shared_access')
-    .doc(emailHash)
-    .collection('sites')
-    .get();
-
-  final sites = <Site>[];
-
-  // 2. Fetch each shared site
-  for (final doc in sharedAccess.docs) {
-    final ownerUID = doc.data()['ownerUID'] as String;
-    final siteId = doc.id;
-
-    final siteDoc = await FirebaseFirestore.instance
-      .collection('sites')
-      .doc(ownerUID)
-      .collection('sites')
-      .doc(siteId)
+  // 1. Get single shared_access document (ONE read, secure)
+  final sharedAccessDoc = await _firestore
+      .collection('shared_access')
+      .doc(emailHash)
       .get();
 
-    if (siteDoc.exists) {
-      sites.add(Site.fromFirestore(siteId, siteDoc.data()!));
+  if (!sharedAccessDoc.exists) return empty;
+
+  final sites = sharedAccessDoc.data()!['sites'] as Map<String, dynamic>;
+
+  // 2. Fetch each shared site and its snags
+  for (final entry in sites.entries) {
+    final siteId = entry.key;
+    final ownerUID = entry.value as String;
+
+    // Download site document
+    final siteDoc = await _firestore
+        .collection('Profile').doc(ownerUID)
+        .collection('Sites').doc(siteId)
+        .get();
+
+    // Download snags for site
+    final snagsQuery = await _firestore
+        .collection('Profile').doc(ownerUID)
+        .collection('Sites').doc(siteId)
+        .collection('Snags')
+        .get();
+
+    // Save to local SQLite
+    await _database.siteDao.insertSite(site);
+    for (final snag in snags) {
+      await _database.snagDao.insertSnag(snag);
     }
+
+    // TODO: Download images from Firebase Storage
   }
-
-  return sites;
-}
-
-String emailToHash(String email) {
-  final normalized = email.toLowerCase().trim();
-  final bytes = utf8.encode(normalized);
-  return sha256.convert(bytes).toString();
 }
 ```
 
@@ -407,39 +327,91 @@ String emailToHash(String email) {
 
 ## Security Rules
 
+### Firestore Rules (firestore.rules)
+
 ```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+// Shared Access - Single document per user
+match /shared_access/{emailHash} {
+  // User can ONLY read their own shared_access document
+  // Email field verification ensures security
+  allow read: if isAuthenticated()
+              && resource.data.email == request.auth.token.email.lower();
 
-    // Sites: Owner has full access, collaborators can read
-    match /sites/{ownerUID}/sites/{siteId} {
-      allow read, write: if request.auth.uid == ownerUID;
+  // Only Cloud Functions can write
+  allow write: if false;
+}
 
-      // Collaborators can read if their email is in sharedWith
-      allow read: if request.auth.token.email.lower() in resource.data.sharedWith.keys();
+// Sites - Collaborators can read if in sharedWith
+match /Profile/{ownerUID}/Sites/{siteId} {
+  allow read: if isOwner(ownerUID)
+              || isCollaborator(resource.data);
+  allow write: if isOwner(ownerUID);
+}
 
-      // CONTRIBUTOR can update (but not delete or change ownership)
-      allow update: if
-        request.auth.token.email.lower() in resource.data.sharedWith.keys() &&
-        resource.data.sharedWith[request.auth.token.email.lower()] == 'CONTRIBUTOR' &&
-        request.resource.data.ownerUID == resource.data.ownerUID &&
-        request.resource.data.ownerEmail == resource.data.ownerEmail;
-    }
-
-    // Shared Access: Read-only for users (Cloud Function writes)
-    match /shared_access/{emailHash}/sites/{siteId} {
-      // Users can only read their own shared_access
-      // We can't verify emailHash matches user's email in rules,
-      // but the data is not sensitive (just pointers)
-      allow read: if request.auth != null;
-
-      // Only Cloud Functions can write (no client access)
-      allow write: if false;
-    }
-  }
+// Snags - Inherit permissions from parent site
+match /Profile/{ownerUID}/Sites/{siteId}/Snags/{snagId} {
+  allow read: if isOwner(ownerUID)
+              || isCollaboratorOnSite(ownerUID, siteId);
+  // Write rules based on permission level...
 }
 ```
+
+### Storage Rules (storage.rules) - TODO
+
+```javascript
+// TODO: Allow collaborators to READ images for shared sites
+match /Profile/{ownerUID}/Sites/{siteId}/{allPaths=**} {
+  allow read: if request.auth != null
+              && (request.auth.uid == ownerUID
+                  || isCollaboratorOnSite(ownerUID, siteId));
+}
+```
+
+**Note:** Storage rules cannot directly query Firestore. Options:
+1. Use custom claims in auth token
+2. Create a separate index for storage access
+3. Use signed URLs from Cloud Function
+
+---
+
+## Snag Sharing
+
+### Inheritance Model
+
+Snags **inherit sharing permissions from their parent site**. There is no separate sharing mechanism for snags.
+
+```
+Site (Delhi) - sharedWith: { "john@example.com": "WORKING" }
+├── Snag A - John can see (inherits from site)
+├── Snag B - John can see (inherits from site)
+└── Snag C - John can see (inherits from site)
+```
+
+### Permission Enforcement for Snags
+
+| Permission | Can See | Can Edit | Can Create | Can Mark Complete |
+|------------|---------|----------|------------|-------------------|
+| VIEW | All snags | None | No | No |
+| WORKING | All* | Assigned only | No | Assigned only |
+| CONTRIBUTOR | All | Own + Assigned | Yes | Yes |
+| OWNER | All | All | Yes | Yes |
+
+*WORKING visibility controlled by `workingCanSeeAllSnags` site setting
+
+### Download Flow
+
+When collaborator downloads a shared site:
+1. Download site document from `/Profile/{ownerUID}/Sites/{siteId}`
+2. Download ALL snags from `/Profile/{ownerUID}/Sites/{siteId}/Snags/`
+3. Client-side filtering based on permission level
+4. **TODO:** Download snag images from Storage
+
+### Snag Assignment
+
+Snags can be assigned to collaborators via `assignedEmail` field:
+- WORKING users can only edit snags assigned to them
+- Assignment doesn't affect visibility (controlled by site setting)
+- Only OWNER can assign snags
 
 ---
 
@@ -450,23 +422,24 @@ service cloud.firestore {
 | Action | Reads | Writes |
 |--------|-------|--------|
 | Update Site.sharedWith | 0 | 1 |
-| CF creates shared_access | 0 | 1 (per email) |
-| **Total** | **0** | **2** |
+| CF creates shared_access | 0 | 2 (set + update) |
+| **Total** | **0** | **3** |
 
 ### Discovering Shared Sites
 
 | Action | Reads | Writes |
 |--------|-------|--------|
-| Query shared_access index | 1 | 0 |
+| Get shared_access document | 1 | 0 |
 | Fetch N shared sites | N | 0 |
-| **Total** | **N+1** | **0** |
+| Fetch snags for N sites | N queries | 0 |
+| **Total** | **1 + 2N** | **0** |
 
-### Comparison vs Naive Approach
+### Comparison: Single Document vs Subcollection
 
-| Approach | Discovery Cost (10,000 sites in system) |
-|----------|----------------------------------------|
-| ❌ Query all sites | 10,000 reads |
-| ✅ Reverse index | 1 read + N shared sites |
+| Approach | Discovery Cost | Security |
+|----------|----------------|----------|
+| ❌ Subcollection (old) | N+1 reads | ❌ Broken (list() can't verify email) |
+| ✅ Single document (new) | 1 read | ✅ Secure (get() verifies email) |
 
 ---
 
@@ -539,8 +512,9 @@ Use Firebase Extensions or custom Cloud Function to send email when site is shar
 | Permission settings | Per-site | Flexible, no Profile complexity |
 | Colleagues table | ❌ Removed | Use sharing history instead |
 | Email in path | SHA256 hash | Reliable, secure, fixed length |
-| Discovery mechanism | Reverse index | O(1) lookup, scalable |
+| Discovery mechanism | Single document per user | Secure get() vs insecure list() |
 | Index creation | Cloud Function | Secure, reliable, extensible |
+| Snag sharing | Inherit from site | No separate snag permissions |
 
 ---
 
@@ -549,6 +523,7 @@ Use Firebase Extensions or custom Cloud Function to send email when site is shar
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-06-07 | 1.0.0 | Initial document |
+| 2026-06-09 | 1.1.0 | Updated to single document structure (security fix), added snag sharing section, noted pending image download issue |
 
 ---
 
