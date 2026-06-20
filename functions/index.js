@@ -62,10 +62,54 @@ function hashEmail(email) {
  * Validate permission level
  * @param {string} permission - Permission to validate
  * @returns {boolean} True if valid
+ *
+ * Permission levels:
+ * - VIEW: Read-only, can see all snags
+ * - WORKING_SEE_ALL: Can see all snags, edit only assigned
+ * - WORKING_SEE_SELF: Can only see and edit assigned snags
+ * - CONTRIBUTOR: Can create snags, edit all snags
  */
 function isValidPermission(permission) {
-  const validPermissions = ['VIEW', 'WORKING', 'CONTRIBUTOR'];
+  const validPermissions = ['VIEW', 'WORKING_SEE_ALL', 'WORKING_SEE_SELF', 'CONTRIBUTOR'];
   return validPermissions.includes(permission);
+}
+
+/**
+ * Validate email format
+ * @param {string} email - Email to validate
+ * @returns {boolean} True if valid email format
+ */
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  // Tightened email regex (2026 best practice):
+  // - Allows + tags (user+newsletter@gmail.com)
+  // - Allows long TLDs (.museum, .technology)
+  // - Rejects: consecutive dots, dot before/after @, domain segments starting/ending with hyphen
+  // - Synced with UI validation in share_site_dialog.dart
+  // Negative lookaheads:
+  //   (?!.*\.\.) - no consecutive dots
+  //   (?!.*\.@)  - no dot before @
+  //   (?!.*@\.)  - no dot after @
+  //   (?!.*@-)   - no hyphen after @
+  //   (?!.*-\.)  - no hyphen before dot (segment ending with hyphen)
+  //   (?!.*\.-)  - no dot before hyphen (segment starting with hyphen)
+  const emailRegex = /^(?!.*\.\.)(?!.*\.@)(?!.*@\.)(?!.*@-)(?!.*-\.)(?!.*\.-)[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(email.trim());
+}
+
+ /**
+ * Escape HTML special characters to prevent XSS in emails
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text safe for HTML insertion
+ */
+function escapeHtml(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**
@@ -90,10 +134,19 @@ function log(functionName, message, data = null) {
 // CLOUD FUNCTIONS (2nd Gen)
 // ============================================================================
 
-/**
- * Triggered when a site document is created.
- * Creates shared_access entries for any initial collaborators.
- */
+// ============================================================================
+// DISABLED: onSiteCreated
+// ============================================================================
+// Reason: UI does not allow sharing during site creation. Sites are always
+// created with empty sharedWith map. Sharing only happens via site update,
+// which triggers onSiteUpdated. This function would never process any
+// collaborators in practice, so it's disabled to avoid unnecessary CF costs.
+//
+// Kept for reference in case sharing-at-creation is added in the future.
+// To re-enable: uncomment the exports.onSiteCreated line below.
+// ============================================================================
+
+/*
 exports.onSiteCreated = onDocumentCreated(
   {
     document: 'Profile/{ownerUID}/Sites/{siteId}',
@@ -131,8 +184,13 @@ exports.onSiteCreated = onDocumentCreated(
       const updatePromises = [];
 
       for (const [email, permission] of Object.entries(sharedWith)) {
+        if (!isValidEmail(email)) {
+          log(functionName, 'Skipping invalid email format', { email: email });
+          continue;
+        }
+
         if (!isValidPermission(permission)) {
-          log(functionName, 'Skipping invalid permission', { email: email.substring(0, 3) + '***', permission });
+          log(functionName, 'Skipping invalid permission', { email: email, permission });
           continue;
         }
 
@@ -142,15 +200,19 @@ exports.onSiteCreated = onDocumentCreated(
         // Two-step approach: set() with merge doesn't interpret dots as nested paths
         // Step 1: Ensure document exists with email field
         // Step 2: Use update() which correctly interprets dots as nested paths
+        // Store ownerUID + version for efficient client-side sync (RA 4.10)
+        const siteVersion = data.firebaseVersion || 0;
         updatePromises.push(
           accessRef.set({ email: email.toLowerCase().trim() }, { merge: true })
-            .then(() => accessRef.update({ [`sites.${siteId}`]: ownerUID }))
+            .then(() => accessRef.update({
+              [`sites.${siteId}`]: { ownerUID, version: siteVersion }
+            }))
         );
 
         // Queue email notification
         emailPromises.push(sendSiteSharedEmail(email, siteName, ownerName, permission));
 
-        log(functionName, 'Queued shared_access update', { email: email.substring(0, 3) + '***', siteId });
+        log(functionName, 'Queued shared_access update', { email: email, siteId, version: siteVersion });
       }
 
       await Promise.all(updatePromises);
@@ -169,6 +231,7 @@ exports.onSiteCreated = onDocumentCreated(
     }
   }
 );
+*/
 
 /**
  * Triggered when a site's sharedWith field changes.
@@ -200,8 +263,11 @@ exports.onSiteUpdated = onDocumentUpdated(
 
       // Check if sharedWith changed
       const sharedWithChanged = JSON.stringify(beforeShared) !== JSON.stringify(afterShared);
+      const siteVersion = afterData.firebaseVersion || 0;
+      const beforeVersion = beforeData.firebaseVersion || 0;
+      const versionChanged = siteVersion !== beforeVersion;
 
-      if (!sharedWithChanged) {
+      if (!sharedWithChanged && !versionChanged) {
         // No relevant changes for shared_access
         return;
       }
@@ -222,6 +288,11 @@ exports.onSiteUpdated = onDocumentUpdated(
       for (const [email, permission] of Object.entries(afterShared)) {
         if (!beforeShared[email]) {
           // New share - add site to user's shared_access document
+          if (!isValidEmail(email)) {
+            log(functionName, 'Skipping invalid email format for new share', { email: email });
+            continue;
+          }
+
           if (!isValidPermission(permission)) {
             log(functionName, 'Skipping invalid permission for new share', { permission });
             continue;
@@ -233,16 +304,54 @@ exports.onSiteUpdated = onDocumentUpdated(
           // Two-step approach: set() with merge doesn't interpret dots as nested paths
           // Step 1: Ensure document exists with email field
           // Step 2: Use update() which correctly interprets dots as nested paths
+          // Store ownerUID + version for efficient client-side sync (RA 4.10)
           updatePromises.push(
             accessRef.set({ email: email.toLowerCase().trim() }, { merge: true })
-              .then(() => accessRef.update({ [`sites.${siteId}`]: ownerUID }))
+              .then(() => accessRef.update({
+                [`sites.${siteId}`]: { ownerUID, version: siteVersion }
+              }))
           );
 
           // Queue email notification for new collaborators
           emailPromises.push(sendSiteSharedEmail(email, siteName, ownerName, permission));
 
           operationCount++;
-          log(functionName, 'Queued new share + email', { email: email.substring(0, 3) + '***' });
+          log(functionName, 'Queued new share + email', { email: email, version: siteVersion });
+        } else if (versionChanged) {
+          // Existing user - update version only
+          // Validate email for safety (in case of DB corruption)
+          if (!isValidEmail(email)) {
+            log(functionName, 'Skipping invalid email in existing share', { email: email });
+            continue;
+          }
+
+          const emailHash = hashEmail(email);
+          const accessRef = db.collection('shared_access').doc(emailHash);
+
+          // Try update first (normal path - 1 write)
+          // If doc doesn't exist (edge case), fall back to set+update (2 writes)
+          // gRPC status codes: https://grpc.github.io/grpc/core/md_doc_statuscodes.html
+          // NOT_FOUND = 5 (numeric, not string)
+          updatePromises.push(
+            accessRef.update({
+              [`sites.${siteId}`]: { ownerUID, version: siteVersion }
+            }).catch(err => {
+              // Check for gRPC NOT_FOUND (code 5) - document doesn't exist
+              const isNotFound = err.code === 5 ||
+                                 (err.message && err.message.includes('NOT_FOUND'));
+              if (isNotFound) {
+                log(functionName, 'shared_access doc missing for existing user, recreating', { email: email });
+                return accessRef.set({ email: email.toLowerCase().trim() }, { merge: true })
+                  .then(() => accessRef.update({
+                    [`sites.${siteId}`]: { ownerUID, version: siteVersion }
+                  }));
+              }
+              throw err; // Re-throw other errors
+            })
+          );
+
+          operationCount++;
+          log(functionName, 'Queued version update for existing share', { email: email, version: siteVersion });
         }
         // Note: Permission changes don't require shared_access updates
         // since we only store ownerUID (permission is read from site document)
@@ -263,7 +372,7 @@ exports.onSiteUpdated = onDocumentUpdated(
           );
 
           operationCount++;
-          log(functionName, 'Queued share removal', { email: email.substring(0, 3) + '***' });
+          log(functionName, 'Queued share removal', { email: email });
         }
       }
 
@@ -339,7 +448,7 @@ exports.onSiteDeleted = onDocumentDeleted(
             [`sites.${siteId}`]: FieldValue.delete(),
           })
         );
-        log(functionName, 'Queued shared_access site removal', { email: email.substring(0, 3) + '***' });
+        log(functionName, 'Queued shared_access site removal', { email: email });
       }
 
       await Promise.all(updatePromises);
@@ -423,12 +532,12 @@ function generateSiteSharedEmailHTML(siteName, ownerName, permission) {
 
                 <!-- Site Name -->
                 <h2 style="margin: 0 0 8px; font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">
-                  ${siteName || 'New Site'}
+                  ${escapeHtml(siteName) || 'New Site'}
                 </h2>
 
                 <!-- Owner Info -->
                 <p style="margin: 0 0 25px; font-size: 15px; color: #a0aec0;">
-                  Shared by <strong style="color: #667eea;">${ownerName || 'Site Owner'}</strong>
+                  Shared by <strong style="color: #667eea;">${escapeHtml(ownerName) || 'Site Owner'}</strong>
                 </p>
 
                 <!-- Permission Badge -->
@@ -647,7 +756,7 @@ async function sendSiteSharedEmail(recipientEmail, siteName, ownerName, permissi
 
     const response = await sesClient.send(sendCommand);
     log(functionName, 'Site shared email sent', {
-      recipient: recipientEmail.substring(0, 3) + '***',
+      recipient: recipientEmail,
       siteName,
       messageId: response.MessageId,
     });
@@ -657,7 +766,7 @@ async function sendSiteSharedEmail(recipientEmail, siteName, ownerName, permissi
     // Log error but don't throw - email failure shouldn't break sharing
     console.error(`${functionName} error:`, error);
     log(functionName, 'Failed to send site shared email', {
-      recipient: recipientEmail.substring(0, 3) + '***',
+      recipient: recipientEmail,
       siteName,
       error: error.message,
     });
@@ -906,7 +1015,7 @@ exports.onProfileCreated = onDocumentCreated(
         return;
       }
 
-      log(functionName, 'Sending welcome email', { email: userEmail.substring(0, 3) + '***' });
+      log(functionName, 'Sending welcome email', { email: userEmail });
 
       // Configure SES client
       const sesClient = new SESClient({
@@ -958,4 +1067,3 @@ exports.onProfileCreated = onDocumentCreated(
     }
   }
 );
-

@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Sharing Risk Assessment - SnagSnapper</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      line-height: 1.6;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #e2e8f0;
+    }
+    h1 {
+      color: #e2e8f0;
+      border-bottom: 3px solid #4a5568;
+      padding-bottom: 10px;
+    }
+    h2 {
+      margin-top: 40px;
+      padding: 10px 15px;
+      background: #2d3748;
+      color: #e2e8f0;
+      border-radius: 5px 5px 0 0;
+      margin-bottom: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    h3.na-divider {
+      color: #a0aec0;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+      padding: 8px 15px;
+      background: #1a202c;
+      border-top: 2px solid #4a5568;
+    }
+    .meta {
+      color: #a0aec0;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+    .summary-box {
+      background: #2d3748;
+      border-left: 4px solid #4a5568;
+      padding: 15px 20px;
+      margin: 20px 0;
+      border-radius: 0 5px 5px 0;
+    }
+    .summary-box h3 {
+      margin-top: 0;
+      color: #e2e8f0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #2d3748;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      margin-bottom: 30px;
+    }
+    th {
+      background: #1a202c;
+      color: #e2e8f0;
+      padding: 12px 15px;
+      text-align: left;
+      font-weight: 600;
+      position: sticky;
+      top: 44px;
+      z-index: 99;
+    }
+    td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #4a5568;
+      vertical-align: top;
+      color: #e2e8f0;
+    }
+    tr:hover {
+      background: #3d4a5c;
+    }
+    tr.na-row {
+      background: #252d3d;
+      opacity: 0.8;
+    }
+    tr.na-row:hover {
+      background: #3d4a5c;
+    }
+    .status-present {
+      background: #276749;
+      color: #9ae6b4;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .status-todo {
+      background: #822727;
+      color: #feb2b2;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .status-na {
+      background: #4a5568;
+      color: #a0aec0;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .status-outdated {
+      background: #744210;
+      color: #fbd38d;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .location-cf {
+      background: #2b4c7e;
+      color: #90cdf4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      margin-right: 5px;
+    }
+    .location-rules {
+      background: #44337a;
+      color: #d6bcfa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      margin-right: 5px;
+    }
+    .location-app {
+      background: #276749;
+      color: #9ae6b4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      margin-right: 5px;
+    }
+    .check-yes {
+      color: #68d391;
+      font-weight: bold;
+    }
+    .check-no {
+      color: #fc8181;
+      font-weight: bold;
+    }
+    code {
+      background: #1a202c;
+      color: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 13px;
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+    .severity-high {
+      color: #fc8181;
+      font-weight: 600;
+    }
+    .severity-medium {
+      color: #f6ad55;
+      font-weight: 600;
+    }
+    .severity-low {
+      color: #68d391;
+      font-weight: 600;
+    }
+    .test-select {
+      padding: 4px 8px;
+      border: 1px solid #4a5568;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #2d3748;
+      color: #e2e8f0;
+    }
+    .test-select:focus {
+      outline: none;
+      border-color: #718096;
+    }
+    .test-select option[value="Tested"] {
+      color: #9ae6b4;
+      background: #276749;
+    }
+    .test-select option[value="N/A"] {
+      color: #fbd38d;
+      background: #744210;
+    }
+    .test-select option[value="Accept"] {
+      color: #90cdf4;
+      background: #2b4c7e;
+    }
+    .status-accepted {
+      background: #2b4c7e;
+      color: #90cdf4;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .cf-intro {
+      background: #1a202c;
+      padding: 12px 15px;
+      font-size: 13px;
+      color: #a0aec0;
+      border-bottom: 1px solid #4a5568;
+    }
+    .cf-intro code {
+      background: #2d3748;
+    }
+    /* Info icon and popup styles */
+    .info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      background: #00ff00;
+      color: #1a1a2e;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-left: 6px;
+      vertical-align: middle;
+      transition: background 0.2s, box-shadow 0.2s;
+      box-shadow: 0 0 6px #00ff00;
+    }
+    .info-icon:hover {
+      background: #33ff33;
+      box-shadow: 0 0 12px #00ff00;
+    }
+    .info-popup-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .info-popup-overlay.active {
+      display: flex;
+    }
+    .info-popup {
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 8px;
+      max-width: 700px;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 20px 25px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+    .info-popup h4 {
+      margin: 0 0 15px 0;
+      color: #90cdf4;
+      font-size: 16px;
+      border-bottom: 1px solid #4a5568;
+      padding-bottom: 10px;
+    }
+    .info-popup p {
+      margin: 10px 0;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+    .info-popup pre {
+      background: #1a202c;
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+      color: #e2e8f0;
+      margin: 10px 0;
+    }
+    .info-popup .section-title {
+      color: #fbd38d;
+      font-weight: 600;
+      margin-top: 15px;
+    }
+    .info-popup .close-btn {
+      float: right;
+      background: #4a5568;
+      color: #e2e8f0;
+      border: none;
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .info-popup .close-btn:hover {
+      background: #718096;
+    }
+    /* Sub-item rows (e.g., 2.5.1, 2.5.2) */
+    tr.sub-item {
+      background: #252d3d;
+      font-size: 13px;
+    }
+    tr.sub-item:hover {
+      background: #3d4a5c;
+    }
+    tr.sub-item td:first-child {
+      padding-left: 30px;
+      color: #a0aec0;
+    }
+    tr.sub-item td:nth-child(2) {
+      padding-left: 20px;
+    }
+    tr.sub-item td {
+      border-left: 3px solid #4a5568;
+    }
+    tr.sub-item td:first-child {
+      border-left: 3px solid #718096;
+    }
+    /* Collapsible parent row */
+    tr.collapsible-parent {
+      cursor: pointer;
+    }
+    tr.collapsible-parent td:first-child {
+      position: relative;
+    }
+    .collapse-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      background: #4a5568;
+      color: #e2e8f0;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: bold;
+      margin-right: 8px;
+      transition: transform 0.2s, background 0.2s;
+      user-select: none;
+    }
+    .collapse-toggle:hover {
+      background: #718096;
+    }
+    .collapse-toggle.collapsed {
+      transform: rotate(-90deg);
+    }
+    tr.sub-item.hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Site Sharing Risk Assessment</h1>
+<p class="meta">
+  <strong>Version:</strong> 2.1.0 |
+  <strong>Date:</strong> 2026-06-20 |
+  <strong>Scope:</strong> Site Sharing Feature (Cloud Functions, Firebase, Client)
+</p>
+
+<div class="summary-box">
+  <h3>Executive Summary</h3>
+  <p><strong>Total Vulnerabilities Assessed:</strong> 52 (reorganized by Cloud Function)</p>
+  <p><strong>Status:</strong>
+    <span class="status-present">PRESENT: 27</span>
+    <span class="status-accepted">ACCEPTED: 13</span>
+    <span class="status-todo">TODO: 5</span>
+    <span class="status-na">N/A: 7</span>
+  </p>
+  <p><strong>Critical Gaps:</strong> Section 9 - Deletion & Asset Cleanup (5 TODOs). Local/Firebase images orphaned on site deletion.</p>
+</div>
+
+<!-- ==================== SECTION 1: onSiteCreated (DISABLED) ==================== -->
+<div style="opacity: 0.5; border: 2px dashed #666; padding: 15px; margin-bottom: 20px; background: #2d2d2d;">
+<h2 style="color: #888;">1. Cloud Function: onSiteCreated <span style="background: #e53e3e; color: white; padding: 2px 8px; border-radius: 4px; font-size: 14px; margin-left: 10px;">DISABLED</span></h2>
+<div class="cf-intro" style="border-left-color: #666;">
+  <strong>Trigger:</strong> <code>Profile/{ownerUID}/Sites/{siteId}</code> document created<br>
+  <strong>Purpose:</strong> Creates shared_access entries for initial collaborators, sends notification emails<br>
+  <strong>Location:</strong> <code>functions/index.js</code> (commented out, lines 126-214)
+</div>
+<div style="background: #4a3f3f; border-left: 4px solid #e53e3e; padding: 12px; margin: 10px 0;">
+  <strong style="color: #fc8181;">⚠️ DISABLED - For Reference Only</strong><br>
+  <p style="margin: 8px 0 0 0; color: #a0aec0; font-size: 13px;">
+    <strong>Reason:</strong> UI does not allow sharing during site creation. Sites are always created with empty <code>sharedWith</code> map.
+    Sharing only happens via site update, which triggers <code>onSiteUpdated</code>. This function would never process any collaborators in practice.<br>
+    <strong>Cost:</strong> Disabled to avoid unnecessary Cloud Function invocation costs.<br>
+    <strong>Code:</strong> Preserved in <code>functions/index.js</code> as commented block for future use if sharing-at-creation is added.
+  </p>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Active risks first -->
+    <tr>
+      <td>1.1</td>
+      <td><strong>Input Validation (Email)</strong></td>
+      <td>Attacker could inject malformed email addresses (e.g., "not-an-email", empty string, special characters) into the sharedWith map. These would be hashed and stored in shared_access, potentially causing lookup failures or unexpected behavior.</td>
+      <td><strong>Two-layer validation:</strong> (1) <strong>UI:</strong> <code>_isValidEmail()</code> in <code>share_site_dialog.dart:51-54</code> validates with regex before "Add" action (lines 64-67). Shows error: "Please enter a valid email address". (2) <strong>CF:</strong> <code>isValidEmail()</code> re-validates server-side. Invalid emails skipped and logged. Attacker bypassing UI still blocked by CF.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:167-170</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-54,64-67</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.2</td>
+      <td><strong>Input Validation (Permission)</strong></td>
+      <td>Attacker could inject arbitrary permission strings (e.g., "ADMIN", "OWNER", "DELETE_ALL") into sharedWith map values via direct API call. If propagated to shared_access, could cause permission check failures or unexpected behavior.</td>
+      <td><strong>UI enforces valid permissions:</strong> Card-based selection only (lines 570-610) - users tap predefined cards, no text input. Invalid permissions impossible via genuine app. <strong>CF defense-in-depth:</strong> <code>isValidPermission()</code> validates against whitelist. If attacker bypasses UI via direct API: collaborator silently skipped. <strong>Acceptable:</strong> Genuine app always sends valid permissions; API bypass only harms attacker's own sharing attempt.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:72-75,172-175</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:570-610</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.3</td>
+      <td><strong>HTML Injection (Email)</strong></td>
+      <td>Attacker could inject malicious HTML into fields that appear in notification emails: <code>siteName</code> (from site.name) and <code>ownerName</code> (from profile.name or ownerEmail). Example: <code>&lt;script&gt;alert('XSS')&lt;/script&gt;</code> could execute in recipient's email client, stealing credentials or redirecting to phishing sites.</td>
+      <td><strong>Two-layer protection for each field:</strong><br>(1) <strong>Site name UI:</strong> <code>FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ]'))</code> blocks all HTML chars at input.<br>(2) <strong>Owner name UI:</strong> <code>ValidationRules.namePattern</code> regex (<code>^[\p{L}\p{M}0-9\s\-']+$</code>) blocks <code>&lt; &gt; &amp; "</code> at validation.<br>(3) <strong>CF:</strong> <code>escapeHtml()</code> escapes both siteName and ownerName before email insertion as defense-in-depth.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:94-102,502,507</code><br><span class="location-app">Site UI</span><br><code>site_info_v2.dart:585</code><br><span class="location-app">Profile UI</span><br><code>validation_rules.dart:41,88-102</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.4</td>
+      <td><strong>Email Enumeration</strong></td>
+      <td>Attacker could probe shared_access collection to discover which email addresses have accounts. If document IDs were plain emails, attacker could enumerate <code>/shared_access/victim@email.com</code> to confirm user exists, enabling targeted phishing attacks.</td>
+      <td><strong>Two-layer protection:</strong> (1) Document IDs are SHA256 hashes of lowercase emails - non-reversible, 64-char hex string. (2) Firestore rules verify <code>resource.data.email == request.auth.token.email</code> - even if attacker guesses hash, read is blocked unless their auth email matches.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:51-59,177</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.5</td>
+      <td><strong>Data Integrity (shared_access structure)</strong></td>
+      <td><strong>Document structure:</strong> <code>shared_access/{emailHash}</code> contains <code>{ email, sites: { siteId1: {ownerUID, version}, ... } }</code>. <strong>Problem:</strong> If CF uses single <code>set()</code> with dot notation like <code>sites.abc123</code>, Firestore creates literal key <code>"sites.abc123"</code> instead of nested <code>sites: { abc123: {...} }</code>. Also, if document doesn't exist yet (first share for this user), the <code>email</code> field would be missing - breaking Firestore rule verification.</td>
+      <td><strong>Two-step write:</strong><br>(1) <code>set({ email }, { merge: true })</code> - Creates doc if needed, ensures <code>email</code> field exists for rule verification.<br>(2) <code>update({ [`sites.${siteId}`]: {...} })</code> - <code>update()</code> correctly interprets dots as nested paths, adding site to the <code>sites</code> map.<br>Chained via <code>.then()</code> so Step 2 only runs after Step 1 succeeds.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:185-190</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.6</td>
+      <td><strong>Rate Limiting</strong></td>
+      <td>Attacker could rapidly create sites with 30 collaborators each, triggering CF executions (30 shared_access writes + 30 emails per site). At scale: 100 sites × 30 collabs = 3000 CF invocations + 3000 emails, causing Firebase/email cost spikes.</td>
+      <td><strong>ACCEPTED - Multi-layer protection:</strong><br>(1) <strong>App Check:</strong> Enforced in Firebase Console - blocks requests without valid device attestation.<br>(2) <strong>freeRASP:</strong> Blocks emulators, app cloning, Frida/hooks, debuggers, tampered APKs, sideloaded installs.<br>(3) <strong>Auth:</strong> <code>isAuthenticated()</code> required in Firestore rules.<br>(4) <strong>Rules:</strong> <code>sharedWith.size() <= 30</code> caps per-site impact.<br>(5) <strong>Traceability:</strong> All writes tied to UID for account banning.<br>(6) Can add <code>firebase-functions-rate-limiter</code> if abuse detected post-launch.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js</code><br><span class="location-app">freeRASP</span><br><code>security_service.dart</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.7</td>
+      <td><strong>Information Disclosure (Logs)</strong></td>
+      <td>When CF throws an error, full stack traces are logged via <code>console.error(error)</code>. Stack traces could reveal: internal function names, file paths, library versions, and error messages that help attackers understand system internals.</td>
+      <td><strong>ACCEPTED.</strong> Cloud Logging only accessible to Firebase project admins with <code>roles/logging.viewer</code> IAM permission. No public access. Stack traces essential for debugging production issues. Risk: Low (admin-only access).</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:209</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.8</td>
+      <td><strong>Log Data Leakage (PII)</strong></td>
+      <td>CF logs full email addresses in statements like <code>console.log('Skipping invalid email:', email)</code> and success messages. PII (email addresses) stored in Cloud Logging could be exposed if: (1) logs exported to insecure location, (2) admin account compromised, (3) overly broad IAM permissions.</td>
+      <td><strong>ACCEPTED.</strong> (1) Only Firebase project admins can access Cloud Logging. (2) Full emails essential for troubleshooting "user X can't see shared site" support tickets. (3) Logs auto-expire per retention policy. (4) Alternative (hashing emails in logs) would make debugging impossible.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:168,195</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>1.9</td>
+      <td><strong>CF Failure/Recovery</strong></td>
+      <td>CF fails after Firestore write succeeds. User sees "Shared!" but <code>shared_access</code> entries are never created. Collaborators can't discover shared site. User has no indication of failure.<br><br><strong>See:</strong> <code>Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md</code></td>
+      <td><strong>ACCEPTED - Retry intentionally NOT enabled:</strong><br>(1) <strong>Decision:</strong> Do not enable <code>retry: true</code> - Firebase doesn't allow limiting retry count (would retry for 24 hours).<br>(2) <strong>Recovery path:</strong> User edits site (any field) → triggers <code>onSiteUpdated</code> → handles sharing.<br>(3) <strong>Alternative recovery:</strong> Owner removes and re-adds collaborator.<br>(4) <strong>Risk is low:</strong> CF is simple, transient failures rare. Permanent failures indicate bugs to fix.<br>(5) <strong>Idempotent writes:</strong> <code>set({ merge: true })</code> safe if manually re-triggered.</td>
+      <td><span class="location-cf">onSiteCreated</span><br><code>functions/index.js:130-213</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+  </tbody>
+  <!-- N/A items grouped at bottom -->
+  <tbody>
+    <tr><td colspan="7"><h3 class="na-divider">N/A Items (verified not applicable to this CF)</h3></td></tr>
+    <tr class="na-row">
+      <td>1.10</td>
+      <td><strong>Authentication</strong></td>
+      <td>Concern: CF could execute for unauthenticated users, creating shared_access entries without proper authorization.</td>
+      <td><strong>N/A.</strong> This is a Firestore-triggered function, not an HTTP callable function. It executes server-side in response to document writes. The trigger only fires AFTER Firestore rules allow the write - and those rules require <code>isAuthenticated()</code> and <code>isOwner()</code>. Unauthenticated writes are rejected before CF ever triggers.</td>
+      <td><span class="location-cf">onSiteCreated</span><br>N/A (trigger-based)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="na-row">
+      <td>1.11</td>
+      <td><strong>Replay Attacks</strong></td>
+      <td>Concern: Attacker could capture and replay a "create site with shares" request to trigger duplicate CF executions, causing duplicate shared_access entries or duplicate emails.</td>
+      <td><strong>N/A.</strong> (1) You can't "replay" a Firestore trigger - it fires based on document state changes, not HTTP requests. (2) Even if CF runs twice for same data (rare retry scenario), it's idempotent: <code>set({ merge: true })</code> on existing document is a no-op, and duplicate email sends are acceptable edge case.</td>
+      <td><span class="location-cf">onSiteCreated</span><br>N/A (idempotent)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+</div><!-- End of DISABLED Section 1 wrapper -->
+
+<!-- ==================== SECTION 2: onSiteUpdated ==================== -->
+<h2>2. Cloud Function: onSiteUpdated</h2>
+<div class="cf-intro">
+  <strong>Trigger:</strong> <code>Profile/{ownerUID}/Sites/{siteId}</code> document updated<br>
+  <strong>Purpose:</strong> Adds/removes shared_access entries when sharedWith changes, updates versions, sends notification emails for new shares<br>
+  <strong>Location:</strong> <code>functions/index.js:229-370</code>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Active risks first -->
+    <tr>
+      <td>2.1</td>
+      <td><strong>Input Validation (Email)</strong></td>
+      <td>When owner adds new collaborator via site update, malformed email (e.g., "not-an-email", SQL injection attempt, script tags) could be processed. Malformed emails would fail lookup when collaborator tries to sync.</td>
+      <td><strong>Two-layer validation with tightened regex (2026 best practice):</strong> (1) <strong>UI:</strong> <code>_isValidEmail()</code> in <code>share_site_dialog.dart:51-66</code> validates before "Add" action. Shows error: "Please enter a valid email address". (2) <strong>CF:</strong> <code>isValidEmail()</code> re-validates server-side. Invalid emails skipped and logged. <strong>Regex rejects:</strong> consecutive dots, dot before/after @, domain segments starting/ending with hyphen. Both use identical pattern.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:280-283</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-66</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.2</td>
+      <td><strong>Input Validation (Permission)</strong></td>
+      <td>When owner adds new collaborator, they could inject arbitrary permission string (e.g., "ADMIN", "FULL_ACCESS"). If stored in shared_access, could cause permission check failures or unexpected behavior.</td>
+      <td><strong>Two-layer validation:</strong> (1) <strong>UI:</strong> Card-based selection only (lines 569-610) - users tap predefined cards, no text input. Only 4 valid options: VIEW, WORKING_SEE_ALL, WORKING_SEE_SELF, CONTRIBUTOR. (2) <strong>CF:</strong> <code>isValidPermission()</code> validates against whitelist. Invalid permissions skipped and logged. Attacker bypassing UI still blocked by CF.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:285-288</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:569-610</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.3</td>
+      <td><strong>HTML Injection (Email)</strong></td>
+      <td>Site name or owner name with HTML/script tags could be injected into notification emails for new collaborators added via site update.</td>
+      <td><strong>Two-layer protection:</strong> (1) <strong>Site name UI:</strong> <code>FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ]'))</code> blocks all HTML chars at input. (2) <strong>Owner name UI:</strong> <code>ValidationRules.namePattern</code> blocks <code>&lt;&gt;&amp;"</code>. (3) <strong>CF:</strong> <code>escapeHtml()</code> escapes both siteName and ownerName before email insertion as defense-in-depth.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:94-102,502,507</code><br><span class="location-app">Site UI</span><br><code>site_info_v2.dart:585</code><br><span class="location-app">Profile UI</span><br><code>validation_rules.dart:41,88-102</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.4</td>
+      <td><strong>Email Enumeration</strong></td>
+      <td>Attacker could probe shared_access collection paths to discover valid email addresses. If document IDs used plain emails, attacker could enumerate <code>/shared_access/victim@email.com</code> paths to confirm accounts exist.</td>
+      <td><strong>Two-layer protection:</strong> (1) Document IDs are SHA256 hashes via <code>hashEmail()</code> for all operations (add/update/remove) - non-reversible 64-char hex. (2) Firestore rules verify <code>resource.data.email == request.auth.token.email.lower()</code> - even if attacker guesses a hash, read is blocked unless their authenticated email matches the document's email field.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:301,322,342</code><br><span class="location-rules">Firestore Rules</span><br><code>firestore.rules:260</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr class="collapsible-parent" onclick="toggleSubItems('group-2-5', this)">
+      <td><span class="collapse-toggle">▼</span>2.5</td>
+      <td><strong>Data Integrity (Version Sync)</strong> <span class="info-icon" onclick="event.stopPropagation(); showPopup('popup-2-5')">i</span></td>
+      <td>Collaborator's client could have stale site data if they don't know the site was updated. Without version tracking, client would need to fetch full site document on every sync to detect changes, causing unnecessary Firestore reads and costs.</td>
+      <td>CF stores <code>{ ownerUID, version }</code> in each collaborator's shared_access entry. On site update, version is incremented for ALL existing shares (not just new ones). Client compares local version vs shared_access version - only fetches site document if remote version is higher.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:307-332</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" onclick="event.stopPropagation()"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="sub-item" data-group="group-2-5">
+      <td>2.5.1</td>
+      <td><strong>Missing shared_access Document</strong></td>
+      <td>For existing collaborators, if the <code>shared_access/{hash}</code> document doesn't exist (deleted, or previous CF failed), <code>update()</code> would throw gRPC error code 5 (NOT_FOUND).</td>
+      <td><strong>FIXED:</strong> Catch-and-recover pattern implemented. Normal path uses single <code>update()</code> (1 write). If NOT_FOUND error (code 5), falls back to <code>set({ merge: true })</code> + <code>update()</code> (2 writes). Self-healing - recreates missing doc. Also added <code>isValidEmail()</code> check for existing shares.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:320-347</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="sub-item" data-group="group-2-5">
+      <td>2.5.2</td>
+      <td><strong>Partial Update Failure</strong></td>
+      <td><code>Promise.all(updatePromises)</code> fails fast - if ANY collaborator's update fails, the entire batch is marked failed. However, some updates may have already completed before the failure, leaving inconsistent state where some collaborators have updated version, others don't.</td>
+      <td><strong>ACCEPTED:</strong> Low probability scenario. Recovery path exists: owner edits site again → triggers new <code>onSiteUpdated</code> → retries all updates. Inconsistency is temporary and self-healing on next site edit.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:358</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="sub-item" data-group="group-2-5">
+      <td>2.5.3</td>
+      <td><strong>Stale Data (Silent Failure)</strong></td>
+      <td>If CF fails to update a collaborator's <code>shared_access</code> version, that collaborator has no way to know they're out of sync. Their <code>localVersion &lt; remoteVersion</code> check returns false (since remote wasn't updated), so they won't redownload. They continue with stale site data.</td>
+      <td><strong>ACCEPTED:</strong> Edge case with recovery path. Collaborator will eventually get updated on next site edit by owner. Alternative: collaborator can manually force-refresh site data via pull-to-refresh or re-entering the site.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br>Consequence of 2.5.1/2.5.2<br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.6</td>
+      <td><strong>Share Removal Cleanup</strong></td>
+      <td>When owner removes collaborator from sharedWith, their shared_access entry for this site could remain orphaned. Collaborator would still see site in their "Shared Sites" list but might get permission errors when accessing.</td>
+      <td>CF detects removed shares by comparing before/after sharedWith maps. For each removed email, uses <code>FieldValue.delete()</code> to remove specific site entry: <code>accessRef.update({ [`sites.${siteId}`]: FieldValue.delete() })</code>. Only removes this site, preserves other shared sites.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:338-350</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.7</td>
+      <td><strong>Rate Limiting</strong></td>
+      <td>Rapid share/unshare cycles could cause cost abuse via repeated CF invocations and email sends.</td>
+      <td><strong>ACCEPTED.</strong> Same multi-layer protection as 1.6: App Check + freeRASP + Auth + Rules + Traceability. Manual abuse self-limiting and traceable.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js</code><br>See 1.6 for details<br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.8</td>
+      <td><strong>Information Disclosure (Logs)</strong></td>
+      <td>Sensitive error details exposed in Cloud Function logs</td>
+      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code>. Requires Firebase project access (admin only).</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:366</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.9</td>
+      <td><strong>Log Data Leakage (PII)</strong></td>
+      <td>Full email addresses logged, exposing PII</td>
+      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged to aid troubleshooting.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:281,308,321,342</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.10</td>
+      <td><strong>CF Failure/Recovery</strong></td>
+      <td>CF fails after Firestore write succeeds. Site's sharedWith is updated but <code>shared_access</code> entries not created/updated. New collaborators can't discover site; removed collaborators still see it.<br><br><strong>See:</strong> <code>Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md</code></td>
+      <td><strong>ACCEPTED - Retry intentionally NOT enabled:</strong><br>(1) <strong>Decision:</strong> Do not enable <code>retry: true</code> - Firebase doesn't allow limiting retry count (would retry for 24 hours).<br>(2) <strong>Recovery path:</strong> User edits site again → triggers another <code>onSiteUpdated</code>.<br>(3) <strong>Alternative recovery:</strong> Owner removes and re-adds collaborator.<br>(4) <strong>Note:</strong> This CF IS the recovery path for <code>onSiteCreated</code> failures.<br>(5) <strong>Idempotent writes:</strong> <code>set({ merge: true })</code>, <code>update()</code>, and <code>FieldValue.delete()</code> are all safe to repeat.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:229-370</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+  <!-- N/A items grouped at bottom -->
+  <tbody>
+    <tr><td colspan="7"><h3 class="na-divider">N/A Items (verified not applicable to this CF)</h3></td></tr>
+    <tr class="na-row">
+      <td>2.11</td>
+      <td><strong>Authentication</strong></td>
+      <td>CF executes without verifying user is logged in</td>
+      <td><strong>N/A.</strong> This is a Firestore-triggered function (not callable). Authentication enforced at Firestore write level before CF triggers.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br>N/A (trigger-based)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="na-row">
+      <td>2.12</td>
+      <td><strong>Replay Attacks</strong></td>
+      <td>Captured requests could be replayed</td>
+      <td><strong>N/A.</strong> Firestore triggers are idempotent - replaying the same update compares same before/after and produces same result.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br>N/A (idempotent)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 3: onSiteDeleted ==================== -->
+<h2>3. Cloud Function: onSiteDeleted</h2>
+<div class="cf-intro">
+  <strong>Trigger:</strong> <code>Profile/{ownerUID}/Sites/{siteId}</code> document deleted<br>
+  <strong>Purpose:</strong> Removes all shared_access entries for deleted site<br>
+  <strong>Location:</strong> <code>functions/index.js:376-432</code><br>
+  <strong style="color: #c53030;">Note:</strong> This is a single point of failure - if this CF fails, shared_access entries remain pointing to deleted site. Client-side cleanup handles this.
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- Active risks first -->
+    <tr>
+      <td>3.1</td>
+      <td><strong>Email Enumeration</strong></td>
+      <td>When site is deleted, CF iterates over sharedWith emails to clean up shared_access. If document paths used plain emails, cleanup operations would leak which emails had accounts.</td>
+      <td>All emails are SHA256 hashed via <code>hashEmail()</code> (line 399) before constructing document paths. Cleanup operations use <code>/shared_access/{64-char-hash}</code> paths - no email addresses exposed in document paths or logs (except internal debug logs).</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:399</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>3.2</td>
+      <td><strong>Cleanup Completeness</strong></td>
+      <td>If CF only partially processes sharedWith (e.g., crashes mid-loop, timeout), some collaborators' shared_access entries would remain pointing to deleted site. They'd see ghost site in list.</td>
+      <td>CF iterates ALL keys in <code>data.sharedWith</code> from deleted document snapshot (line 398). Each cleanup is pushed to <code>updatePromises[]</code> array. <code>await Promise.all(updatePromises)</code> (line 411) ensures all operations complete or fail together. If any fails, error is thrown and logged.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:398-411</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>3.3</td>
+      <td><strong>CF Failure (Orphaned Pointers)</strong></td>
+      <td><strong>Single point of failure:</strong> If this CF fails (~0.5% rate), ALL collaborators' shared_access entries remain pointing to the now-deleted site. On next sync, collaborator sees site in "Shared Sites" list, but fetch from Firestore returns 404 (site doesn't exist).</td>
+      <td><strong>ACCEPTED.</strong> Client-side handles gracefully: <code>shared_site_service.dart</code> detects site in shared_access but not in Firestore (lines 267-277), deletes local copy + snags, continues sync. User experience: site silently disappears from list. No error shown, no manual intervention needed.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:267-277,284-297</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>3.4</td>
+      <td><strong>Information Disclosure (Logs)</strong></td>
+      <td>Sensitive error details exposed in Cloud Function logs</td>
+      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code>. Requires Firebase project access (admin only).</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:418</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>3.5</td>
+      <td><strong>Log Data Leakage (PII)</strong></td>
+      <td>Full email addresses logged during cleanup, exposing PII</td>
+      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged to aid troubleshooting.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:408</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+  </tbody>
+  <!-- N/A items grouped at bottom -->
+  <tbody>
+    <tr><td colspan="7"><h3 class="na-divider">N/A Items (verified not applicable to this CF)</h3></td></tr>
+    <tr class="na-row">
+      <td>3.6</td>
+      <td><strong>Authentication</strong></td>
+      <td>Concern: Unauthenticated user could trigger site deletion CF to remove others' shared_access entries.</td>
+      <td><strong>N/A.</strong> This is a Firestore-triggered function (<code>onDocumentDeleted</code>). It only fires when a Site document is actually deleted from Firestore. Firestore rules require <code>isOwner(ownerUID)</code> for delete operations - only authenticated owner can delete their site. Unauthenticated deletes are rejected before CF ever triggers.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br>N/A (trigger-based)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="na-row">
+      <td>3.7</td>
+      <td><strong>Input Validation (Email)</strong></td>
+      <td>Concern: Malformed emails in sharedWith could cause hashEmail() to fail or produce invalid document paths during cleanup.</td>
+      <td><strong>N/A.</strong> This CF only REMOVES existing entries - it doesn't validate or add new emails. Emails were already validated by onSiteCreated/onSiteUpdated when they were added. Even if somehow malformed email exists, hashEmail() handles any string input (just produces a hash), and FieldValue.delete() works regardless of path content.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br>N/A (cleanup only)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="na-row">
+      <td>3.8</td>
+      <td><strong>Input Validation (Permission)</strong></td>
+      <td>Invalid permission types could be processed</td>
+      <td><strong>N/A.</strong> This CF only removes entries - it doesn't read or validate permissions. Just deletes site from each collaborator's shared_access.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br>N/A (cleanup only)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="na-row">
+      <td>3.9</td>
+      <td><strong>HTML Injection (Email)</strong></td>
+      <td>HTML/script tags could be injected into emails</td>
+      <td><strong>N/A.</strong> This CF does not send any emails. It only removes entries from shared_access.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br>N/A (no emails)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr class="na-row">
+      <td>3.10</td>
+      <td><strong>Replay Attacks</strong></td>
+      <td>Captured requests could be replayed</td>
+      <td><strong>N/A.</strong> Firestore triggers are idempotent - replaying the same deletion has no additional effect (entries already removed).</td>
+      <td><span class="location-cf">onSiteDeleted</span><br>N/A (idempotent)<br><span class="check-yes">N/A</span></td>
+      <td><span class="status-na">N/A</span></td>
+      <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 4: FIREBASE DOCUMENT ==================== -->
+<h2>4. Firebase Document (shared_access)</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>4.1</td>
+      <td><strong>Unauthorized Read</strong></td>
+      <td>Attacker could attempt to read another user's shared_access document by guessing or computing their email hash. If successful, they'd learn which sites are shared with that user (site IDs + owner UIDs).</td>
+      <td>Firestore rules verify <code>resource.data.email == request.auth.token.email.lower()</code>. Even if attacker correctly guesses the SHA256 hash of victim's email, the read fails because attacker's auth token email doesn't match the document's email field. Returns permission denied, not 404.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:258-260</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>4.2</td>
+      <td><strong>Unauthorized Creation</strong></td>
+      <td>Attacker triggers CF to create shared_access entry for unauthorized site</td>
+      <td>CF only triggers after successful Site write. Firestore rules enforce <code>isOwner(ownerUID)</code> on Site writes. Only owner can modify sharedWith, so only owner can trigger shared_access creation.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:178-180,182-184</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>4.3</td>
+      <td><strong>Client Write</strong></td>
+      <td>Malicious client could attempt to create fake shared_access entries to grant themselves access to sites they shouldn't see. They could write <code>{ email: "attacker@email.com", sites: { victimSiteId: {...} } }</code>.</td>
+      <td><strong>Write completely blocked:</strong> <code>allow write: if false;</code> in Firestore rules. No client can create, update, or delete shared_access documents regardless of authentication. Only Cloud Functions using Admin SDK (bypasses rules) can modify. Direct API calls return permission denied.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:262</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>4.4</td>
+      <td><strong>Document Enumeration</strong></td>
+      <td>Attacker lists all shared_access documents</td>
+      <td>Explicit <code>allow list: if false</code> blocks enumeration. Only <code>get()</code> allowed with email verification. SHA256 hash as document ID prevents path guessing.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:254-266</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>4.5</td>
+      <td><strong>Self-Share Prevention</strong></td>
+      <td>Owner adds themselves to sharedWith, causing duplicate site in "Shared Sites" tab. Site would appear in both "My Sites" and "Shared Sites".</td>
+      <td><strong>Two-layer protection:</strong> (1) <strong>UI:</strong> Checks <code>email == widget.site.ownerEmail.toLowerCase()</code> before adding. Shows error: "Cannot add the site owner". (2) <strong>Rules:</strong> Validates <code>!(data.ownerEmail.lower() in data.sharedWith)</code> - rejects write if owner in sharedWith.</td>
+      <td><span class="location-app">UI</span><br><code>share_site_dialog.dart:74-77</code><br><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:79-80</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>4.6</td>
+      <td><strong>Orphaned Site Pointer</strong></td>
+      <td>If <code>onSiteDeleted</code> CF fails, shared_access entry remains pointing to deleted site</td>
+      <td><strong>Two-layer cleanup:</strong> (1) If site not in Firestore but in shared_access, delete local copy + snags (lines 267-277). (2) If site not in shared_access but exists locally, orphan cleanup removes it (lines 370-381).</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:267-277,370-381</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 5: FIREBASE RULES ==================== -->
+<h2>5. Firebase Rules</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>5.1</td>
+      <td><strong>Missing Authentication</strong></td>
+      <td>Unauthenticated users access protected resources</td>
+      <td><code>isAuthenticated()</code> helper checks <code>request.auth != null</code>. Applied to all read/write operations.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:10-12</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.2</td>
+      <td><strong>Unverified Email</strong></td>
+      <td>Users with unverified emails perform sensitive operations</td>
+      <td><code>isEmailVerified()</code> helper checks <code>request.auth.token.email_verified == true</code>. Required for all write operations.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:20-22</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.3</td>
+      <td><strong>Ownership Bypass</strong></td>
+      <td>Non-owner modifies owner-only resources</td>
+      <td><code>isOwner(userId)</code> helper verifies <code>request.auth.uid == userId</code>. Applied to Site create/update/delete.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:15-17</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.4</td>
+      <td><strong>Unauthorized Site Access</strong></td>
+      <td>User reads site they're not shared with</td>
+      <td><code>isCollaborator(siteData)</code> checks if user's email exists in <code>siteData.sharedWith</code> map with lowercase matching.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:30-33</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.5</td>
+      <td><strong>Permission Escalation</strong></td>
+      <td>User with VIEW permission could attempt to create snags, modify site data, or perform actions reserved for CONTRIBUTOR. If server doesn't enforce permissions, VIEW users could effectively have full access.</td>
+      <td>Granular permission helpers in Firestore rules: <code>canContribute()</code> checks for CONTRIBUTOR, <code>isWorking()</code> checks for WORKING_* types. Each write rule (snag create, snag update, site update) checks appropriate permission. Example: Snag create requires <code>canContribute()</code> - VIEW users get permission denied.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:41-61</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.6</td>
+      <td><strong>sharedWith Tampering</strong></td>
+      <td>Collaborator modifies sharing permissions</td>
+      <td>CONTRIBUTOR update rule explicitly requires <code>request.resource.data.sharedWith == resource.data.sharedWith</code>. Only owner can modify.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:194</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.7</td>
+      <td><strong>Ownership Transfer</strong></td>
+      <td>User changes ownerUID/ownerEmail on existing site</td>
+      <td><code>ownershipUnchanged()</code> helper ensures <code>ownerUID</code> and <code>ownerEmail</code> match existing values on update.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:81-84</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.8</td>
+      <td><strong>Invalid Site Data</strong></td>
+      <td>Malformed data written to Site documents</td>
+      <td><code>isValidSiteData()</code> validates: name (1-200 chars), ownerUID matches auth, ownerEmail matches token.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:69-78</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.9</td>
+      <td><strong>DoS via Payload Size</strong></td>
+      <td>Massive sharedWith map could exhaust CF resources/costs</td>
+      <td><code>isValidSiteData()</code> limits sharedWith map to 30 collaborators max. Enforced at Firestore rules level, blocking direct API abuse.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:79</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.10</td>
+      <td><strong>Invalid Snag Data</strong></td>
+      <td>Malformed data written to Snag documents</td>
+      <td><code>isValidSnagData()</code> validates 40+ fields: title, arrays (6 slots each), description (5000 chars), integers, booleans, etc.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:92-140</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>5.11</td>
+      <td><strong>Snag Identity Tampering</strong></td>
+      <td>User changes siteUID, creatorEmail, etc. after creation</td>
+      <td><code>snagIdentityUnchanged()</code> ensures siteUID, ownerEmail, creatorEmail, creationDate cannot be modified after creation.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:143-148</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 6: CLIENT-SIDE SHARING ==================== -->
+<h2>6. Client-Side Sharing</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>6.1</td>
+      <td><strong>Invalid Email Format</strong></td>
+      <td>User enters malformed email address (e.g., "not-an-email", missing @, invalid domain). Malformed emails would fail collaborator lookup on sync.</td>
+      <td><strong>Two-layer validation:</strong> (1) <strong>UI:</strong> <code>_isValidEmail()</code> validates with regex before enabling "Add" button. Invalid input shows inline error: "Please enter a valid email address". (2) <strong>CF:</strong> <code>isValidEmail()</code> re-validates server-side as defense-in-depth for API bypass.</td>
+      <td><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-54,64-67</code><br><span class="location-cf">CF</span><br><code>functions/index.js:167-170</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.2</td>
+      <td><strong>Case-Sensitive Email</strong></td>
+      <td>Same email with different case treated as different users. "User@Example.com" and "user@example.com" could create duplicate shared_access entries or fail to match on lookup.</td>
+      <td><strong>Two-layer normalization:</strong> (1) <strong>UI:</strong> <code>.trim().toLowerCase()</code> applied before storing in sharedWith map. (2) <strong>CF:</strong> <code>email.toLowerCase().trim()</code> applied in hashEmail() and when setting shared_access document. Consistent normalization ensures case-insensitive matching.</td>
+      <td><span class="location-app">UI</span><br><code>share_site_dialog.dart:57</code><br><span class="location-cf">CF</span><br><code>functions/index.js:57,186,288</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.3</td>
+      <td><strong>Duplicate Collaborator</strong></td>
+      <td>Same email added twice with different permissions. Could cause confusion or overwrite existing permission unexpectedly.</td>
+      <td><strong>UI enforced:</strong> Checks <code>_sharedWith.containsKey(email)</code> before adding. If exists, shows inline error: "Already a collaborator". User must remove existing entry first to change permission. Uses sharedWith as Map (key uniqueness enforced by data structure).</td>
+      <td><span class="location-app">UI</span><br><code>share_site_dialog.dart:69-72</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.4</td>
+      <td><strong>Self-Share</strong></td>
+      <td>Owner adds themselves as collaborator. Would cause site to appear in both "My Sites" and "Shared Sites" tabs, creating confusion.</td>
+      <td><strong>UI enforced:</strong> Compares <code>email == widget.site.ownerEmail.toLowerCase()</code> before adding. Shows inline error: "Cannot add the site owner". Also protected by Firestore rules (see 4.5) as defense-in-depth for API bypass.</td>
+      <td><span class="location-app">UI</span><br><code>share_site_dialog.dart:74-77</code><br><span class="location-rules">Rules</span><br><code>firestore.rules:79-80</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.5</td>
+      <td><strong>Share Others' Site</strong></td>
+      <td>Non-owner attempts to share a site they don't own. Could grant themselves or others unauthorized access to the site's snags and data.</td>
+      <td><strong>Three-layer protection:</strong> (1) <strong>UI:</strong> Share button only rendered for owners: <code>if (_isOwner) _buildShareButton()</code> - collaborators never see it. (2) <strong>Service:</strong> <code>site.isOwnedBy(_currentUserEmail)</code> checks ownership before save. (3) <strong>Rules:</strong> <code>isOwner(ownerUID)</code> rejects non-owner writes.</td>
+      <td><span class="location-app">UI</span><br><code>site_status_v2.dart:90,221</code><br><span class="location-app">Service</span><br><code>site_service.dart:154-160</code><br><span class="location-rules">Rules</span><br><code>firestore.rules:180</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.6</td>
+      <td><strong>Invalid Permission Type</strong></td>
+      <td>Arbitrary permission string (e.g., "ADMIN", "DELETE_ALL") stored in sharedWith. Could cause permission check failures or unexpected access if CF or rules don't validate.</td>
+      <td><strong>Three-layer protection:</strong> (1) <strong>UI:</strong> Card-based selection only (lines 569-610) - users tap predefined cards, no text input possible. Invalid permissions cannot be entered via genuine app. (2) <strong>Service:</strong> Validates against 4-type whitelist. (3) <strong>CF:</strong> <code>isValidPermission()</code> skips invalid entries for API bypass attempts.</td>
+      <td><span class="location-app">UI</span><br><code>share_site_dialog.dart:569-610</code><br><span class="location-app">Service</span><br><code>site_service.dart:164-165</code><br><span class="location-cf">CF</span><br><code>functions/index.js:72-75</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.7</td>
+      <td><strong>Invalid Sync Data</strong></td>
+      <td>Malformed data sent to Firebase</td>
+      <td><code>_validateSiteData()</code> checks name, ownerUID, ownerEmail before sync. Email regex validation applied.</td>
+      <td><span class="location-app">App Logic</span><br><code>site_sync_handler.dart:150-169</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.8</td>
+      <td><strong>Stale Access</strong></td>
+      <td>After owner removes collaborator, the collaborator could retain local copy of site + snags indefinitely. They could view sensitive data offline even though server access is revoked. Worse: if CF is slow, shared_access still shows site temporarily.</td>
+      <td><strong>Three-layer cleanup on every sync:</strong> (1) After fetching site from Firestore, re-verify user in sharedWith - if not present, delete local copy + snags immediately (handles race condition). (2) Orphan cleanup: compare local shared sites against shared_access - delete any not found. (3) If site in shared_access but 404 from Firestore, delete local. Covers all failure modes.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:284-297,267-277,370-381</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.9</td>
+      <td><strong>Sync Button Abuse</strong></td>
+      <td>User rapidly presses Sync to trigger excessive Firestore reads. Each sync reads shared_access doc + potentially multiple site docs. At scale could cause cost spikes.</td>
+      <td><strong>UI enforced cooldown:</strong> Service tracks <code>_lastSyncTime</code> with 30-second cooldown (<code>cooldownSeconds = 30</code>). UI reads <code>cooldownRemaining</code> and disables button, showing countdown text. Timer updates UI every second. Cooldown survives tab switches (stored in service singleton, not widget state).</td>
+      <td><span class="location-app">Service</span><br><code>shared_site_service.dart:79-97</code><br><span class="location-app">UI</span><br><code>sharedSites.dart:63-87</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>6.10</td>
+      <td><strong>Redundant Firestore Reads</strong></td>
+      <td>Every sync fetches all site documents even when unchanged</td>
+      <td>CF stores version in shared_access: <code>{ ownerUID, version }</code>. Client compares local vs remote versions before fetching (lines 244-254). Skips fetch if local >= remote. Orphan cleanup (lines 370-381) removes local sites not in shared_access.</td>
+      <td><span class="location-cf">Cloud Function</span><br><code>functions/index.js:185-189,287-307</code><br><span class="location-app">App Logic</span><br><code>shared_site_service.dart:244-254,370-381</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 7: SHARER (OWNER) ==================== -->
+<h2>7. Sharer (Owner)</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>7.1</td>
+      <td><strong>Share Without Auth</strong></td>
+      <td>Unauthenticated user shares a site</td>
+      <td>Firestore rules require <code>isAuthenticated()</code> for any Site write. CF only triggers after successful write.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:176</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>7.2</td>
+      <td><strong>Share Non-Owned Site</strong></td>
+      <td>User modifies sharedWith on site they don't own</td>
+      <td>Firestore rules require <code>isOwner(ownerUID)</code> for Site update. Contributors explicitly blocked from changing sharedWith.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:180,194</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>7.3</td>
+      <td><strong>Invalid Permission Assignment</strong></td>
+      <td>Owner assigns invalid permission type</td>
+      <td>CF validates permission via <code>isValidPermission()</code>. Invalid permissions are logged and skipped (not propagated to shared_access).</td>
+      <td><span class="location-cf">Cloud Function</span><br><code>functions/index.js:72-75,172-175</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>7.4</td>
+      <td><strong>Collaborator Modifies Sharing</strong></td>
+      <td>CONTRIBUTOR attempts to add/remove other collaborators</td>
+      <td>Firestore rules for CONTRIBUTOR update explicitly require <code>sharedWith == existing.sharedWith</code>. Any change is rejected.</td>
+      <td><span class="location-rules">Firebase Rules</span><br><code>firestore.rules:189-194</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 8: CF FAILURE RECOVERY ==================== -->
+<h2>8. CF Failure Recovery (Client-Side)</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>8.1</td>
+      <td><strong>CF Failure: Site Not Discoverable</strong></td>
+      <td>onSiteCreated/onSiteUpdated fails (~0.5% rate), shared_access not updated, collaborator can't discover site</td>
+      <td><strong>ACCEPTED.</strong> Manual recovery: Site Owner removes and re-adds collaborator. App shows bottom sheet with guidance when no new sites found.</td>
+      <td><span class="location-app">App Logic</span><br><code>sharedSites.dart:123-229</code><br><code>_showNoNewSitesSheet()</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>8.2</td>
+      <td><strong>CF Failure: Orphaned Pointer</strong></td>
+      <td>onSiteDeleted fails, shared_access entry remains pointing to deleted site</td>
+      <td>Client detects: if site in shared_access but not in Firestore, deletes local copy + snags. User sees site disappear on next sync.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:267-277</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>8.3</td>
+      <td><strong>Race Condition: Stale sharedWith</strong></td>
+      <td>User removed from sharedWith but shared_access not yet updated by CF</td>
+      <td>Client re-verifies user in site's sharedWith before saving. If not present, deletes local copy + snags immediately.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:284-297</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>8.4</td>
+      <td><strong>Orphan Cleanup</strong></td>
+      <td>Local sites exist that are no longer in shared_access (e.g., CF eventually succeeded after client synced)</td>
+      <td>Orphan cleanup compares local shared sites against shared_access. Sites not in shared_access are deleted locally.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:370-381</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-present">PRESENT</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== SECTION 9: DELETION & CLEANUP ==================== -->
+<h2 style="background: #e53e3e;">9. Deletion & Asset Cleanup</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:3%">#</th>
+      <th style="width:12%">Vulnerability</th>
+      <th style="width:20%">Description</th>
+      <th style="width:24%">Our Mitigation</th>
+      <th style="width:18%">Codebase Location</th>
+      <th style="width:13%">Status</th>
+      <th style="width:10%">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>9.1</td>
+      <td><strong>Collaborator: Local Snag Images Orphaned</strong></td>
+      <td>When collaborator loses site access (unshared or site deleted), local snag image files remain on device consuming storage. Over time: 100 sites × 50 snags × 12 images × 2MB = 120GB of orphaned images possible on device.</td>
+      <td><strong>TODO.</strong> Current code (<code>shared_site_service.dart:273-274</code>) calls <code>deleteSnagsBySite()</code> which only deletes DB records. Images in app's documents directory are never deleted. <strong>Fix needed:</strong> Before DB delete: query snags → extract ImageSlot.localPath values → delete files from disk → then delete DB records.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:273-274</code><br><span class="check-no">Not Implemented</span></td>
+      <td><span class="status-todo">TODO</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>9.2</td>
+      <td><strong>Collaborator: Local Site Image Orphaned</strong></td>
+      <td>When collaborator loses site access, local site image file remains on device</td>
+      <td><strong>TODO.</strong> Need to delete <code>site.imageLocalPath</code> file before deleting site DB record.</td>
+      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:274</code><br><span class="check-no">Not Implemented</span></td>
+      <td><span class="status-todo">TODO</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>9.3</td>
+      <td><strong>Owner: No Firebase Document Cleanup</strong></td>
+      <td>When owner deletes site, Firebase documents (site + all snags) remain in Firestore indefinitely. Costs: ongoing storage charges for abandoned documents. Security: deleted site data persists in cloud, could be accessed if rules misconfigured later.</td>
+      <td><strong>TODO.</strong> Current flow: <code>markSiteForDeletion()</code> sets <code>markedForDeletion=true</code> locally, 7-day grace period, then <code>cleanupExpiredSites()</code> deletes local DB. <strong>Missing:</strong> No code to delete Firestore documents. <strong>Fix:</strong> After grace period, sync handler should delete all snag docs then site doc from Firestore.</td>
+      <td><span class="location-app">App Logic</span><br><code>site_service.dart:135-148</code><br><code>site_sync_handler.dart</code> (missing)<br><span class="check-no">Not Implemented</span></td>
+      <td><span class="status-todo">TODO</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>9.4</td>
+      <td><strong>Owner: No Firebase Storage Cleanup</strong></td>
+      <td>When owner deletes site, Firebase Storage images persist indefinitely. Costs: Storage charges (~$0.026/GB/month). Scale: 1 site image + (50 snags × 12 images) = 601 images × 2MB = 1.2GB per site. Over time, abandoned storage costs accumulate.</td>
+      <td><strong>TODO.</strong> No code exists to delete Storage files on site deletion. <strong>Fix needed:</strong> Before Firestore doc deletion: (1) Delete site image from <code>sites/{siteId}/image</code>, (2) List and delete all snag images from <code>snags/{snagId}/</code> paths. Consider: Cloud Function trigger on site delete, or client-side cleanup before Firestore delete.</td>
+      <td><span class="location-app">App Logic</span><br><code>site_sync_handler.dart</code> (missing)<br><span class="check-no">Not Implemented</span></td>
+      <td><span class="status-todo">TODO</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>9.5</td>
+      <td><strong>Owner: Local Images Orphaned</strong></td>
+      <td>When owner deletes site (after 7-day grace period), local image files (site + snags) remain on device</td>
+      <td><strong>TODO.</strong> <code>cleanupExpiredSites()</code> only deletes DB records. Need to delete local files first: site.imageLocalPath + all snag ImageSlot.localPath values.</td>
+      <td><span class="location-app">App Logic</span><br><code>site_service.dart:269-274</code><br><code>site_dao.dart:315-335</code><br><span class="check-no">Not Implemented</span></td>
+      <td><span class="status-todo">TODO</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>9.6</td>
+      <td><strong>Owner: Soft Delete Not Synced</strong></td>
+      <td>When owner marks site for deletion, collaborators still see the site until CF <code>onSiteDeleted</code> triggers (which requires hard delete)</td>
+      <td><strong>ACCEPTED.</strong> 7-day grace period is intentional for owner to recover. Collaborators continue to have access during grace period. Site doc only deleted from Firebase after grace period expires + sync runs.</td>
+      <td><span class="location-app">App Logic</span><br><code>site_dao.dart:269-279</code><br><span class="check-yes">By Design</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== COMPLETED ITEMS ==================== -->
+<h2 style="background: #22543d;">Completed Items</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width:5%">#</th>
+      <th style="width:20%">Issue</th>
+      <th style="width:10%">Resolution</th>
+      <th style="width:25%">Location</th>
+      <th style="width:40%">Details</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>No email format validation in CF</strong></td>
+      <td><span class="status-present">DONE</span></td>
+      <td><code>functions/index.js:82-87</code></td>
+      <td>Implemented <code>isValidEmail()</code>. Deployed 2026-06-14.</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>HTML injection in email templates</strong></td>
+      <td><span class="status-present">DONE</span></td>
+      <td><code>functions/index.js:94-102</code></td>
+      <td>Implemented <code>escapeHtml()</code>. Deployed 2026-06-14.</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Stack traces in error logs</strong></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><code>functions/index.js</code></td>
+      <td>Low risk - requires Firebase admin access. Accepted 2026-06-14.</td>
+    </tr>
+    <tr>
+      <td>4a</td>
+      <td><strong>DoS via payload size</strong></td>
+      <td><span class="status-present">DONE</span></td>
+      <td><code>firestore.rules:79</code></td>
+      <td>Added 30 collaborator limit in <code>isValidSiteData()</code>. Pending deploy.</td>
+    </tr>
+    <tr>
+      <td>4b</td>
+      <td><strong>Rate limiting</strong></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><code>functions/index.js</code></td>
+      <td>App Check blocks automation. Manual abuse traceable. Can add firebase-functions-rate-limiter if needed. Accepted 2026-06-14.</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>Outdated permission list in service</strong></td>
+      <td><span class="status-present">DONE</span></td>
+      <td><code>site_service.dart:164-165</code></td>
+      <td>Updated to 4-type system. Pending deploy.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p style="margin-top: 40px; color: #666; font-size: 12px; text-align: center;">
+  Generated: 2026-06-18 | SnagSnapper Risk Assessment v2.0 | Confidential
+</p>
+
+<script>
+  // Update progress counter on load and change
+  document.addEventListener('DOMContentLoaded', function() {
+    updateProgress();
+
+    document.querySelectorAll('.test-select').forEach(select => {
+      // Style based on current value
+      updateSelectStyle(select);
+      select.addEventListener('change', function() {
+        updateSelectStyle(this);
+        updateProgress();
+      });
+    });
+  });
+
+  function updateSelectStyle(select) {
+    if (select.value === 'Tested') {
+      select.style.background = '#c6f6d5';
+      select.style.color = '#22543d';
+    } else if (select.value === 'N/A') {
+      select.style.background = '#feebc8';
+      select.style.color = '#744210';
+    } else if (select.value === 'Accept') {
+      select.style.background = '#bee3f8';
+      select.style.color = '#2a4365';
+    } else {
+      select.style.background = 'white';
+      select.style.color = '#333';
+    }
+  }
+
+  function updateProgress() {
+    const selects = document.querySelectorAll('.test-select');
+    const total = selects.length;
+    const tested = [...selects].filter(s => s.value === 'Tested').length;
+    const na = [...selects].filter(s => s.value === 'N/A').length;
+    const accepted = [...selects].filter(s => s.value === 'Accept').length;
+    const done = tested + na + accepted;
+
+    let progressEl = document.getElementById('test-progress');
+    if (!progressEl) {
+      progressEl = document.createElement('div');
+      progressEl.id = 'test-progress';
+      progressEl.style.cssText = 'position:fixed;top:10px;right:10px;background:#667eea;color:white;padding:10px 20px;border-radius:5px;font-weight:bold;z-index:1000;display:flex;gap:15px;align-items:center;';
+      progressEl.innerHTML = '<span id="progress-text"></span><button onclick="saveProgress()" style="background:#fff;color:#667eea;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;font-weight:bold;">Save</button>';
+      document.body.appendChild(progressEl);
+    }
+    document.getElementById('progress-text').textContent = `Reviewed: ${done}/${total} (${tested} Tested, ${accepted} Accept, ${na} N/A)`;
+  }
+
+  function saveProgress() {
+    // Clone the document
+    const clone = document.documentElement.cloneNode(true);
+
+    // Remove the floating progress bar from clone
+    const progressBar = clone.querySelector('#test-progress');
+    if (progressBar) progressBar.remove();
+
+    // Update select values in clone to match current state
+    const originalSelects = document.querySelectorAll('.test-select');
+    const cloneSelects = clone.querySelectorAll('.test-select');
+
+    originalSelects.forEach((select, i) => {
+      // Set the selected attribute on the correct option
+      cloneSelects[i].querySelectorAll('option').forEach(opt => {
+        opt.removeAttribute('selected');
+        if (opt.value === select.value) {
+          opt.setAttribute('selected', 'selected');
+        }
+      });
+      // Also copy the inline style
+      cloneSelects[i].style.cssText = select.style.cssText;
+    });
+
+    // Generate HTML string
+    const html = '<!DOCTYPE html>\n<html lang="en">\n' + clone.innerHTML + '\n</html>';
+
+    // Download
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Site_Sharing_RA.html';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    alert('File downloaded. Replace the old file to save your progress.');
+  }
+</script>
+
+<!-- Info Popup for 2.5: Data Integrity (Version Sync) -->
+<div id="popup-2-5" class="info-popup-overlay" onclick="if(event.target===this)hidePopup('popup-2-5')">
+  <div class="info-popup">
+    <button class="close-btn" onclick="hidePopup('popup-2-5')">Close</button>
+    <h4>2.5 Data Integrity (Version Sync) - Detailed Explanation</h4>
+
+    <p class="section-title">The Problem:</p>
+    <p>When a site is shared with collaborators, they need to know when the site has been updated. Without version tracking:</p>
+    <ul style="color: #e2e8f0; font-size: 14px; margin: 5px 0 10px 20px;">
+      <li>Collaborator's app would need to fetch the full site document from Firebase on every sync</li>
+      <li>This causes unnecessary Firestore reads and costs</li>
+      <li>No efficient way to detect "has anything changed?"</li>
+    </ul>
+
+    <p class="section-title">The Solution:</p>
+    <p>CF stores <code>{ ownerUID, version }</code> in each collaborator's <code>shared_access</code> entry.</p>
+
+    <p class="section-title">Code Implementation:</p>
+    <p><strong>1. Version detection</strong> (lines 266-268):</p>
+    <pre>const siteVersion = afterData.firebaseVersion || 0;
+const beforeVersion = beforeData.firebaseVersion || 0;
+const versionChanged = siteVersion !== beforeVersion;</pre>
+
+    <p><strong>2. New collaborator</strong> - gets both ownerUID and version (lines 307-312):</p>
+    <pre>[`sites.${siteId}`]: { ownerUID, version: siteVersion }</pre>
+
+    <p><strong>3. Existing collaborator</strong> - version updated when site changes (lines 320-332):</p>
+    <pre>} else if (versionChanged) {
+  // Existing user - update version only
+  updatePromises.push(
+    accessRef.update({
+      [`sites.${siteId}`]: { ownerUID, version: siteVersion }
+    })
+  );
+}</pre>
+
+    <p class="section-title">Client-Side Sync Flow:</p>
+    <ol style="color: #e2e8f0; font-size: 14px; margin: 5px 0 10px 20px;">
+      <li>Collaborator's app reads their <code>shared_access</code> document</li>
+      <li>Compares local version with remote version using <code>&lt;</code> (less than)</li>
+      <li>If <code>localVersion &lt; remoteVersion</code> → client is behind, redownload site</li>
+      <li>If <code>localVersion &gt;= remoteVersion</code> → already up to date, skip fetch</li>
+    </ol>
+    <pre>// Client-side comparison logic
+if (localVersion < shared_access.sites[siteId].version) {
+  // Local is behind - redownload site from Firebase
+  fetchSiteDocument(siteId, ownerUID);
+}</pre>
+
+    <p class="section-title">Why This Matters:</p>
+    <ul style="color: #e2e8f0; font-size: 14px; margin: 5px 0 10px 20px;">
+      <li>Collaborator only reads 1 small document (<code>shared_access</code>) to check ALL shared sites</li>
+      <li>Only fetches full site document when version indicates changes</li>
+      <li>Saves Firestore read costs and bandwidth</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  function showPopup(id) {
+    document.getElementById(id).classList.add('active');
+  }
+  function hidePopup(id) {
+    document.getElementById(id).classList.remove('active');
+  }
+  function toggleSubItems(groupId, parentRow) {
+    const subItems = document.querySelectorAll(`tr[data-group="${groupId}"]`);
+    const toggle = parentRow.querySelector('.collapse-toggle');
+    const isCollapsed = toggle.classList.contains('collapsed');
+
+    subItems.forEach(row => {
+      if (isCollapsed) {
+        row.classList.remove('hidden');
+      } else {
+        row.classList.add('hidden');
+      }
+    });
+
+    toggle.classList.toggle('collapsed');
+  }
+</script>
+
+</body>
+</html>
