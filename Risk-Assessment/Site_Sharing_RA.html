@@ -652,45 +652,45 @@
     <tr>
       <td>2.7</td>
       <td><strong>Share Removal Cleanup</strong></td>
-      <td><strong>Failure modes:</strong> (1) CF fails entirely → shared_access entry remains. (2) <code>FieldValue.delete()</code> fails → entry remains. (3) Partial batch failure → some entries remain.<br><br><strong>With retry:</strong> Transient failures auto-retry within 30s. If all retries fail, local copy persists until owner makes another edit.</td>
-      <td><strong>MITIGATED:</strong> (1) <code>retry: true</code> ensures transient failures retry.<br>(2) <code>FieldValue.delete()</code> (line 395) is idempotent.<br>(3) NOT_FOUND handled gracefully (lines 397-408) - covers edge case where shared_access doc never created (initial share timed out).<br>(4) <strong>Fallback recovery:</strong> Owner makes any edit → version increments → client fetches → cleanup.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:385-410</code><br><span class="check-yes">Verified</span></td>
+      <td>When owner removes a collaborator from <code>sharedWith</code> map, CF must delete that user's <code>shared_access/{emailHash}/sites/{siteId}</code> entry. <strong>Failure modes:</strong> (1) CF fails entirely → entry remains, collaborator retains stale access pointer. (2) <code>FieldValue.delete()</code> fails → entry remains. (3) Partial batch failure (multiple removals) → some entries remain. (4) <code>shared_access</code> doc doesn't exist (initial share timed out) → <code>update()</code> throws NOT_FOUND.</td>
+      <td><strong>MITIGATED:</strong><br>(1) <strong>Retry:</strong> <code>retry: true</code> (line 248) ensures transient failures auto-retry within 30s.<br>(2) <strong>Idempotent:</strong> <code>FieldValue.delete()</code> (line 406) is safe to repeat - deleting already-deleted field is no-op.<br>(3) <strong>NOT_FOUND handling:</strong> Lines 407-416 catch gRPC code 5 and return success - if doc doesn't exist, nothing to clean up.<br>(4) <strong>Fallback:</strong> If retries fail, owner makes any edit → triggers new CF → cleanup retried.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:390-422</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>2.8</td>
       <td><strong>Rate Limiting</strong></td>
-      <td>Rapid share/unshare cycles could cause cost abuse via repeated CF invocations and email sends.</td>
-      <td><strong>ACCEPTED.</strong> Same multi-layer protection as 1.6: App Check + freeRASP + Auth + Rules + Traceability. Manual abuse self-limiting and traceable.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js</code><br>See 1.6 for details<br><span class="check-yes">Verified</span></td>
+      <td>Attacker could rapidly update site's <code>sharedWith</code> map (add/remove collaborators in cycles), triggering repeated CF invocations. Each invocation causes: Firestore writes to <code>shared_access</code>, email sends via SES. At scale: 100 updates × 30 collaborators = 3000 writes + potential email costs.</td>
+      <td><strong>ACCEPTED - Multi-layer protection:</strong><br>(1) <strong>App Check:</strong> Enforced in Firebase Console - blocks requests without valid device attestation.<br>(2) <strong>freeRASP:</strong> Blocks emulators, app cloning, Frida/hooks, debuggers, tampered APKs, sideloaded installs.<br>(3) <strong>Auth:</strong> <code>isAuthenticated()</code> required in Firestore rules - all writes tied to UID.<br>(4) <strong>Rules:</strong> <code>sharedWith.size() <= 30</code> caps collaborators per site.<br>(5) <strong>Traceability:</strong> Abuse traceable to specific user for account action.<br>(6) <strong>Retry limit:</strong> 30s event age check prevents runaway retries.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:240-487</code><br><span class="location-app">freeRASP</span><br><code>security_service.dart</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>2.9</td>
       <td><strong>Information Disclosure (Logs)</strong></td>
-      <td>Sensitive error details exposed in Cloud Function logs</td>
-      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code> at lines 472, 478 (transient/permanent errors). Requires Firebase project access (admin only).</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:472,478</code><br><span class="check-yes">Accepted</span></td>
+      <td>When CF throws an error, full stack traces are logged via <code>console.error(error)</code>. Stack traces could reveal: internal function names, file paths, library versions, and error messages that help attackers understand system internals. With retry enabled, errors are logged with classification: "transient error, will retry" or "permanent error, not retrying".</td>
+      <td><strong>ACCEPTED.</strong> Cloud Logging only accessible to Firebase project admins with <code>roles/logging.viewer</code> IAM permission. No public access. Stack traces essential for debugging production issues. Transient/permanent classification aids troubleshooting without exposing additional info. Risk: Low (admin-only access).</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:477,483</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>2.10</td>
       <td><strong>Log Data Leakage (PII)</strong></td>
-      <td>Full email addresses logged, exposing PII</td>
-      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged at lines 317, 322, 344, 349, 368, 379, 407, 415 to aid troubleshooting.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:317,322,344,349,368,379,407,415</code><br><span class="check-yes">Accepted</span></td>
+      <td>CF logs full email addresses in multiple statements: invalid email warnings, share queued confirmations, NOT_FOUND recovery logs. PII (email addresses) stored in Cloud Logging could be exposed if: (1) logs exported to insecure location, (2) admin account compromised, (3) overly broad IAM permissions granted.</td>
+      <td><strong>ACCEPTED.</strong> (1) Only Firebase project admins can access Cloud Logging. (2) Full emails essential for troubleshooting "user X can't see shared site" support tickets - without them, debugging is impossible. (3) Logs auto-expire per retention policy. (4) Alternative (hashing emails in logs) would make debugging impossible since we couldn't correlate with user reports.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:322,349,354,373,384,412,420</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>2.11</td>
       <td><strong>CF Failure/Recovery</strong></td>
-      <td>CF fails after Firestore write succeeds. Site's sharedWith is updated but <code>shared_access</code> entries not created/updated. New collaborators can't discover site; removed collaborators still see it.<br><br><strong>See:</strong> <code>Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md</code></td>
-      <td><strong>MITIGATED - Retry NOW enabled with safeguards:</strong><br>(1) <strong>retry: true</strong> enabled (line 248) - transient failures auto-retry.<br>(2) <strong>Event age check:</strong> Events &gt;30s dropped (lines 257-271) - prevents stale retries and infinite loops.<br>(3) <strong>Deferred emails:</strong> Emails only sent AFTER Firestore success (lines 411-421) - no duplicates on retry.<br>(4) <strong>Error handling:</strong> Transient errors (gRPC 4,8,14) retry; permanent errors return gracefully (lines 426-464).<br>(5) <strong>NOT_FOUND handling:</strong> Share removal handles missing docs (lines 392-410) - covers edge case where initial share creation timed out.<br>(6) <strong>Idempotent writes:</strong> All Firestore operations safe to repeat.<br><br><strong>Trade-off:</strong> 30s timeout means some share creations may never complete if all retries fail. Recovery: owner makes another edit.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:240-467</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Verified</span></td>
+      <td>CF fails after Firestore write succeeds. User's <code>sharedWith</code> map is updated but <code>shared_access</code> entries not created/updated/deleted. <strong>Impact:</strong> New collaborators can't discover shared site (no entry in their <code>shared_access</code>). Removed collaborators retain stale access pointer (entry not deleted). Version not propagated (collaborators have stale data).<br><br><strong>See:</strong> <code>Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md</code></td>
+      <td><strong>MITIGATED - Retry enabled with safeguards:</strong><br>(1) <strong>retry: true</strong> (line 248) - transient failures auto-retry.<br>(2) <strong>Event age check FIRST</strong> (lines 260-273) - events &gt;30s dropped. Runs before ANY code that could throw, preventing infinite retries. Uses safe access <code>event.params?.siteId</code>.<br>(3) <strong>Deferred emails</strong> (lines 431-441) - emails only sent AFTER <code>Promise.all(updatePromises)</code> succeeds, preventing duplicates on retry.<br>(4) <strong>Transient/permanent handling</strong> (lines 446-485) - transient errors (gRPC 4,8,14, network codes) throw to retry; permanent errors return gracefully.<br>(5) <strong>Idempotent writes</strong> - <code>set({merge:true})</code>, <code>update()</code>, <code>FieldValue.delete()</code> all safe to repeat.<br><br><strong>Trade-off:</strong> 30s timeout means some operations may not complete if all retries fail within window. Fallback: owner makes another edit.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:240-487</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
