@@ -242,9 +242,37 @@ exports.onSiteUpdated = onDocumentUpdated(
     document: 'Profile/{ownerUID}/Sites/{siteId}',
     region: REGION,
     secrets: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],
+    // RETRY ENABLED: Ensures share removal propagates even if CF fails transiently
+    // Safe because: event age check (30s), deferred emails, transient/permanent error handling
+    // See: Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md
+    retry: true,
   },
   async (event) => {
     const functionName = 'onSiteUpdated';
+
+    // =========================================================================
+    // EVENT AGE CHECK - MUST BE FIRST, before ANY code that could throw
+    // =========================================================================
+    // If this check isn't first, an error before it could cause infinite retries.
+    // 30 seconds allows 1-2 transient retries (first retry ~10s with exponential backoff)
+    // but prevents processing events that are too old to be relevant.
+    // =========================================================================
+    const MAX_EVENT_AGE_MS = 30000;
+    const eventTimestamp = Date.parse(event.time);
+    const eventAgeMs = Date.now() - eventTimestamp;
+
+    // If event.time is invalid (NaN) or event is stale, drop it to prevent retry storms
+    if (isNaN(eventAgeMs) || eventAgeMs > MAX_EVENT_AGE_MS) {
+      log(functionName, 'Dropping stale/invalid event', {
+        siteId: event.params?.siteId || 'unknown',  // Safe access - don't throw here
+        eventAgeMs: isNaN(eventAgeMs) ? 'INVALID' : eventAgeMs,
+        eventTime: event.time,
+        maxAge: MAX_EVENT_AGE_MS,
+      });
+      return; // Return successfully - don't throw to avoid more retries
+    }
+
+    // Safe to destructure now - age check has passed
     const { ownerUID, siteId } = event.params;
 
     try {
@@ -280,7 +308,9 @@ exports.onSiteUpdated = onDocumentUpdated(
         afterCount: Object.keys(afterShared).length,
       });
 
-      const emailPromises = [];
+      // DEFERRED EMAILS: Store email data (not promises) to avoid starting emails
+      // before Firestore operations succeed. This prevents duplicate emails on retry.
+      const emailsToSend = [];
       const updatePromises = [];
       let operationCount = 0;
 
@@ -312,8 +342,8 @@ exports.onSiteUpdated = onDocumentUpdated(
               }))
           );
 
-          // Queue email notification for new collaborators
-          emailPromises.push(sendSiteSharedEmail(email, siteName, ownerName, permission));
+          // Queue email data for new collaborators (deferred until Firestore success)
+          emailsToSend.push({ email, siteName, ownerName, permission });
 
           operationCount++;
           log(functionName, 'Queued new share + email', { email: email, version: siteVersion });
@@ -365,9 +395,24 @@ exports.onSiteUpdated = onDocumentUpdated(
           const accessRef = db.collection('shared_access').doc(emailHash);
 
           // Delete the specific site entry from the sites map
+          // Handle NOT_FOUND gracefully - can occur if:
+          //   1. Initial share creation failed and retries timed out (>30s)
+          //      → sharedWith has user, but shared_access doc was never created
+          //   2. Admin manually deleted the shared_access document
+          // In both cases, nothing to clean up = success
+          // gRPC NOT_FOUND = 5
           updatePromises.push(
             accessRef.update({
               [`sites.${siteId}`]: FieldValue.delete(),
+            }).catch(err => {
+              const isNotFound = err.code === 5 ||
+                                 (err.message && err.message.includes('NOT_FOUND'));
+              if (isNotFound) {
+                // Document doesn't exist - nothing to delete, this is success
+                log(functionName, 'shared_access doc not found during removal, already clean', { email });
+                return;
+              }
+              throw err; // Re-throw other errors
             })
           );
 
@@ -383,10 +428,13 @@ exports.onSiteUpdated = onDocumentUpdated(
           operationCount,
         });
 
-        // Send all emails in parallel (fire and forget)
-        if (emailPromises.length > 0) {
-          Promise.all(emailPromises).then(() => {
-            log(functionName, 'All share notification emails sent', { siteId, emailCount: emailPromises.length });
+        // DEFERRED EMAILS: Only start emails AFTER Firestore operations succeed
+        // This ensures emails are only sent once even if function retries
+        if (emailsToSend.length > 0) {
+          Promise.all(emailsToSend.map(e =>
+            sendSiteSharedEmail(e.email, e.siteName, e.ownerName, e.permission)
+          )).then(() => {
+            log(functionName, 'All share notification emails sent', { siteId, emailCount: emailsToSend.length });
           }).catch((err) => {
             log(functionName, 'Some share notification emails failed', { siteId, error: err.message });
           });
@@ -396,8 +444,44 @@ exports.onSiteUpdated = onDocumentUpdated(
       }
 
     } catch (error) {
-      console.error(`${functionName} error:`, error);
-      throw error;
+      // TRANSIENT VS PERMANENT ERROR HANDLING
+      // Transient errors should retry; permanent errors should log and return
+      // to prevent infinite retry loops
+      //
+      // gRPC numeric codes (from nodejs-firestore):
+      // https://github.com/googleapis/nodejs-firestore/issues/1239
+      // https://grpc.io/docs/guides/status-codes/
+      const transientErrors = {
+        // Network errors (string codes from Node.js)
+        'ECONNRESET': true,
+        'ETIMEDOUT': true,
+        'ENOTFOUND': true,
+        'EAI_AGAIN': true,
+        // gRPC transient errors (numeric codes from Firestore)
+        4: true,   // DEADLINE_EXCEEDED
+        8: true,   // RESOURCE_EXHAUSTED
+        14: true,  // UNAVAILABLE
+      };
+
+      const isTransient = transientErrors[error.code] ||
+        (error.message && (
+          error.message.includes('UNAVAILABLE') ||
+          error.message.includes('DEADLINE_EXCEEDED') ||
+          error.message.includes('RESOURCE_EXHAUSTED') ||
+          error.message.includes('ECONNRESET') ||
+          error.message.includes('ETIMEDOUT')
+        ));
+
+      if (isTransient) {
+        // Transient error - throw to trigger retry
+        console.error(`${functionName} transient error, will retry:`, error);
+        throw error;
+      }
+
+      // Permanent error - log and return to stop retry cycle
+      // Examples: PERMISSION_DENIED (7), INVALID_ARGUMENT (3), NOT_FOUND (5)
+      console.error(`${functionName} permanent error, not retrying:`, error);
+      return;
     }
   }
 );
@@ -410,9 +494,36 @@ exports.onSiteDeleted = onDocumentDeleted(
   {
     document: 'Profile/{ownerUID}/Sites/{siteId}',
     region: REGION,
+    // RETRY ENABLED: Ensures orphaned shared_access entries are cleaned up
+    // even if CF fails transiently. Critical for security (prevents stale access).
+    // See: Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md
+    retry: true,
   },
   async (event) => {
     const functionName = 'onSiteDeleted';
+
+    // =========================================================================
+    // EVENT AGE CHECK - MUST BE FIRST, before ANY code that could throw
+    // =========================================================================
+    // If this check isn't first, an error before it could cause infinite retries.
+    // 30 seconds allows 1-2 transient retries (first retry ~10s with exponential backoff).
+    // =========================================================================
+    const MAX_EVENT_AGE_MS = 30000;
+    const eventTimestamp = Date.parse(event.time);
+    const eventAgeMs = Date.now() - eventTimestamp;
+
+    // If event.time is invalid (NaN) or event is stale, drop it to prevent retry storms
+    if (isNaN(eventAgeMs) || eventAgeMs > MAX_EVENT_AGE_MS) {
+      log(functionName, 'Dropping stale/invalid event', {
+        siteId: event.params?.siteId || 'unknown',  // Safe access - don't throw here
+        eventAgeMs: isNaN(eventAgeMs) ? 'INVALID' : eventAgeMs,
+        eventTime: event.time,
+        maxAge: MAX_EVENT_AGE_MS,
+      });
+      return; // Return successfully - don't throw to avoid more retries
+    }
+
+    // Safe to destructure now - age check has passed
     const { ownerUID, siteId } = event.params;
 
     try {
@@ -443,9 +554,24 @@ exports.onSiteDeleted = onDocumentDeleted(
         const accessRef = db.collection('shared_access').doc(emailHash);
 
         // Delete the specific site entry from the sites map
+        // Handle NOT_FOUND gracefully - can occur if:
+        //   1. Initial share creation failed and retries timed out (>30s)
+        //      → sharedWith has user, but shared_access doc was never created
+        //   2. Admin manually deleted the shared_access document
+        // In both cases, nothing to clean up = success
+        // gRPC NOT_FOUND = 5
         updatePromises.push(
           accessRef.update({
             [`sites.${siteId}`]: FieldValue.delete(),
+          }).catch(err => {
+            const isNotFound = err.code === 5 ||
+                               (err.message && err.message.includes('NOT_FOUND'));
+            if (isNotFound) {
+              // Document doesn't exist - nothing to delete, this is success
+              log(functionName, 'shared_access doc not found, already clean', { email });
+              return;
+            }
+            throw err; // Re-throw other errors
           })
         );
         log(functionName, 'Queued shared_access site removal', { email: email });
@@ -458,8 +584,43 @@ exports.onSiteDeleted = onDocumentDeleted(
       });
 
     } catch (error) {
-      console.error(`${functionName} error:`, error);
-      throw error;
+      // TRANSIENT VS PERMANENT ERROR HANDLING
+      // Transient errors should retry; permanent errors should log and return
+      //
+      // gRPC numeric codes (from nodejs-firestore):
+      // https://github.com/googleapis/nodejs-firestore/issues/1239
+      // https://grpc.io/docs/guides/status-codes/
+      const transientErrors = {
+        // Network errors (string codes from Node.js)
+        'ECONNRESET': true,
+        'ETIMEDOUT': true,
+        'ENOTFOUND': true,
+        'EAI_AGAIN': true,
+        // gRPC transient errors (numeric codes from Firestore)
+        4: true,   // DEADLINE_EXCEEDED
+        8: true,   // RESOURCE_EXHAUSTED
+        14: true,  // UNAVAILABLE
+      };
+
+      const isTransient = transientErrors[error.code] ||
+        (error.message && (
+          error.message.includes('UNAVAILABLE') ||
+          error.message.includes('DEADLINE_EXCEEDED') ||
+          error.message.includes('RESOURCE_EXHAUSTED') ||
+          error.message.includes('ECONNRESET') ||
+          error.message.includes('ETIMEDOUT')
+        ));
+
+      if (isTransient) {
+        // Transient error - throw to trigger retry
+        console.error(`${functionName} transient error, will retry:`, error);
+        throw error;
+      }
+
+      // Permanent error - log and return to stop retry cycle
+      // Examples: PERMISSION_DENIED (7), INVALID_ARGUMENT (3)
+      console.error(`${functionName} permanent error, not retrying:`, error);
+      return;
     }
   }
 );

@@ -23,8 +23,11 @@ class Validators {
   static const String postcodeTooLong = 'Postcode must be less than 20 characters';
 
   // Regex patterns
+  // Tightened email regex (2026 best practice):
+  // Rejects: consecutive dots, dot before/after @, domain segments starting/ending with hyphen
+  // Synced with: share_site_dialog.dart, functions/index.js, and all sync handlers
   static final RegExp _emailRegex = RegExp(
-    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    r'^(?!.*\.\.)(?!.*\.@)(?!.*@\.)(?!.*@-)(?!.*-\.)(?!.*\.-)[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$',
   );
   
   static final RegExp _phoneRegex = RegExp(

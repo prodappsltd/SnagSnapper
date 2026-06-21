@@ -161,8 +161,8 @@ class SiteService {
       return false;
     }
     
-    // Validate permission level
-    if (!['VIEW', 'FIXER', 'CONTRIBUTOR'].contains(permission)) {
+    // Validate permission level (RA 4.6 - updated to 4-type system)
+    if (!['VIEW', 'WORKING_SEE_ALL', 'WORKING_SEE_SELF', 'CONTRIBUTOR'].contains(permission)) {
       if (kDebugMode) {
         print('SiteService: Invalid permission level: $permission');
       }

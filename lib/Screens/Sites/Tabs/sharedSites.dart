@@ -4,7 +4,9 @@
 /// - Loads from SiteDao (local SQLite)
 /// - Supports grid/list view toggle
 /// - Memory efficient using builder widgets
-/// - "Check & Download" button to fetch shared sites from Firebase
+/// - "Sync" button to fetch shared sites from Firebase
+
+import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -38,15 +40,62 @@ class _SharedSitesState extends State<SharedSites> {
   bool _isDownloading = false;
   String _downloadStatus = '';
 
+  /// Track if sites exist (for conditional FAB display)
+  bool _hasSites = false;
+
+  /// Cooldown UI state (reads from service, timer for display updates)
+  final SharedSiteService _syncService = SharedSiteService();
+  Timer? _cooldownTimer;
+
   @override
   void initState() {
     super.initState();
     _initSitesStream();
+    _initCooldownTimer();
   }
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Initialize cooldown timer if service has active cooldown
+  void _initCooldownTimer() {
+    if (_syncService.cooldownRemaining > 0) {
+      _startCooldownTimer();
+    }
+  }
+
+  /// Start timer to update UI countdown (reads from service)
+  void _startCooldownTimer() {
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        final remaining = _syncService.cooldownRemaining;
+        if (remaining <= 0) {
+          timer.cancel();
+        }
+        setState(() {}); // Trigger rebuild to update UI
+      } else {
+        timer.cancel();
+      }
+    });
+    setState(() {}); // Initial rebuild
+  }
+
+  /// Record sync and start cooldown timer
+  void _recordSyncAndStartCooldown() {
+    _syncService.recordSyncTime();
+    _startCooldownTimer();
+  }
+
+  /// Check if sync is allowed (not downloading and service allows)
+  bool get _canSync => !_isDownloading && _syncService.canSync;
 
   /// Check and download shared sites from Firebase
   Future<void> _checkAndDownload() async {
-    if (_isDownloading) return;
+    if (!_canSync) return;
 
     setState(() {
       _isDownloading = true;
@@ -69,28 +118,33 @@ class _SharedSitesState extends State<SharedSites> {
           _isDownloading = false;
           _downloadStatus = '';
         });
+        _recordSyncAndStartCooldown();
 
-        // Show result snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(
-                  result.hasErrors ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(result.summary)),
-              ],
+        // Show bottom sheet for empty result, snackbar for success/errors
+        if (result.isEmpty && !result.hasErrors) {
+          _showNoNewSitesSheet();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(
+                    result.hasErrors ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(result.summary)),
+                ],
+              ),
+              backgroundColor: result.hasErrors
+                  ? Colors.orange.shade700
+                  : Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 3),
             ),
-            backgroundColor: result.hasErrors
-                ? Colors.orange.shade700
-                : (result.isEmpty ? Colors.grey.shade700 : Colors.green.shade700),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -98,6 +152,7 @@ class _SharedSitesState extends State<SharedSites> {
           _isDownloading = false;
           _downloadStatus = '';
         });
+        _recordSyncAndStartCooldown();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -115,6 +170,137 @@ class _SharedSitesState extends State<SharedSites> {
         );
       }
     }
+  }
+
+  void _showNoNewSitesSheet() {
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Icon
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.search_off_rounded,
+                  size: 36,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Title
+              Text(
+                'No New Shared Sites',
+                style: GoogleFonts.montserrat(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Description
+              Text(
+                'We checked and there are no new sites shared with you at this time.',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+
+              // Info box
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.lightbulb_outline_rounded,
+                      size: 24,
+                      color: theme.colorScheme.secondary,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Expecting a shared site? Ask the Site Owner to remove and re-add you, then try again in a few minutes.',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSecondaryContainer,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Dismiss button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Got It',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+
+              // Bottom padding for safe area
+              SizedBox(height: MediaQuery.of(context).padding.bottom),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _initSitesStream() {
@@ -158,16 +344,21 @@ class _SharedSitesState extends State<SharedSites> {
   }
 
   Widget? _buildFAB(ThemeData theme) {
-    // Only show FAB when not in empty state
+    // Only show FAB when sites exist (not in empty state)
+    if (!_hasSites) return null;
+
+    final inCooldown = _syncService.cooldownRemaining > 0;
+    final isDisabled = !_canSync;
+
     return FloatingActionButton.extended(
-      onPressed: _isDownloading ? null : _checkAndDownload,
-      backgroundColor: _isDownloading
+      onPressed: isDisabled ? null : _checkAndDownload,
+      backgroundColor: isDisabled
           ? theme.colorScheme.surfaceContainerHighest
           : theme.colorScheme.primary,
-      foregroundColor: _isDownloading
+      foregroundColor: isDisabled
           ? theme.colorScheme.onSurfaceVariant
           : theme.colorScheme.onPrimary,
-      elevation: _isDownloading ? 0 : 4,
+      elevation: isDisabled ? 0 : 4,
       icon: _isDownloading
           ? SizedBox(
               width: 20,
@@ -179,9 +370,13 @@ class _SharedSitesState extends State<SharedSites> {
                 ),
               ),
             )
-          : const Icon(Icons.cloud_download_rounded),
+          : const Icon(Icons.sync_rounded),
       label: Text(
-        _isDownloading ? _downloadStatus : 'Check & Download',
+        _isDownloading
+            ? _downloadStatus
+            : inCooldown
+                ? 'Sync in ${_syncService.cooldownRemaining}s'
+                : 'Sync',
         style: GoogleFonts.inter(
           fontWeight: FontWeight.w600,
         ),
@@ -224,6 +419,13 @@ class _SharedSitesState extends State<SharedSites> {
 
         final sites = snapshot.data ?? [];
 
+        // Update _hasSites state for FAB visibility
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _hasSites != sites.isNotEmpty) {
+            setState(() => _hasSites = sites.isNotEmpty);
+          }
+        });
+
         if (sites.isEmpty) {
           return _buildEmptyState(theme);
         }
@@ -237,69 +439,86 @@ class _SharedSitesState extends State<SharedSites> {
 
   Widget _buildEmptyState(ThemeData theme) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.group_outlined,
-            size: 64,
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No shared sites',
-            style: GoogleFonts.montserrat(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurfaceVariant,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.group_outlined,
+              size: 64,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Sites shared with you will appear here',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            const SizedBox(height: 16),
+            Text(
+              'No shared sites',
+              style: GoogleFonts.montserrat(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          _buildCheckAndDownloadButton(theme),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'Sites shared with you will appear here',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            _buildSyncButton(theme),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildCheckAndDownloadButton(ThemeData theme) {
+  Widget _buildSyncButton(ThemeData theme) {
+    final inCooldown = _syncService.cooldownRemaining > 0;
+    final isDisabled = !_canSync;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       child: ElevatedButton.icon(
-        onPressed: _isDownloading ? null : _checkAndDownload,
+        onPressed: isDisabled ? null : _checkAndDownload,
         style: ElevatedButton.styleFrom(
-          backgroundColor: theme.colorScheme.primary,
-          foregroundColor: theme.colorScheme.onPrimary,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          backgroundColor: isDisabled
+              ? theme.colorScheme.surfaceContainerHighest
+              : theme.colorScheme.primary,
+          foregroundColor: isDisabled
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.colorScheme.onPrimary,
+          padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
-          elevation: 2,
+          elevation: isDisabled ? 0 : 3,
         ),
         icon: _isDownloading
             ? SizedBox(
-                width: 20,
-                height: 20,
+                width: 24,
+                height: 24,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2,
+                  strokeWidth: 2.5,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    theme.colorScheme.onPrimary,
+                    theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               )
-            : const Icon(Icons.cloud_download_rounded),
+            : Icon(Icons.sync_rounded, size: 26, color: isDisabled
+                ? theme.colorScheme.onSurfaceVariant
+                : null),
         label: Text(
-          _isDownloading ? _downloadStatus : 'Check & Download',
+          _isDownloading
+              ? _downloadStatus
+              : inCooldown
+                  ? 'Sync in ${_syncService.cooldownRemaining}s'
+                  : 'Sync',
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
-            fontSize: 15,
+            fontSize: 18,
           ),
         ),
       ),

@@ -330,7 +330,8 @@ class AppUser {
       if (email.isEmpty) {
         throw ArgumentError('Email cannot be empty');
       }
-      final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+      // Tightened email regex - synced with validators.dart
+      final emailRegex = RegExp(r'^(?!.*\.\.)(?!.*\.@)(?!.*@\.)(?!.*@-)(?!.*-\.)(?!.*\.-)[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$');
       if (!emailRegex.hasMatch(email)) {
         throw ArgumentError('Invalid email format');
       }

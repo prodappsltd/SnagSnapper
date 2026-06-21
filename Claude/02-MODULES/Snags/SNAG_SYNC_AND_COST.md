@@ -4,6 +4,10 @@
 **Last Updated:** 2026-06-10
 **Status:** Approved - Manifest Approach
 
+**Related Documents:**
+- [Sharing Architecture](../../00-CORE/SHARING_ARCHITECTURE.md) - Permission levels, data structure, flows
+- [Sharing & CF Decisions](../Sites/SHARING_AND_CF_DECISIONS.md) - CF error handling, security model
+
 ---
 
 ## Overview
@@ -867,9 +871,10 @@ REQUEST
 
 | Function | Limit | Scope | Rationale |
 |----------|-------|-------|-----------|
-| `rebuildSiteManifest` | 3/day | Per site | Recovery only, rarely needed |
 | `getSignedUrls` | 10/day | Per site | Covers busy workday syncs |
 | `getSignedUrls` | 2,000 images | Per call | Fits worst case (1,800 images) |
+
+**Note:** `rebuildSiteManifest` is NOT callable by clients. It's an internal function triggered only by the scheduled health check CF.
 
 **Worst case calculation:**
 ```
@@ -879,7 +884,7 @@ Total: 200 × 6 = 1,200 images
 With 1.5x buffer: 1,800 images → rounded to 2,000 limit
 ```
 
-**Note:** Rate limiting applies to ALL callable functions, even "cheap" ones. Storage existence checks and Firestore reads still cost money at scale.
+**Note:** Rate limiting applies to ALL callable functions. Storage existence checks and Firestore reads still cost money at scale.
 
 ### Signed URL Security
 
@@ -892,121 +897,149 @@ With 1.5x buffer: 1,800 images → rounded to 2,000 limit
 
 ---
 
-## Manifest Recovery
+## Manifest Recovery (Server-Controlled)
 
-### Scenario 1: Missing Manifest (404)
+### Architecture Decision
+
+**Client does NOT trigger rebuilds.** Server handles all recovery automatically.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  SCHEDULED CF: checkManifestHealth                      │
+│  Runs every N minutes (configurable, default: 5)        │
+│                                                         │
+│  FOR EACH site:                                         │
+│    - Check if manifest exists                           │
+│    - Check if manifest is stale                         │
+│    - Check if manifest is corrupt                       │
+│    - Rebuild if any issue found                         │
+│    - Log results to monitoring                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- Zero abuse risk (no callable rebuild function)
+- Predictable cost (fixed scheduled runs)
+- Full control (change logic without app update)
+- Simpler client (just download, no detection)
+
+**Cost at scale:**
+| Sites | Cost/Month |
+|-------|------------|
+| 5 | ~$0.02 |
+| 100 | ~$0.31 |
+| 1,000 | ~$3.10 |
+| 10,000 | ~$31 |
+
+Cost scales with revenue - acceptable trade-off.
+
+---
+
+### Scenario 1: Missing Manifest (404) ✅ AGREED
 
 **When it happens:**
 - New site before first snag sync
 - Cloud Function trigger failed
 - Feature deployed to existing sites
 
-**Recovery flow:**
-
+**Server handles it:**
 ```
-CLIENT                              CLOUD FUNCTION
-   │
-   │  Download manifest.json
-   │─────────────────────────▶
-   │
-   │  404 Not Found
-   │◀─────────────────────────
-   │
-   │  Call rebuildSiteManifest
-   │─────────────────────────▶
-   │                               Check rate limit (3/day)
-   │                               Check if manifest exists now
-   │                               If missing → scan Firestore + Storage
-   │                               Create manifest
-   │  Success / Error
-   │◀─────────────────────────
-   │
-   │  Wait 2 seconds
-   │
-   │  Retry download manifest
-   │─────────────────────────▶
-   │
-   │  manifest.json (or 404)
-   │◀─────────────────────────
-   │
-   │  If still 404 after 3 attempts → Show error
+checkManifestHealth detects missing manifest
+  → Rebuilds from Firestore + Storage
+  → Manifest available within 5 minutes
 ```
 
-**TODO:** Define client error UI for 404 after retries
-**TODO:** Email alert to app owner if rebuild fails 3 times for same site
+**Client behavior:**
+```
+Download manifest
+  │
+  ├── 404? → Show "Site syncing, please wait..."
+  │          Auto-retry after 30 seconds
+  │          After 3 retries → "Try again later"
+  │
+  └── OK? → Continue sync
+```
 
-### Manifest Integrity
+**TODO:** Define exact client UI for "syncing in progress"
 
-Once created, manifests can only be modified by Cloud Functions:
+---
 
-| Actor | Can Create | Can Modify | Can Delete |
-|-------|------------|------------|------------|
-| Site Owner (client) | ❌ | ❌ | ❌ |
-| Shared User (client) | ❌ | ❌ | ❌ |
-| Cloud Function | ✅ | ✅ | ❌ |
-| Admin (console) | ✅ | ✅ | ✅ |
-
-### Scenario 2: Stale Manifest (TODO - Needs Discussion)
+### Scenario 2: Stale Manifest ✅ AGREED
 
 **When it happens:**
 - Cloud Function trigger failed silently
 - Firestore updated but CF didn't run
-- Network issue during manifest upload
 
-**Detection:**
+**Server handles it:**
 ```
-Compare: Site.lastSnagUpdate (Firestore) vs manifest.updatedAt
+checkManifestHealth compares:
+  Site.lastSnagUpdate vs manifest.updatedAt
 
-If Site.lastSnagUpdate > manifest.updatedAt + 5 minutes → STALE
+If lastSnagUpdate > updatedAt + 2 minutes → STALE
+  → Rebuild manifest
 ```
 
-**Recovery options:**
-- Option A: Trigger rebuildSiteManifest
-- Option B: Accept stale data, show warning to user
-
-**TODO:** Decide recovery approach
+**Client behavior:**
+- Client doesn't detect staleness
+- Just downloads manifest and syncs
+- Server ensures freshness within 5 minutes
 
 ---
 
-### Scenario 3: Corrupt Manifest (TODO - Needs Discussion)
+### Scenario 3: Corrupt Manifest ✅ AGREED
 
 **When it happens:**
 - Partial write (CF timeout mid-upload)
 - Storage corruption (rare)
 
-**Detection:**
+**Server handles it:**
 ```
-TRY
-  manifest = PARSE downloaded JSON
-CATCH ParseError
-  → CORRUPT
+checkManifestHealth attempts to parse manifest JSON
+
+IF parse fails → CORRUPT
+  → Delete corrupt file
+  → Rebuild from scratch
 ```
 
-**Recovery:**
-- Same as missing manifest → call rebuildSiteManifest
+**Client behavior:**
+- Same as missing (404) - corrupt file might not download properly
+- Server fixes within 5 minutes
 
-**TODO:** Decide if we need separate handling or same as Scenario 1
+---
+
+### Manifest Integrity
+
+Manifests can only be modified by Cloud Functions:
+
+| Actor | Can Create | Can Modify | Can Delete |
+|-------|------------|------------|------------|
+| Site Owner (client) | ❌ | ❌ | ❌ |
+| Shared User (client) | ❌ | ❌ | ❌ |
+| Scheduled CF | ✅ | ✅ | ✅ (corrupt only) |
+| Trigger CF (onSnagWritten) | ✅ | ✅ | ❌ |
+| Admin (console) | ✅ | ✅ | ✅ |
 
 ---
 
 ### Scenario 4: Hash Mismatch (TODO - Needs Discussion)
 
 **When it happens:**
-- Image replaced, but manifest not updated
-- Race condition during upload
+- Image replaced, but manifest not updated yet
+- Timing issue between image upload and manifest update
 
 **Detection:**
 ```
-Download image → compute hash → compare with manifest.images[key].hash
-
-If different → image was replaced
+Client downloads image
+Client computes hash
+Hash ≠ manifest.images[key].hash
 ```
 
-**Recovery options:**
-- Option A: Re-download image (trust remote)
-- Option B: Trigger manifest rebuild to get correct hash
+**Question:** Do we need to actively detect this?
 
-**TODO:** Decide if this needs active detection or just handle during sync
+**Options:**
+- Option A: Ignore - manifest will catch up within 5 minutes
+- Option B: Client re-downloads image if hash mismatch
+- Option C: Client flags mismatch, server investigates
 
 ---
 
@@ -1014,20 +1047,20 @@ If different → image was replaced
 
 **When it happens:**
 ```
-T1: User A uploads image → CF starts updating manifest
-T2: User B uploads image → CF starts updating manifest
+T1: User A uploads image → CF A starts
+T2: User B uploads image → CF B starts
 T3: CF A reads manifest (version 5)
 T4: CF B reads manifest (version 5)
 T5: CF A writes manifest (version 6, has A's image)
 T6: CF B writes manifest (version 6, OVERWRITES, loses A's image!)
 ```
 
-**Prevention options:**
-- Option A: Optimistic locking (version check before write)
-- Option B: Use Firestore for manifest (has transactions)
-- Option C: Accept rare data loss, rely on periodic rebuild
+**Question:** How likely is this? How to prevent?
 
-**TODO:** Decide approach based on how often concurrent edits happen
+**Options:**
+- Option A: Optimistic locking (check version before write)
+- Option B: Use Firestore for manifest (has transactions)
+- Option C: Accept rare loss, server health check catches it
 
 ---
 
@@ -1082,24 +1115,38 @@ Total data: ~1 GB
 
 **Purpose:** Private web dashboard for app owner to monitor system health and usage.
 
+### Configurable Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Health check interval | 5 minutes | How often checkManifestHealth runs |
+| Stale threshold | 2 minutes | How old before manifest considered stale |
+| Max retry attempts | 3 | Client retries before showing error |
+
+**Example:** During low-traffic periods, change health check from 5 to 10 minutes to reduce cost.
+
 ### Metrics from Sync Feature
 
 | Metric | Description | Why Useful |
 |--------|-------------|------------|
 | Total manifests | Count of site manifests | Scale indicator |
-| Manifest rebuild calls | Daily/weekly count | Detect issues if high |
+| Health check runs | Daily count | Verify scheduled CF running |
+| Rebuilds triggered | By health check, daily/weekly | Detect CF trigger failures |
 | Failed rebuilds | Count with site IDs | Immediate attention needed |
 | getSignedUrls calls | Daily volume | Usage pattern |
 | Rate limit hits | Users hitting limits | Adjust limits if needed |
 | Total storage used | Across all users | Capacity planning |
 | Storage by tier | FREE vs PRO vs BUSINESS | Revenue insight |
 | Largest sites | Top 10 by image count | Identify power users |
+| Stale detections | How often staleness found | CF reliability indicator |
 
 ### Alerts to Configure
 
 | Alert | Trigger | Action |
 |-------|---------|--------|
+| Health check missed | No run in 15 minutes | Check scheduled CF |
 | Rebuild failure | 3 failures same site | Email owner |
+| High rebuild rate | >10 rebuilds/hour | CF triggers failing |
 | Rate limit spike | >10 users hit limit/hour | Review limits |
 | Storage anomaly | User adds >1GB in 1 hour | Investigate |
 

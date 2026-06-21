@@ -1,8 +1,12 @@
 # Site Sharing Architecture
 
-**Version:** 1.1.0
-**Last Updated:** 2026-06-09
+**Version:** 1.2.0
+**Last Updated:** 2026-06-10
 **Status:** Implemented
+
+**Related Documents:**
+- [Sharing & CF Decisions](../02-MODULES/Sites/SHARING_AND_CF_DECISIONS.md) - CF error handling, security model
+- [Snag Sync & Cost Analysis](../02-MODULES/Snags/SNAG_SYNC_AND_COST.md) - Manifest-based sync for shared sites
 
 ---
 
@@ -29,12 +33,13 @@ This document defines how site sharing works in SnagSnapper, including:
 
 ### Access Levels
 
-| Level | Description | Capabilities |
-|-------|-------------|--------------|
-| **OWNER** | Site creator | Full control, configure permissions |
-| **VIEW** | Read-only | See all snags, cannot edit |
-| **WORKING** | Assigned work | Work on assigned snags only |
-| **CONTRIBUTOR** | Team member | Create snags, work on assigned |
+| Level | Description | See Snags | Edit Snags | Create Snags |
+|-------|-------------|-----------|------------|--------------|
+| **OWNER** | Site creator | All | All | Yes |
+| **VIEW** | Read-only | All | None | No |
+| **WORKING_SEE_ALL** | Worker (full visibility) | All | Assigned only | No |
+| **WORKING_SEE_SELF** | Worker (limited visibility) | Assigned only | Assigned only | No |
+| **CONTRIBUTOR** | Team member | All | All | Yes |
 
 **Note:** OWNER is not stored in `sharedWith` - identified by `ownerEmail` match.
 
@@ -42,21 +47,21 @@ This document defines how site sharing works in SnagSnapper, including:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `workingCanSeeAllSnags` | `true` | WORKING can see all snags (but only edit assigned) |
 | `contributorCanEditOthers` | `false` | CONTRIBUTOR can edit snags created by others |
+
+**Note:** Worker visibility is controlled by permission type (WORKING_SEE_ALL vs WORKING_SEE_SELF), not a site setting.
 
 ### Permission Matrix
 
-| Capability | VIEW | WORKING | CONTRIBUTOR | OWNER |
-|------------|------|---------|-------------|-------|
-| See all snags | ✅ | ⚙️ Setting | ✅ | ✅ |
-| See assigned snags | ✅ | ✅ | ✅ | ✅ |
-| Create snags | ❌ | ❌ | ✅ | ✅ |
-| Edit assigned snags | ❌ | ✅ | ✅ | ✅ |
-| Edit own snags | ❌ | ❌ | ✅ | ✅ |
-| Edit others' snags | ❌ | ❌ | ⚙️ Setting | ✅ |
-| Mark complete | ❌ | ✅ (assigned) | ✅ | ✅ |
-| Configure settings | ❌ | ❌ | ❌ | ✅ |
+| Capability | VIEW | WORKING_SEE_ALL | WORKING_SEE_SELF | CONTRIBUTOR | OWNER |
+|------------|------|-----------------|------------------|-------------|-------|
+| See all snags | ✅ | ✅ | ❌ | ✅ | ✅ |
+| See assigned snags | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Create snags | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Edit assigned snags | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Edit others' snags | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Mark complete | ❌ | ✅ (assigned) | ✅ (assigned) | ✅ | ✅ |
+| Configure settings | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 ---
 
@@ -524,6 +529,7 @@ Use Firebase Extensions or custom Cloud Function to send email when site is shar
 |------|---------|--------|
 | 2026-06-07 | 1.0.0 | Initial document |
 | 2026-06-09 | 1.1.0 | Updated to single document structure (security fix), added snag sharing section, noted pending image download issue |
+| 2026-06-10 | 1.2.0 | Split WORKING into WORKING_SEE_ALL/WORKING_SEE_SELF, removed workingCanSeeAllSnags setting, added related docs links |
 
 ---
 

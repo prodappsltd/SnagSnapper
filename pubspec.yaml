@@ -48,6 +48,7 @@ dependencies:
   firebase_database: ^12.2.0  # For device management
   # For security
   firebase_app_check: ^0.4.2
+  freerasp: ^8.0.0  # Runtime Application Self-Protection (RASP) - clone/root/emulator detection
   another_flushbar: ^1.12.30
   provider: ^6.1.5
   image_picker: ^1.1.2

@@ -31,7 +31,7 @@ class _ShareSiteSheetState extends State<_ShareSiteSheet> {
   late Map<String, String> _sharedWith;
   final TextEditingController _emailController = TextEditingController();
   final FocusNode _emailFocusNode = FocusNode();
-  String _selectedPermission = 'WORKING';
+  String _selectedPermission = 'WORKING_SEE_ALL';
   String? _emailError;
   bool _hasChanges = false;
 
@@ -48,9 +48,21 @@ class _ShareSiteSheetState extends State<_ShareSiteSheet> {
     super.dispose();
   }
 
+  /// Validates email format using tightened regex (2026 best practice):
+  /// - Allows + tags (user+newsletter@gmail.com)
+  /// - Allows long TLDs (.museum, .technology)
+  /// - Rejects: consecutive dots, dot before/after @, domain segments starting/ending with hyphen
+  /// - Synced with CF validation in functions/index.js
+  /// Negative lookaheads:
+  ///   (?!.*\.\.) - no consecutive dots
+  ///   (?!.*\.@)  - no dot before @
+  ///   (?!.*@\.)  - no dot after @
+  ///   (?!.*@-)   - no hyphen after @
+  ///   (?!.*-\.)  - no hyphen before dot (segment ending with hyphen)
+  ///   (?!.*\.-)  - no dot before hyphen (segment starting with hyphen)
   bool _isValidEmail(String email) {
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    return emailRegex.hasMatch(email);
+    final emailRegex = RegExp(r'^(?!.*\.\.)(?!.*\.@)(?!.*@\.)(?!.*@-)(?!.*-\.)(?!.*\.-)[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$');
+    return emailRegex.hasMatch(email.trim());
   }
 
   void _addCollaborator() {
@@ -125,19 +137,31 @@ class _ShareSiteSheetState extends State<_ShareSiteSheet> {
           'Change anything',
         ];
         break;
-      case 'WORKING':
-        title = 'Working';
+      case 'WORKING_SEE_ALL':
+        title = 'Worker (View All Snags)';
         emoji = '🔧';
         color = Colors.orange;
         canDo = [
-          'View snags assigned to them',
-          'Add fix photos to assigned snags',
-          'Mark assigned snags as complete',
+          'View ALL snags under this site',
+          'Fix & update snags assigned to them only',
         ];
         cannotDo = [
-          'See unassigned snags (configurable)',
           'Create new snags',
-          'Edit snags not assigned to them',
+          'Update snags assigned to others or are unassigned',
+          'Change site settings',
+        ];
+        break;
+      case 'WORKING_SEE_SELF':
+        title = 'Worker (View Only Assigned Snags)';
+        emoji = '🎯';
+        color = Colors.deepOrange;
+        canDo = [
+          'View snags assigned to them only under this site',
+          'Fix & update snags assigned to them only',
+        ];
+        cannotDo = [
+          'Create new snags',
+          'Change site settings',
         ];
         break;
       case 'CONTRIBUTOR':
@@ -151,7 +175,7 @@ class _ShareSiteSheetState extends State<_ShareSiteSheet> {
           'Add fix photos and mark complete',
         ];
         cannotDo = [
-          'Edit snags created by others (configurable)',
+          'Edit snags created by others',
           'Delete snags',
           'Change site settings or sharing',
         ];
@@ -566,14 +590,25 @@ class _ShareSiteSheetState extends State<_ShareSiteSheet> {
                   ),
                   const SizedBox(height: 12),
                   _PermissionCard(
-                    permission: 'WORKING',
-                    title: 'Working',
-                    description: 'Can complete snags assigned to them',
+                    permission: 'WORKING_SEE_ALL',
+                    title: 'Worker (See ALL snags)',
+                    description: 'Can see all snags, complete assigned ones only',
                     emoji: '🔧',
                     color: Colors.orange,
-                    isSelected: _selectedPermission == 'WORKING',
-                    onTap: () => setState(() => _selectedPermission = 'WORKING'),
-                    onInfoTap: () => _showPermissionDetails('WORKING'),
+                    isSelected: _selectedPermission == 'WORKING_SEE_ALL',
+                    onTap: () => setState(() => _selectedPermission = 'WORKING_SEE_ALL'),
+                    onInfoTap: () => _showPermissionDetails('WORKING_SEE_ALL'),
+                  ),
+                  const SizedBox(height: 12),
+                  _PermissionCard(
+                    permission: 'WORKING_SEE_SELF',
+                    title: 'Worker (Assigned Only)',
+                    description: 'Can only see and complete their assigned snags',
+                    emoji: '🎯',
+                    color: Colors.deepOrange,
+                    isSelected: _selectedPermission == 'WORKING_SEE_SELF',
+                    onTap: () => setState(() => _selectedPermission = 'WORKING_SEE_SELF'),
+                    onInfoTap: () => _showPermissionDetails('WORKING_SEE_SELF'),
                   ),
                   const SizedBox(height: 12),
                   _PermissionCard(
@@ -726,8 +761,10 @@ class _CollaboratorCard extends StatelessWidget {
     switch (permission) {
       case 'VIEW':
         return Colors.blue;
-      case 'WORKING':
+      case 'WORKING_SEE_ALL':
         return Colors.orange;
+      case 'WORKING_SEE_SELF':
+        return Colors.deepOrange;
       case 'CONTRIBUTOR':
         return Colors.green;
       default:
@@ -739,8 +776,10 @@ class _CollaboratorCard extends StatelessWidget {
     switch (permission) {
       case 'VIEW':
         return '👁️';
-      case 'WORKING':
+      case 'WORKING_SEE_ALL':
         return '🔧';
+      case 'WORKING_SEE_SELF':
+        return '🎯';
       case 'CONTRIBUTOR':
         return '✏️';
       default:
@@ -752,8 +791,10 @@ class _CollaboratorCard extends StatelessWidget {
     switch (permission) {
       case 'VIEW':
         return 'View';
-      case 'WORKING':
-        return 'Working';
+      case 'WORKING_SEE_ALL':
+        return 'Worker (All)';
+      case 'WORKING_SEE_SELF':
+        return 'Worker (Assigned)';
       case 'CONTRIBUTOR':
         return 'Contributor';
       default:
@@ -870,7 +911,10 @@ class _CollaboratorCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           // Permission quick-change chips
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 'Change to:',
@@ -879,26 +923,26 @@ class _CollaboratorCard extends StatelessWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(width: 10),
               if (permission != 'VIEW')
                 _QuickChangeChip(
                   label: '👁️ View',
                   onTap: () => onPermissionChange('VIEW'),
                 ),
-              if (permission != 'WORKING') ...[
-                if (permission != 'VIEW') const SizedBox(width: 8),
+              if (permission != 'WORKING_SEE_ALL')
                 _QuickChangeChip(
-                  label: '🔧 Working',
-                  onTap: () => onPermissionChange('WORKING'),
+                  label: '🔧 All',
+                  onTap: () => onPermissionChange('WORKING_SEE_ALL'),
                 ),
-              ],
-              if (permission != 'CONTRIBUTOR') ...[
-                const SizedBox(width: 8),
+              if (permission != 'WORKING_SEE_SELF')
+                _QuickChangeChip(
+                  label: '🎯 Assigned',
+                  onTap: () => onPermissionChange('WORKING_SEE_SELF'),
+                ),
+              if (permission != 'CONTRIBUTOR')
                 _QuickChangeChip(
                   label: '✏️ Contrib',
                   onTap: () => onPermissionChange('CONTRIBUTOR'),
                 ),
-              ],
             ],
           ),
         ],

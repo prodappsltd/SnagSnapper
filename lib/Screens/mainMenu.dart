@@ -24,6 +24,9 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:snagsnapper/services/sync/device_manager.dart';
+import 'package:snagsnapper/services/security_service.dart';
+import 'package:snagsnapper/widgets/security_dialog.dart';
+import 'package:snagsnapper/widgets/debug_security_button.dart';
 
 class MainMenu extends StatefulWidget {
   const MainMenu({super.key});
@@ -78,6 +81,11 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
     WidgetsBinding.instance.addObserver(this);
     _setupAnimations();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Set up security threat callback after first frame renders
+      // This ensures we have a valid BuildContext for showing dialogs
+      // Any threats detected before this point are queued and processed now
+      _setupSecurityCallback();
+
       // TODO: Firebase Dynamic Links is discontinued - commented out for now
       // await initDynamicLinks();
       await _initRateMyApp();
@@ -388,7 +396,23 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
       _slideController.forward();
     });
   }
-  
+
+  /// Sets up the callback for handling security threats detected by freeRASP
+  /// Shows appropriate dialogs based on threat severity (warn or block)
+  void _setupSecurityCallback() {
+    SecurityService.onThreatDetected = (ThreatInfo threatInfo) {
+      // Ensure we have a valid mounted context before showing dialog
+      if (!mounted) return;
+
+      if (kDebugMode) {
+        print('[MainMenu] Security threat callback received: ${threatInfo.threatType}');
+      }
+
+      // Show the appropriate dialog based on threat response type
+      SecurityDialog.show(context, threatInfo);
+    };
+  }
+
   /// Initialize sync service for background syncing
   Future<void> _initializeSyncService() async {
     try {
@@ -899,6 +923,9 @@ class _MainMenuState extends State<MainMenu> with TickerProviderStateMixin, Widg
             ),
           ),
           
+          // Debug button for testing security dialogs (only visible in kDebugMode)
+          const DebugSecurityButton(),
+
           // Main content
           SafeArea(
             child: Column(

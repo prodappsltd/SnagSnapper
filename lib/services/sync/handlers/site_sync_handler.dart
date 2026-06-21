@@ -159,8 +159,8 @@ class SiteSyncHandler {
       return false;
     }
 
-    // Validate email format
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    // Validate email format - tightened regex synced with validators.dart
+    final emailRegex = RegExp(r'^(?!.*\.\.)(?!.*\.@)(?!.*@\.)(?!.*@-)(?!.*-\.)(?!.*\.-)[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$');
     if (!emailRegex.hasMatch(site.ownerEmail)) {
       return false;
     }

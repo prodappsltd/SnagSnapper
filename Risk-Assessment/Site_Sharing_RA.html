@@ -208,6 +208,14 @@
       font-weight: 600;
       font-size: 12px;
     }
+    .status-mitigated {
+      background: #276749;
+      color: #9ae6b4;
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 12px;
+    }
     .cf-intro {
       background: #1a202c;
       padding: 12px 15px;
@@ -522,7 +530,8 @@
 <div class="cf-intro">
   <strong>Trigger:</strong> <code>Profile/{ownerUID}/Sites/{siteId}</code> document updated<br>
   <strong>Purpose:</strong> Adds/removes shared_access entries when sharedWith changes, updates versions, sends notification emails for new shares<br>
-  <strong>Location:</strong> <code>functions/index.js:229-370</code>
+  <strong>Location:</strong> <code>functions/index.js:240-481</code><br>
+  <strong style="color: #38a169;">Retry enabled:</strong> <code>retry: true</code> with 30s event age check, deferred emails, transient/permanent error handling. See 2.11 for details.
 </div>
 <table>
   <thead>
@@ -542,8 +551,8 @@
       <td>2.1</td>
       <td><strong>Input Validation (Email)</strong></td>
       <td>When owner adds new collaborator via site update, malformed email (e.g., "not-an-email", SQL injection attempt, script tags) could be processed. Malformed emails would fail lookup when collaborator tries to sync.</td>
-      <td><strong>Two-layer validation with tightened regex (2026 best practice):</strong> (1) <strong>UI:</strong> <code>_isValidEmail()</code> in <code>share_site_dialog.dart:51-66</code> validates before "Add" action. Shows error: "Please enter a valid email address". (2) <strong>CF:</strong> <code>isValidEmail()</code> re-validates server-side. Invalid emails skipped and logged. <strong>Regex rejects:</strong> consecutive dots, dot before/after @, domain segments starting/ending with hyphen. Both use identical pattern.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:280-283</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-66</code><br><span class="check-yes">Verified</span></td>
+      <td><strong>Two-layer validation with tightened regex (2026 best practice):</strong> (1) <strong>UI:</strong> <code>_isValidEmail()</code> in <code>share_site_dialog.dart:51-66</code> validates before "Add" action. Shows error: "Please enter a valid email address". (2) <strong>CF:</strong> <code>isValidEmail()</code> re-validates server-side at lines 316, 348. Invalid emails skipped and logged. <strong>Regex rejects:</strong> consecutive dots, dot before/after @, domain segments starting/ending with hyphen. Both use identical pattern.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:82-98,316-319,348-351</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-66</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -551,8 +560,8 @@
       <td>2.2</td>
       <td><strong>Input Validation (Permission)</strong></td>
       <td>When owner adds new collaborator, they could inject arbitrary permission string (e.g., "ADMIN", "FULL_ACCESS"). If stored in shared_access, could cause permission check failures or unexpected behavior.</td>
-      <td><strong>Two-layer validation:</strong> (1) <strong>UI:</strong> Card-based selection only (lines 569-610) - users tap predefined cards, no text input. Only 4 valid options: VIEW, WORKING_SEE_ALL, WORKING_SEE_SELF, CONTRIBUTOR. (2) <strong>CF:</strong> <code>isValidPermission()</code> validates against whitelist. Invalid permissions skipped and logged. Attacker bypassing UI still blocked by CF.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:285-288</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:569-610</code><br><span class="check-yes">Verified</span></td>
+      <td><strong>Two-layer validation:</strong> (1) <strong>UI:</strong> Card-based selection only (lines 569-610) - users tap predefined cards, no text input. Only 4 valid options: VIEW, WORKING_SEE_ALL, WORKING_SEE_SELF, CONTRIBUTOR. (2) <strong>CF:</strong> <code>isValidPermission()</code> validates against whitelist at line 321. Invalid permissions skipped and logged. Attacker bypassing UI still blocked by CF.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:72-75,321-324</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:569-610</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -570,57 +579,87 @@
       <td><strong>Email Enumeration</strong></td>
       <td>Attacker could probe shared_access collection paths to discover valid email addresses. If document IDs used plain emails, attacker could enumerate <code>/shared_access/victim@email.com</code> paths to confirm accounts exist.</td>
       <td><strong>Two-layer protection:</strong> (1) Document IDs are SHA256 hashes via <code>hashEmail()</code> for all operations (add/update/remove) - non-reversible 64-char hex. (2) Firestore rules verify <code>resource.data.email == request.auth.token.email.lower()</code> - even if attacker guesses a hash, read is blocked unless their authenticated email matches the document's email field.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:301,322,342</code><br><span class="location-rules">Firestore Rules</span><br><code>firestore.rules:260</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:51-59,326,353,389</code><br><span class="location-rules">Firestore Rules</span><br><code>firestore.rules:260</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
+    <!-- ===== 2.5: Document Creation (New Collaborator) ===== -->
     <tr class="collapsible-parent" onclick="toggleSubItems('group-2-5', this)">
       <td><span class="collapse-toggle">▼</span>2.5</td>
-      <td><strong>Data Integrity (Version Sync)</strong> <span class="info-icon" onclick="event.stopPropagation(); showPopup('popup-2-5')">i</span></td>
-      <td>Collaborator's client could have stale site data if they don't know the site was updated. Without version tracking, client would need to fetch full site document on every sync to detect changes, causing unnecessary Firestore reads and costs.</td>
-      <td>CF stores <code>{ ownerUID, version }</code> in each collaborator's shared_access entry. On site update, version is incremented for ALL existing shares (not just new ones). Client compares local version vs shared_access version - only fetches site document if remote version is higher.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:307-332</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select" onclick="event.stopPropagation()"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td><strong>Document Creation (New Collaborator)</strong></td>
+      <td>When owner adds a new collaborator, CF creates/updates <code>shared_access/{emailHash}</code> document. Two-step: <code>set({ email }, { merge: true })</code> ensures doc exists, then <code>update({ sites.{siteId}: {ownerUID, version} })</code> adds site entry.</td>
+      <td><strong>MITIGATED:</strong> Two-step approach handles both new and existing docs. <code>set({ merge: true })</code> creates if missing, <code>update()</code> adds site entry. Both operations are idempotent (safe on retry).<br><br><strong>With retry:</strong> Transient failures auto-retry within 30s.<br><strong>If retries fail:</strong> Self-healing via 2.6/2.6.1 on next site edit.<br><strong>Manual recovery:</strong> Owner removes and re-adds collaborator.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:313-344</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" onclick="event.stopPropagation()" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr class="sub-item" data-group="group-2-5">
       <td>2.5.1</td>
-      <td><strong>Missing shared_access Document</strong></td>
-      <td>For existing collaborators, if the <code>shared_access/{hash}</code> document doesn't exist (deleted, or previous CF failed), <code>update()</code> would throw gRPC error code 5 (NOT_FOUND).</td>
-      <td><strong>FIXED:</strong> Catch-and-recover pattern implemented. Normal path uses single <code>update()</code> (1 write). If NOT_FOUND error (code 5), falls back to <code>set({ merge: true })</code> + <code>update()</code> (2 writes). Self-healing - recreates missing doc. Also added <code>isValidEmail()</code> check for existing shares.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:320-347</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td><strong>Partial Creation Failure</strong></td>
+      <td>Line 334 <code>set({ email }, { merge: true })</code> succeeds but chained <code>.then(() => update({...}))</code> at lines 335-338 fails. Document exists with <code>{ email }</code> but no <code>sites.{siteId}</code> entry. Collaborator won't see site in Shared Sites list.</td>
+      <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures auto-retry within 30s. <code>set({ merge: true })</code> is idempotent - re-running is safe.<br>(2) <strong>If retries fail (&gt;30s):</strong> Self-healing on next site edit via version sync path (2.6) which runs <code>update()</code> to add missing site entry.<br>(3) <strong>Manual recovery:</strong> Owner removes/re-adds collaborator.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:333-338</code><br>Recovery: 2.6<br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr class="sub-item" data-group="group-2-5">
       <td>2.5.2</td>
+      <td><strong>Complete Creation Failure</strong></td>
+      <td>Line 334 <code>set()</code> fails entirely (network timeout, Firebase service unavailable). No <code>shared_access</code> document created. Collaborator in site's <code>sharedWith</code> but can't discover site.</td>
+      <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures (gRPC 4,8,14) auto-retry within 30s.<br>(2) <strong>If retries fail (&gt;30s):</strong> Self-healing via 2.6.1 catch-and-recover on next site edit - version sync tries <code>update()</code>, catches NOT_FOUND (code 5), falls back to <code>set() + update()</code>.<br>(3) <strong>Manual recovery:</strong> Owner removes/re-adds collaborator.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:333-338</code><br>Recovery: 2.6.1<br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <!-- ===== 2.6: Version Sync (Existing Collaborator) ===== -->
+    <tr class="collapsible-parent" onclick="toggleSubItems('group-2-6', this)">
+      <td><span class="collapse-toggle">▼</span>2.6</td>
+      <td><strong>Version Sync (Existing Collaborator)</strong> <span class="info-icon" onclick="event.stopPropagation(); showPopup('popup-2-6')">i</span></td>
+      <td>Collaborator's client could have stale site data if they don't know the site was updated. Without version tracking, client would need to fetch full site document on every sync to detect changes, causing unnecessary Firestore reads and costs.</td>
+      <td><strong>MITIGATED:</strong> CF stores <code>{ ownerUID, version }</code> in each collaborator's shared_access entry. On site update with <code>versionChanged=true</code>, version is updated for ALL existing shares. Client compares <code>localVersion &lt; remoteVersion</code> - only fetches if remote is higher.<br><br><strong>With retry:</strong> Transient failures auto-retry within 30s, ensuring version propagates reliably.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:345-380</code><br><span class="location-app">Client check</span><br><code>shared_site_service.dart:247</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" onclick="event.stopPropagation()" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr class="sub-item" data-group="group-2-6">
+      <td>2.6.1</td>
+      <td><strong>Missing shared_access Document</strong></td>
+      <td>For existing collaborators, if the <code>shared_access/{hash}</code> document doesn't exist (deleted, or previous CF failed and timed out), <code>update()</code> would throw gRPC error code 5 (NOT_FOUND).</td>
+      <td><strong>MITIGATED:</strong> Catch-and-recover pattern implemented. Normal path uses single <code>update()</code> (1 write). If NOT_FOUND error (code 5, line 365), falls back to <code>set({ merge: true })</code> + <code>update()</code> (2 writes). Self-healing - recreates missing doc. Email validation at line 348.<br><br><strong>Note:</strong> NOT_FOUND can occur if initial share creation (2.5) timed out after 30s.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:360-376</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr class="sub-item" data-group="group-2-6">
+      <td>2.6.2</td>
       <td><strong>Partial Update Failure</strong></td>
       <td><code>Promise.all(updatePromises)</code> fails fast - if ANY collaborator's update fails, the entire batch is marked failed. However, some updates may have already completed before the failure, leaving inconsistent state where some collaborators have updated version, others don't.</td>
-      <td><strong>ACCEPTED:</strong> Low probability scenario. Recovery path exists: owner edits site again → triggers new <code>onSiteUpdated</code> → retries all updates. Inconsistency is temporary and self-healing on next site edit.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:358</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures auto-retry within 30s. All Firestore operations are idempotent - safe to repeat.<br>(2) <code>Promise.all(updatePromises)</code> at line 420 fails fast.<br>(3) <strong>If retries fail (&gt;30s):</strong> Owner edits site again → triggers new <code>onSiteUpdated</code> → retries all updates. Inconsistency is temporary.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:420</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
-    <tr class="sub-item" data-group="group-2-5">
-      <td>2.5.3</td>
+    <tr class="sub-item" data-group="group-2-6">
+      <td>2.6.3</td>
       <td><strong>Stale Data (Silent Failure)</strong></td>
-      <td>If CF fails to update a collaborator's <code>shared_access</code> version, that collaborator has no way to know they're out of sync. Their <code>localVersion &lt; remoteVersion</code> check returns false (since remote wasn't updated), so they won't redownload. They continue with stale site data.</td>
-      <td><strong>ACCEPTED:</strong> Edge case with recovery path. Collaborator will eventually get updated on next site edit by owner. Alternative: collaborator can manually force-refresh site data via pull-to-refresh or re-entering the site.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br>Consequence of 2.5.1/2.5.2<br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td>If CF fails to update a collaborator's <code>shared_access</code> version after all retries (30s timeout), that collaborator won't know they're out of sync. Their <code>localVersion &lt; remoteVersion</code> check returns false, so they won't redownload.</td>
+      <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures auto-retry within 30s - significantly reduces probability of silent failure.<br>(2) <strong>If retries fail:</strong> Collaborator gets updated on next site edit by owner.<br>(3) <strong>Note:</strong> No force-refresh exists - "Check & Download" still uses version comparison.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br>Consequence of 2.6.1/2.6.2<br><span class="location-app">Version check</span><br><code>shared_site_service.dart:247</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
-    <tr>
-      <td>2.6</td>
-      <td><strong>Share Removal Cleanup</strong></td>
-      <td>When owner removes collaborator from sharedWith, their shared_access entry for this site could remain orphaned. Collaborator would still see site in their "Shared Sites" list but might get permission errors when accessing.</td>
-      <td>CF detects removed shares by comparing before/after sharedWith maps. For each removed email, uses <code>FieldValue.delete()</code> to remove specific site entry: <code>accessRef.update({ [`sites.${siteId}`]: FieldValue.delete() })</code>. Only removes this site, preserves other shared sites.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:338-350</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
-    </tr>
+    <!-- ===== 2.7: Share Removal ===== -->
     <tr>
       <td>2.7</td>
+      <td><strong>Share Removal Cleanup</strong></td>
+      <td><strong>Failure modes:</strong> (1) CF fails entirely → shared_access entry remains. (2) <code>FieldValue.delete()</code> fails → entry remains. (3) Partial batch failure → some entries remain.<br><br><strong>With retry:</strong> Transient failures auto-retry within 30s. If all retries fail, local copy persists until owner makes another edit.</td>
+      <td><strong>MITIGATED:</strong> (1) <code>retry: true</code> ensures transient failures retry.<br>(2) <code>FieldValue.delete()</code> (line 395) is idempotent.<br>(3) NOT_FOUND handled gracefully (lines 397-408) - covers edge case where shared_access doc never created (initial share timed out).<br>(4) <strong>Fallback recovery:</strong> Owner makes any edit → version increments → client fetches → cleanup.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:385-410</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.8</td>
       <td><strong>Rate Limiting</strong></td>
       <td>Rapid share/unshare cycles could cause cost abuse via repeated CF invocations and email sends.</td>
       <td><strong>ACCEPTED.</strong> Same multi-layer protection as 1.6: App Check + freeRASP + Auth + Rules + Traceability. Manual abuse self-limiting and traceable.</td>
@@ -629,38 +668,38 @@
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
-      <td>2.8</td>
+      <td>2.9</td>
       <td><strong>Information Disclosure (Logs)</strong></td>
       <td>Sensitive error details exposed in Cloud Function logs</td>
-      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code>. Requires Firebase project access (admin only).</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:366</code><br><span class="check-yes">Accepted</span></td>
+      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code> at lines 472, 478 (transient/permanent errors). Requires Firebase project access (admin only).</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:472,478</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
-      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
-    </tr>
-    <tr>
-      <td>2.9</td>
-      <td><strong>Log Data Leakage (PII)</strong></td>
-      <td>Full email addresses logged, exposing PII</td>
-      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged to aid troubleshooting.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:281,308,321,342</code><br><span class="check-yes">Accepted</span></td>
-      <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>2.10</td>
+      <td><strong>Log Data Leakage (PII)</strong></td>
+      <td>Full email addresses logged, exposing PII</td>
+      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged at lines 317, 322, 344, 349, 368, 379, 407, 415 to aid troubleshooting.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:317,322,344,349,368,379,407,415</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
+    </tr>
+    <tr>
+      <td>2.11</td>
       <td><strong>CF Failure/Recovery</strong></td>
       <td>CF fails after Firestore write succeeds. Site's sharedWith is updated but <code>shared_access</code> entries not created/updated. New collaborators can't discover site; removed collaborators still see it.<br><br><strong>See:</strong> <code>Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md</code></td>
-      <td><strong>ACCEPTED - Retry intentionally NOT enabled:</strong><br>(1) <strong>Decision:</strong> Do not enable <code>retry: true</code> - Firebase doesn't allow limiting retry count (would retry for 24 hours).<br>(2) <strong>Recovery path:</strong> User edits site again → triggers another <code>onSiteUpdated</code>.<br>(3) <strong>Alternative recovery:</strong> Owner removes and re-adds collaborator.<br>(4) <strong>Note:</strong> This CF IS the recovery path for <code>onSiteCreated</code> failures.<br>(5) <strong>Idempotent writes:</strong> <code>set({ merge: true })</code>, <code>update()</code>, and <code>FieldValue.delete()</code> are all safe to repeat.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:229-370</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Accepted</span></td>
-      <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td><strong>MITIGATED - Retry NOW enabled with safeguards:</strong><br>(1) <strong>retry: true</strong> enabled (line 248) - transient failures auto-retry.<br>(2) <strong>Event age check:</strong> Events &gt;30s dropped (lines 257-271) - prevents stale retries and infinite loops.<br>(3) <strong>Deferred emails:</strong> Emails only sent AFTER Firestore success (lines 411-421) - no duplicates on retry.<br>(4) <strong>Error handling:</strong> Transient errors (gRPC 4,8,14) retry; permanent errors return gracefully (lines 426-464).<br>(5) <strong>NOT_FOUND handling:</strong> Share removal handles missing docs (lines 392-410) - covers edge case where initial share creation timed out.<br>(6) <strong>Idempotent writes:</strong> All Firestore operations safe to repeat.<br><br><strong>Trade-off:</strong> 30s timeout means some share creations may never complete if all retries fail. Recovery: owner makes another edit.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:240-467</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
   </tbody>
   <!-- N/A items grouped at bottom -->
   <tbody>
     <tr><td colspan="7"><h3 class="na-divider">N/A Items (verified not applicable to this CF)</h3></td></tr>
     <tr class="na-row">
-      <td>2.11</td>
+      <td>2.12</td>
       <td><strong>Authentication</strong></td>
       <td>CF executes without verifying user is logged in</td>
       <td><strong>N/A.</strong> This is a Firestore-triggered function (not callable). Authentication enforced at Firestore write level before CF triggers.</td>
@@ -669,7 +708,7 @@
       <td><select class="test-select" style="background: rgb(254, 235, 200); color: rgb(116, 66, 16);"><option value=""></option><option value="Tested">Tested</option><option value="N/A" selected="selected">N/A</option><option value="Accept">Accept</option></select></td>
     </tr>
     <tr class="na-row">
-      <td>2.12</td>
+      <td>2.13</td>
       <td><strong>Replay Attacks</strong></td>
       <td>Captured requests could be replayed</td>
       <td><strong>N/A.</strong> Firestore triggers are idempotent - replaying the same update compares same before/after and produces same result.</td>
@@ -685,8 +724,8 @@
 <div class="cf-intro">
   <strong>Trigger:</strong> <code>Profile/{ownerUID}/Sites/{siteId}</code> document deleted<br>
   <strong>Purpose:</strong> Removes all shared_access entries for deleted site<br>
-  <strong>Location:</strong> <code>functions/index.js:376-432</code><br>
-  <strong style="color: #c53030;">Note:</strong> This is a single point of failure - if this CF fails, shared_access entries remain pointing to deleted site. Client-side cleanup handles this.
+  <strong>Location:</strong> <code>functions/index.js:473-597</code><br>
+  <strong style="color: #38a169;">Retry enabled:</strong> <code>retry: true</code> with 30s event age check ensures cleanup completes. If all retries fail, client-side handles orphaned pointers gracefully.
 </div>
 <table>
   <thead>
@@ -706,35 +745,35 @@
       <td>3.1</td>
       <td><strong>Email Enumeration</strong></td>
       <td>When site is deleted, CF iterates over sharedWith emails to clean up shared_access. If document paths used plain emails, cleanup operations would leak which emails had accounts.</td>
-      <td>All emails are SHA256 hashed via <code>hashEmail()</code> (line 399) before constructing document paths. Cleanup operations use <code>/shared_access/{64-char-hash}</code> paths - no email addresses exposed in document paths or logs (except internal debug logs).</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:399</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td><strong>ACCEPTED:</strong> All emails are SHA256 hashed via <code>hashEmail()</code> (line 442) before constructing document paths. Cleanup operations use <code>/shared_access/{64-char-hash}</code> paths. Note: Full emails ARE logged (line 451) - covered by 3.5 as accepted PII logging.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:442</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>3.2</td>
       <td><strong>Cleanup Completeness</strong></td>
-      <td>If CF only partially processes sharedWith (e.g., crashes mid-loop, timeout), some collaborators' shared_access entries would remain pointing to deleted site. They'd see ghost site in list.</td>
-      <td>CF iterates ALL keys in <code>data.sharedWith</code> from deleted document snapshot (line 398). Each cleanup is pushed to <code>updatePromises[]</code> array. <code>await Promise.all(updatePromises)</code> (line 411) ensures all operations complete or fail together. If any fails, error is thrown and logged.</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:398-411</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-present">PRESENT</span></td>
-      <td><select class="test-select"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td>If CF partially processes sharedWith (timeout mid-loop), some shared_access entries remain. On next sync, client fetches site from Firestore → 404 → client deletes local copy (<code>shared_site_service.dart:267-277</code>). Site disappears from list. Self-cleaning.</td>
+      <td><strong>ACCEPTED:</strong> CF iterates ALL keys via <code>Promise.all(updatePromises)</code> (line 454). If any fails, error thrown and admin alerted. Client-side cleanup handles orphaned pointers gracefully (same as 3.3).</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:441-454</code><br><span class="location-app">Client cleanup</span><br><code>shared_site_service.dart:267-277</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-accepted">ACCEPTED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>3.3</td>
       <td><strong>CF Failure (Orphaned Pointers)</strong></td>
-      <td><strong>Single point of failure:</strong> If this CF fails (~0.5% rate), ALL collaborators' shared_access entries remain pointing to the now-deleted site. On next sync, collaborator sees site in "Shared Sites" list, but fetch from Firestore returns 404 (site doesn't exist).</td>
-      <td><strong>ACCEPTED.</strong> Client-side handles gracefully: <code>shared_site_service.dart</code> detects site in shared_access but not in Firestore (lines 267-277), deletes local copy + snags, continues sync. User experience: site silently disappears from list. No error shown, no manual intervention needed.</td>
-      <td><span class="location-app">App Logic</span><br><code>shared_site_service.dart:267-277,284-297</code><br><span class="check-yes">Verified</span></td>
-      <td><span class="status-accepted">ACCEPTED</span></td>
-      <td><select class="test-select" style="background: white; color: rgb(51, 51, 51);"><option value="" selected="selected"></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept">Accept</option></select></td>
+      <td>If CF fails after all retries (30s timeout), shared_access entries remain pointing to deleted site. On next sync, client fetches from shared_access, tries Firestore → 404, triggers cleanup.</td>
+      <td><strong>MITIGATED:</strong> (1) <strong>retry: true</strong> enabled (line 480) - transient failures auto-retry within 30s.<br>(2) <strong>Event age check:</strong> Events &gt;30s dropped (lines 488-502).<br>(3) <strong>Error handling:</strong> Transient vs permanent errors distinguished (lines 564-594).<br>(4) <strong>NOT_FOUND handling:</strong> Missing docs treated as success (lines 537-546).<br>(5) <strong>Fallback:</strong> Client-side handles gracefully: <code>shared_site_service.dart</code> detects site not in Firestore (lines 267-277), deletes local copy + snags. Site silently disappears.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:473-597</code><br><span class="location-app">App Logic</span><br><code>shared_site_service.dart:267-277</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="status-mitigated">MITIGATED</span></td>
+      <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>3.4</td>
       <td><strong>Information Disclosure (Logs)</strong></td>
       <td>Sensitive error details exposed in Cloud Function logs</td>
       <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code>. Requires Firebase project access (admin only).</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:418</code><br><span class="check-yes">Accepted</span></td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:461</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -742,8 +781,8 @@
       <td>3.5</td>
       <td><strong>Log Data Leakage (PII)</strong></td>
       <td>Full email addresses logged during cleanup, exposing PII</td>
-      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged to aid troubleshooting.</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:408</code><br><span class="check-yes">Accepted</span></td>
+      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged at line 451 to aid troubleshooting.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:451</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -1429,9 +1468,9 @@
 </script>
 
 <!-- Info Popup for 2.5: Data Integrity (Version Sync) -->
-<div id="popup-2-5" class="info-popup-overlay" onclick="if(event.target===this)hidePopup('popup-2-5')">
+<div id="popup-2-6" class="info-popup-overlay" onclick="if(event.target===this)hidePopup('popup-2-6')">
   <div class="info-popup">
-    <button class="close-btn" onclick="hidePopup('popup-2-5')">Close</button>
+    <button class="close-btn" onclick="hidePopup('popup-2-6')">Close</button>
     <h4>2.5 Data Integrity (Version Sync) - Detailed Explanation</h4>
 
     <p class="section-title">The Problem:</p>

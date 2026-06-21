@@ -803,8 +803,8 @@ class ProfileSyncHandler {
   }
 
   bool _validateUserData(AppUser user) {
-    // Check for invalid email
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    // Check for invalid email - tightened regex synced with validators.dart
+    final emailRegex = RegExp(r'^(?!.*\.\.)(?!.*\.@)(?!.*@\.)(?!.*@-)(?!.*-\.)(?!.*\.-)[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$');
     if (!emailRegex.hasMatch(user.email)) {
       return false;
     }

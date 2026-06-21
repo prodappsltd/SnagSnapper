@@ -38,6 +38,7 @@ import 'package:snagsnapper/Screens/custom_theme_selector.dart';
 import 'package:snagsnapper/Constants/initialization_state.dart';
 import 'package:snagsnapper/Constants/custom_color_schemes.dart';
 import 'package:snagsnapper/services/sync/device_manager.dart';
+import 'package:snagsnapper/services/security_service.dart';
 
 import 'firebase_options.dart';
 
@@ -106,7 +107,11 @@ Future<void> main() async {
       
       // Enable crashlytics logs
       await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
-      
+
+      // Initialize security monitoring (freeRASP) for clone/root/emulator detection
+      // Runs in background, logs threats to Crashlytics, skipped in debug mode
+      await SecurityService.initialize();
+
     } catch (e, stackTrace) {
       // Log Firebase initialization error
       if (kDebugMode) {

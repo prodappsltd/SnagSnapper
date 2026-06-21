@@ -42,14 +42,27 @@ service cloud.firestore {
       return isCollaborator(siteData) && getPermission(siteData) == permission;
     }
 
-    // Check if user can view (any collaborator can view)
-    function canView(siteData) {
-      return isCollaborator(siteData);
-    }
-
     // Check if user can contribute (CONTRIBUTOR permission)
     function canContribute(siteData) {
       return hasPermission(siteData, 'CONTRIBUTOR');
+    }
+
+    // Check if user is any type of WORKING permission
+    function isWorking(siteData) {
+      return hasPermission(siteData, 'WORKING_SEE_ALL')
+          || hasPermission(siteData, 'WORKING_SEE_SELF');
+    }
+
+    // Check if user can see all snags (VIEW, CONTRIBUTOR, or WORKING_SEE_ALL)
+    function canSeeAllSnags(siteData) {
+      return hasPermission(siteData, 'VIEW')
+          || hasPermission(siteData, 'CONTRIBUTOR')
+          || hasPermission(siteData, 'WORKING_SEE_ALL');
+    }
+
+    // Check if snag is assigned to current user
+    function isAssignedToMe(snagData) {
+      return snagData.assignedEmail == getUserEmail();
     }
 
     // Validate site data for create/update
@@ -61,7 +74,10 @@ service cloud.firestore {
           && data.ownerUID == request.auth.uid
           && data.ownerEmail == request.auth.token.email
           && data.ownerEmail is string
-          && data.ownerEmail.size() > 0;
+          && data.ownerEmail.size() > 0
+          // Limit collaborators to prevent DoS via payload size (RA 1.6)
+          // Prevent owner from adding themselves to sharedWith (RA 2.6)
+          && (!('sharedWith' in data) || (data.sharedWith.size() <= 30 && !(data.ownerEmail.lower() in data.sharedWith)));
     }
 
     // Ensure ownership fields are not changed
@@ -171,7 +187,7 @@ service cloud.firestore {
         allow delete: if isOwner(ownerUID) && isEmailVerified();
 
         // Collaborators can read if their email is in sharedWith
-        allow read: if canView(resource.data);
+        allow read: if isCollaborator(resource.data);
 
         // CONTRIBUTOR can update (but not delete or change ownership)
         allow update: if canContribute(resource.data)
@@ -202,8 +218,12 @@ service cloud.firestore {
           // Only owner can delete snags
           allow delete: if isOwner(ownerUID) && isEmailVerified();
 
-          // Collaborators can read if they can view the site
-          allow read: if canView(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data);
+          // Collaborators can read based on permission level
+          // VIEW, CONTRIBUTOR, WORKING_SEE_ALL can see all snags
+          // WORKING_SEE_SELF can only see snags assigned to them
+          allow read: if canSeeAllSnags(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data)
+                      || (hasPermission(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data, 'WORKING_SEE_SELF')
+                          && isAssignedToMe(resource.data));
 
           // CONTRIBUTOR can create snags with valid data
           allow create: if canContribute(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data)
@@ -211,16 +231,16 @@ service cloud.firestore {
                         && isValidSnagData();
 
           // CONTRIBUTOR can update snags with valid data, identity unchanged
-          // WORKING can update only assigned snags
+          // WORKING_SEE_ALL and WORKING_SEE_SELF can update only assigned snags
           allow update: if isEmailVerified()
                         && isValidSnagData()
                         && snagIdentityUnchanged()
                         && (
                           // CONTRIBUTOR can update any snag
                           canContribute(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data)
-                          // WORKING can update only if assigned to them
-                          || (hasPermission(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data, 'WORKING')
-                              && resource.data.assignedEmail == getUserEmail())
+                          // Both WORKING types can update only if assigned to them
+                          || (isWorking(get(/databases/$(database)/documents/Profile/$(ownerUID)/Sites/$(siteId)).data)
+                              && isAssignedToMe(resource.data))
                         );
         }
       }
@@ -235,9 +255,12 @@ service cloud.firestore {
     match /shared_access/{emailHash} {
       // User can ONLY read their own shared_access document
       // Cloud Function stores email field for verification
-      // Uses get() instead of list() - security rules work correctly
-      allow read: if isAuthenticated()
-                  && resource.data.email == request.auth.token.email.lower();
+      // Allow get if: doc doesn't exist (returns 404) OR email matches requesting user
+      allow get: if isAuthenticated()
+                 && (resource == null || resource.data.email == request.auth.token.email.lower());
+
+      // Explicitly block list/query to prevent enumeration
+      allow list: if false;
 
       // Only Cloud Functions can write (no client writes allowed)
       allow write: if false;

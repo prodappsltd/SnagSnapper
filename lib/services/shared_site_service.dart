@@ -3,10 +3,12 @@
 /// Flow:
 /// 1. Computes SHA256 hash of user's email (same as Cloud Function)
 /// 2. Gets shared_access/{emailHash} document (single document per user)
-/// 3. Reads sites map: { siteId: ownerUID, ... }
-/// 4. Downloads each site from Profile/{ownerUID}/Sites/{siteId}
-/// 5. Downloads snags under each site
-/// 6. Saves to local SQLite database
+/// 3. Reads sites map: { siteId: { ownerUID, version }, ... }
+/// 4. Compares versions - skips fetch if local >= remote (RA 4.10)
+/// 5. Downloads each site from Profile/{ownerUID}/Sites/{siteId}
+/// 6. Downloads snags under each site
+/// 7. Cleans up orphaned local sites not in shared_access (RA 2.7)
+/// 8. Saves to local SQLite database
 ///
 /// Security:
 /// - Firestore rules verify email field matches requesting user on get()
@@ -26,18 +28,21 @@ import 'package:snagsnapper/Data/models/snag.dart';
 class SharedSiteDownloadResult {
   final int sitesDownloaded;
   final int snagsDownloaded;
+  final int sitesRemoved;
   final int errors;
   final List<String> errorMessages;
 
   SharedSiteDownloadResult({
     required this.sitesDownloaded,
     required this.snagsDownloaded,
+    required this.sitesRemoved,
     required this.errors,
     required this.errorMessages,
   });
 
   bool get hasErrors => errors > 0;
-  bool get isEmpty => sitesDownloaded == 0 && snagsDownloaded == 0;
+  bool get isEmpty =>
+      sitesDownloaded == 0 && snagsDownloaded == 0 && sitesRemoved == 0;
 
   String get summary {
     if (isEmpty && !hasErrors) {
@@ -50,10 +55,16 @@ class SharedSiteDownloadResult {
     if (snagsDownloaded > 0) {
       parts.add('$snagsDownloaded snag${snagsDownloaded == 1 ? '' : 's'}');
     }
+    if (sitesRemoved > 0) {
+      parts.add('$sitesRemoved removed');
+    }
     if (hasErrors) {
       parts.add('$errors error${errors == 1 ? '' : 's'}');
     }
-    return 'Downloaded ${parts.join(', ')}';
+    if (sitesDownloaded > 0 || snagsDownloaded > 0) {
+      return 'Downloaded ${parts.join(', ')}';
+    }
+    return parts.join(', ');
   }
 }
 
@@ -65,6 +76,26 @@ class SharedSiteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AppDatabase _database = AppDatabase.instance;
 
+  /// Cooldown tracking (survives tab switches)
+  static const int cooldownSeconds = 30;
+  DateTime? _lastSyncTime;
+
+  /// Get remaining cooldown seconds (0 if ready to sync)
+  int get cooldownRemaining {
+    if (_lastSyncTime == null) return 0;
+    final elapsed = DateTime.now().difference(_lastSyncTime!).inSeconds;
+    final remaining = cooldownSeconds - elapsed;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  /// Check if sync is allowed
+  bool get canSync => cooldownRemaining == 0;
+
+  /// Record sync completion time
+  void recordSyncTime() {
+    _lastSyncTime = DateTime.now();
+  }
+
   /// Hash email using SHA256 (must match Cloud Function implementation)
   /// Email is normalized (lowercase, trimmed) before hashing
   String _hashEmail(String email) {
@@ -75,6 +106,11 @@ class SharedSiteService {
   }
 
   /// Check and download all sites shared with the current user
+  ///
+  /// Uses version-based sync to reduce Firestore reads:
+  /// - Compares local vs remote versions before fetching
+  /// - Skips sites where local version >= remote version
+  /// - Cleans up orphaned local sites not in shared_access
   Future<SharedSiteDownloadResult> checkAndDownloadSharedSites({
     void Function(String status)? onProgress,
   }) async {
@@ -83,6 +119,7 @@ class SharedSiteService {
       return SharedSiteDownloadResult(
         sitesDownloaded: 0,
         snagsDownloaded: 0,
+        sitesRemoved: 0,
         errors: 1,
         errorMessages: ['User not signed in'],
       );
@@ -100,10 +137,19 @@ class SharedSiteService {
 
     int sitesDownloaded = 0;
     int snagsDownloaded = 0;
+    int sitesRemoved = 0;
     int errors = 0;
     final errorMessages = <String>[];
 
     try {
+      // Get all local shared sites for orphan cleanup
+      final localSharedSites = await _database.siteDao.getSharedSites(userEmail);
+      final localSiteIds = localSharedSites.map((s) => s.id).toSet();
+
+      if (kDebugMode) {
+        print('SharedSiteService: Found ${localSiteIds.length} local shared sites');
+      }
+
       // Get single shared_access document for this user
       final sharedAccessDoc = await _firestore
           .collection('shared_access')
@@ -114,10 +160,25 @@ class SharedSiteService {
         if (kDebugMode) {
           print('SharedSiteService: No shared_access document found');
         }
+
+        // Clean up all local shared sites - user has no remote shares
+        if (localSiteIds.isNotEmpty) {
+          onProgress?.call('Cleaning up removed sites...');
+          for (final orphanId in localSiteIds) {
+            if (kDebugMode) {
+              print('SharedSiteService: Removing orphaned local site $orphanId');
+            }
+            await _database.snagDao.deleteSnagsBySite(orphanId);
+            await _database.siteDao.deleteSite(orphanId);
+            sitesRemoved++;
+          }
+        }
+
         onProgress?.call('No shared sites found');
         return SharedSiteDownloadResult(
           sitesDownloaded: 0,
           snagsDownloaded: 0,
+          sitesRemoved: sitesRemoved,
           errors: 0,
           errorMessages: [],
         );
@@ -125,26 +186,54 @@ class SharedSiteService {
 
       final data = sharedAccessDoc.data()!;
       final sites = data['sites'] as Map<String, dynamic>? ?? {};
+      final remoteSiteIds = sites.keys.toSet();
 
       if (kDebugMode) {
         print('SharedSiteService: Found ${sites.length} shared site references');
       }
 
       if (sites.isEmpty) {
+        // Clean up all local shared sites - user has no remote shares
+        if (localSiteIds.isNotEmpty) {
+          onProgress?.call('Cleaning up removed sites...');
+          for (final orphanId in localSiteIds) {
+            if (kDebugMode) {
+              print('SharedSiteService: Removing orphaned local site $orphanId');
+            }
+            await _database.snagDao.deleteSnagsBySite(orphanId);
+            await _database.siteDao.deleteSite(orphanId);
+            sitesRemoved++;
+          }
+        }
+
         onProgress?.call('No shared sites found');
         return SharedSiteDownloadResult(
           sitesDownloaded: 0,
           snagsDownloaded: 0,
+          sitesRemoved: sitesRemoved,
           errors: 0,
           errorMessages: [],
         );
       }
 
       // Process each shared site reference
-      // sites = { "siteId1": "ownerUID1", "siteId2": "ownerUID2", ... }
+      // sites = { "siteId1": { "ownerUID": "uid1", "version": 5 }, ... }
       for (final entry in sites.entries) {
         final siteId = entry.key;
-        final ownerUID = entry.value as String?;
+        final siteData = entry.value;
+
+        // Parse new format: { ownerUID, version }
+        String? ownerUID;
+        int? remoteVersion;
+
+        if (siteData is Map) {
+          ownerUID = siteData['ownerUID'] as String?;
+          remoteVersion = siteData['version'] as int?;
+        } else {
+          errors++;
+          errorMessages.add('Invalid site data format for site $siteId');
+          continue;
+        }
 
         if (ownerUID == null) {
           errors++;
@@ -152,10 +241,22 @@ class SharedSiteService {
           continue;
         }
 
+        // Check local version to skip unnecessary fetches (RA 4.10)
+        final existingSite = await _database.siteDao.getSiteById(siteId);
+        if (existingSite != null && remoteVersion != null) {
+          if (existingSite.firebaseVersion >= remoteVersion) {
+            if (kDebugMode) {
+              print(
+                  'SharedSiteService: Site $siteId up to date (v${existingSite.firebaseVersion})');
+            }
+            continue; // Skip Firestore read - no changes
+          }
+        }
+
         onProgress?.call('Downloading site...');
 
         try {
-          // Download site document
+          // Download site document (only if new or version mismatch)
           final siteDoc = await _firestore
               .collection('Profile')
               .doc(ownerUID)
@@ -165,28 +266,40 @@ class SharedSiteService {
 
           if (!siteDoc.exists) {
             if (kDebugMode) {
-              print('SharedSiteService: Site $siteId not found in Firestore');
+              print(
+                  'SharedSiteService: Site $siteId deleted from Firestore, cleaning up local');
             }
-            // Site may have been deleted - remove the local copy if exists
+            // Site was deleted - clean up local copy (RA 2.7: CF failure scenario)
+            await _database.snagDao.deleteSnagsBySite(siteId);
+            await _database.siteDao.deleteSite(siteId);
+            sitesRemoved++;
             continue;
           }
 
-          final siteData = siteDoc.data()!;
+          final siteDocData = siteDoc.data()!;
 
           // Check if user still has access
-          final sharedWith = siteData['sharedWith'] as Map<String, dynamic>? ?? {};
+          final sharedWith =
+              siteDocData['sharedWith'] as Map<String, dynamic>? ?? {};
           if (!sharedWith.containsKey(userEmail.toLowerCase())) {
             if (kDebugMode) {
-              print('SharedSiteService: User no longer has access to site $siteId');
+              print(
+                  'SharedSiteService: User no longer has access to site $siteId, cleaning up local');
+            }
+            // User was removed from sharedWith - CF hasn't updated shared_access yet
+            // Clean up local copy (race condition handling)
+            if (existingSite != null) {
+              await _database.snagDao.deleteSnagsBySite(siteId);
+              await _database.siteDao.deleteSite(siteId);
+              sitesRemoved++;
             }
             continue;
           }
 
           // Convert to Site model
-          final site = Site.fromFirestore(siteId, siteData);
+          final site = Site.fromFirestore(siteId, siteDocData);
 
           // Save to local database
-          final existingSite = await _database.siteDao.getSiteById(siteId);
           if (existingSite == null) {
             await _database.siteDao.insertSite(site);
             sitesDownloaded++;
@@ -205,6 +318,10 @@ class SharedSiteService {
           }
 
           // Download snags for this site
+          // TODO: Snag sync limitations (out of scope for initial release):
+          // 1. No version-based sync - always fetches all snags
+          // 2. No deletion sync - deleted snags remain locally
+          // See: SHARING_AND_CF_DECISIONS.md TODO section
           onProgress?.call('Downloading snags for ${site.name}...');
 
           final snagsQuery = await _firestore
@@ -216,14 +333,16 @@ class SharedSiteService {
               .get();
 
           if (kDebugMode) {
-            print('SharedSiteService: Found ${snagsQuery.docs.length} snags for site $siteId');
+            print(
+                'SharedSiteService: Found ${snagsQuery.docs.length} snags for site $siteId');
           }
 
           for (final snagDoc in snagsQuery.docs) {
             try {
               final snag = Snag.fromFirestore(snagDoc.id, snagDoc.data());
 
-              final existingSnag = await _database.snagDao.getSnagById(snagDoc.id);
+              final existingSnag =
+                  await _database.snagDao.getSnagById(snagDoc.id);
               if (existingSnag == null) {
                 await _database.snagDao.insertSnag(snag);
                 snagsDownloaded++;
@@ -242,7 +361,6 @@ class SharedSiteService {
               }
             }
           }
-
         } catch (e) {
           errors++;
           errorMessages.add('Failed to download site $siteId: $e');
@@ -252,8 +370,21 @@ class SharedSiteService {
         }
       }
 
-      onProgress?.call('Download complete');
+      // Cleanup: Delete local sites not in shared_access (owner removed access)
+      final orphanedSiteIds = localSiteIds.difference(remoteSiteIds);
+      if (orphanedSiteIds.isNotEmpty) {
+        onProgress?.call('Cleaning up removed sites...');
+        for (final orphanId in orphanedSiteIds) {
+          if (kDebugMode) {
+            print('SharedSiteService: Removing orphaned local site $orphanId');
+          }
+          await _database.snagDao.deleteSnagsBySite(orphanId);
+          await _database.siteDao.deleteSite(orphanId);
+          sitesRemoved++;
+        }
+      }
 
+      onProgress?.call('Download complete');
     } catch (e) {
       errors++;
       errorMessages.add('Failed to query shared sites: $e');
@@ -265,6 +396,7 @@ class SharedSiteService {
     final result = SharedSiteDownloadResult(
       sitesDownloaded: sitesDownloaded,
       snagsDownloaded: snagsDownloaded,
+      sitesRemoved: sitesRemoved,
       errors: errors,
       errorMessages: errorMessages,
     );

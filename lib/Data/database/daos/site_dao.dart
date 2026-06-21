@@ -82,11 +82,23 @@ class SiteDao extends DatabaseAccessor<AppDatabase> with _$SiteDaoMixin {
   /// Get sites that need syncing
   Future<List<Site>> getSitesNeedingSync() async {
     final query = select(sites)
-      ..where((t) => 
-          t.needsSiteSync.equals(true) | 
-          t.needsImageSync.equals(true) | 
+      ..where((t) =>
+          t.needsSiteSync.equals(true) |
+          t.needsImageSync.equals(true) |
           t.needsSnagsSync.equals(true));
-    
+
+    final entries = await query.get();
+    return entries.map((entry) => _entryToSite(entry)).toList();
+  }
+
+  /// Get sites shared with the user (not owned by them)
+  /// Used for version-based sync to identify orphaned local sites
+  Future<List<Site>> getSharedSites(String userEmail) async {
+    final normalizedEmail = userEmail.toLowerCase().trim();
+    final query = select(sites)
+      ..where((t) => t.ownerEmail.equals(normalizedEmail).not())
+      ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]);
+
     final entries = await query.get();
     return entries.map((entry) => _entryToSite(entry)).toList();
   }

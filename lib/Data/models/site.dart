@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///
 /// Core data model for construction site management with the following features:
 /// - Offline-first architecture with local SQLite storage
-/// - Three-level permission system (VIEW, WORKING, CONTRIBUTOR)
+/// - Four-level permission system (VIEW, WORKING_SEE_ALL, WORKING_SEE_SELF, CONTRIBUTOR)
 /// - Configurable permission settings per site
 /// - Dynamic category management for snags
 /// - Soft deletion with 7-day grace period
@@ -14,8 +14,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///
 /// Permission Levels:
 /// - VIEW: Read-only access to site and all snags
-/// - WORKING: Can work on assigned snags (visibility configurable)
-/// - CONTRIBUTOR: Can create snags, work on assigned (edit others configurable)
+/// - WORKING_SEE_ALL: Can see all snags, edit only assigned snags
+/// - WORKING_SEE_SELF: Can only see and edit snags assigned to them
+/// - CONTRIBUTOR: Can create snags, see all, edit assigned (edit others configurable)
 ///
 /// Note: Owner is identified by comparing ownerEmail with current user email,
 /// not through the permission system.
@@ -73,13 +74,16 @@ class Site {
   
   // ============== Sharing & Permissions ==============
   /// Map of user emails to their permission levels
-  /// Permissions: 'VIEW', 'WORKING', 'CONTRIBUTOR'
+  /// Permissions: 'VIEW', 'WORKING_SEE_ALL', 'WORKING_SEE_SELF', 'CONTRIBUTOR'
   /// Note: Owner is NOT stored here, identified by ownerEmail match
   final Map<String, String> sharedWith;
 
   // ============== Permission Settings (Owner-configurable) ==============
-  /// Whether WORKING members can see all snags (true) or only assigned (false)
-  /// Default: true - provides context without risk (can see but only edit assigned)
+  /// @deprecated Use WORKING_SEE_ALL or WORKING_SEE_SELF permission types instead.
+  /// This field is kept for database backward compatibility but is no longer used.
+  /// Visibility is now controlled by the permission type itself:
+  /// - WORKING_SEE_ALL: sees all snags
+  /// - WORKING_SEE_SELF: sees only assigned snags
   final bool workingCanSeeAllSnags;
 
   /// Whether CONTRIBUTOR members can edit snags created by others
@@ -238,7 +242,7 @@ class Site {
       needsSiteSync: true, // Mark for initial sync
       needsImageSync: hasImage, // Mark for image sync if image provided
       sharedWith: const {}, // No sharing initially (owner is not a permission)
-      workingCanSeeAllSnags: true, // Default: WORKING can see all snags
+      workingCanSeeAllSnags: true, // @deprecated - kept for DB compat, use permission types instead
       contributorCanEditOthers: false, // Default: CONTRIBUTOR cannot edit others' snags
     );
   }
@@ -567,7 +571,8 @@ class Site {
   /// - User is the owner (sees all)
   /// - User has VIEW permission (sees all)
   /// - User has CONTRIBUTOR permission (sees all)
-  /// - User has WORKING permission AND (workingCanSeeAllSnags OR snag is assigned to them)
+  /// - User has WORKING_SEE_ALL permission (sees all)
+  /// - User has WORKING_SEE_SELF permission AND snag is assigned to them
   ///
   /// [assignedEmail] is the email the snag is assigned to (null if unassigned)
   bool canSeeSnag(String userEmail, String? assignedEmail) {
@@ -579,12 +584,12 @@ class Site {
     switch (permission) {
       case 'VIEW':
       case 'CONTRIBUTOR':
+      case 'WORKING_SEE_ALL':
         return true; // Always see all snags
-      case 'WORKING':
-        // Can see all if setting allows, or if assigned to them
-        return workingCanSeeAllSnags ||
-            (assignedEmail != null &&
-                assignedEmail.toLowerCase() == userEmail.toLowerCase());
+      case 'WORKING_SEE_SELF':
+        // Can only see snags assigned to them
+        return assignedEmail != null &&
+            assignedEmail.toLowerCase() == userEmail.toLowerCase();
       default:
         return false;
     }
@@ -598,7 +603,7 @@ class Site {
   ///
   /// Returns true if:
   /// - User is the owner (edits all)
-  /// - User is WORKING and snag is assigned to them (edit assigned only)
+  /// - User is WORKING_SEE_ALL or WORKING_SEE_SELF and snag is assigned to them
   /// - User is CONTRIBUTOR and created the snag (edit own)
   /// - User is CONTRIBUTOR and contributorCanEditOthers is true (edit any)
   bool canEditSnag(String userEmail, String snagCreatorEmail, String? assignedEmail) {
@@ -612,8 +617,9 @@ class Site {
     switch (permission) {
       case 'VIEW':
         return false; // Never edit
-      case 'WORKING':
-        // Can only edit if assigned to them
+      case 'WORKING_SEE_ALL':
+      case 'WORKING_SEE_SELF':
+        // Both WORKING types can only edit if assigned to them
         return assignedEmail != null &&
             assignedEmail.toLowerCase() == userEmailLower;
       case 'CONTRIBUTOR':
@@ -631,7 +637,7 @@ class Site {
   ///
   /// Returns true if:
   /// - User is the owner
-  /// - User is WORKING and snag is assigned to them
+  /// - User is WORKING_SEE_ALL or WORKING_SEE_SELF and snag is assigned to them
   /// - User is CONTRIBUTOR (any snag they can edit)
   bool canMarkComplete(String userEmail, String snagCreatorEmail, String? assignedEmail) {
     return canEditSnag(userEmail, snagCreatorEmail, assignedEmail);
