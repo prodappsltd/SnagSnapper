@@ -530,7 +530,7 @@
 <div class="cf-intro">
   <strong>Trigger:</strong> <code>Profile/{ownerUID}/Sites/{siteId}</code> document updated<br>
   <strong>Purpose:</strong> Adds/removes shared_access entries when sharedWith changes, updates versions, sends notification emails for new shares<br>
-  <strong>Location:</strong> <code>functions/index.js:240-481</code><br>
+  <strong>Location:</strong> <code>functions/index.js:240-487</code><br>
   <strong style="color: #38a169;">Retry enabled:</strong> <code>retry: true</code> with 30s event age check, deferred emails, transient/permanent error handling. See 2.11 for details.
 </div>
 <table>
@@ -552,7 +552,7 @@
       <td><strong>Input Validation (Email)</strong></td>
       <td>When owner adds new collaborator via site update, malformed email (e.g., "not-an-email", SQL injection attempt, script tags) could be processed. Malformed emails would fail lookup when collaborator tries to sync.</td>
       <td><strong>Two-layer validation with tightened regex (2026 best practice):</strong> (1) <strong>UI:</strong> <code>_isValidEmail()</code> in <code>share_site_dialog.dart:51-66</code> validates before "Add" action. Shows error: "Please enter a valid email address". (2) <strong>CF:</strong> <code>isValidEmail()</code> re-validates server-side at lines 316, 348. Invalid emails skipped and logged. <strong>Regex rejects:</strong> consecutive dots, dot before/after @, domain segments starting/ending with hyphen. Both use identical pattern.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:82-98,316-319,348-351</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-66</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:82-98,321-324,353-356</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:51-66</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -561,7 +561,7 @@
       <td><strong>Input Validation (Permission)</strong></td>
       <td>When owner adds new collaborator, they could inject arbitrary permission string (e.g., "ADMIN", "FULL_ACCESS"). If stored in shared_access, could cause permission check failures or unexpected behavior.</td>
       <td><strong>Two-layer validation:</strong> (1) <strong>UI:</strong> Card-based selection only (lines 569-610) - users tap predefined cards, no text input. Only 4 valid options: VIEW, WORKING_SEE_ALL, WORKING_SEE_SELF, CONTRIBUTOR. (2) <strong>CF:</strong> <code>isValidPermission()</code> validates against whitelist at line 321. Invalid permissions skipped and logged. Attacker bypassing UI still blocked by CF.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:72-75,321-324</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:569-610</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:72-75,326-329</code><br><span class="location-app">UI</span><br><code>share_site_dialog.dart:569-610</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -570,7 +570,7 @@
       <td><strong>HTML Injection (Email)</strong></td>
       <td>Site name or owner name with HTML/script tags could be injected into notification emails for new collaborators added via site update.</td>
       <td><strong>Two-layer protection:</strong> (1) <strong>Site name UI:</strong> <code>FilteringTextInputFormatter.allow(RegExp('[a-zA-Z0-9_ ]'))</code> blocks all HTML chars at input. (2) <strong>Owner name UI:</strong> <code>ValidationRules.namePattern</code> blocks <code>&lt;&gt;&amp;"</code>. (3) <strong>CF:</strong> <code>escapeHtml()</code> escapes both siteName and ownerName before email insertion as defense-in-depth.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:94-102,502,507</code><br><span class="location-app">Site UI</span><br><code>site_info_v2.dart:585</code><br><span class="location-app">Profile UI</span><br><code>validation_rules.dart:41,88-102</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:105-113,696,701</code><br><span class="location-app">Site UI</span><br><code>site_info_v2.dart:585</code><br><span class="location-app">Profile UI</span><br><code>validation_rules.dart:41,88-102</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -579,7 +579,7 @@
       <td><strong>Email Enumeration</strong></td>
       <td>Attacker could probe shared_access collection paths to discover valid email addresses. If document IDs used plain emails, attacker could enumerate <code>/shared_access/victim@email.com</code> paths to confirm accounts exist.</td>
       <td><strong>Two-layer protection:</strong> (1) Document IDs are SHA256 hashes via <code>hashEmail()</code> for all operations (add/update/remove) - non-reversible 64-char hex. (2) Firestore rules verify <code>resource.data.email == request.auth.token.email.lower()</code> - even if attacker guesses a hash, read is blocked unless their authenticated email matches the document's email field.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:51-59,326,353,389</code><br><span class="location-rules">Firestore Rules</span><br><code>firestore.rules:260</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:51-59,331,358,394</code><br><span class="location-rules">Firestore Rules</span><br><code>firestore.rules:260</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -589,25 +589,25 @@
       <td><strong>Document Creation (New Collaborator)</strong></td>
       <td>When owner adds a new collaborator, CF creates/updates <code>shared_access/{emailHash}</code> document. Two-step: <code>set({ email }, { merge: true })</code> ensures doc exists, then <code>update({ sites.{siteId}: {ownerUID, version} })</code> adds site entry.</td>
       <td><strong>MITIGATED:</strong> Two-step approach handles both new and existing docs. <code>set({ merge: true })</code> creates if missing, <code>update()</code> adds site entry. Both operations are idempotent (safe on retry).<br><br><strong>With retry:</strong> Transient failures auto-retry within 30s.<br><strong>If retries fail:</strong> Self-healing via 2.6/2.6.1 on next site edit.<br><strong>Manual recovery:</strong> Owner removes and re-adds collaborator.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:313-344</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:317-349</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" onclick="event.stopPropagation()" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr class="sub-item" data-group="group-2-5">
       <td>2.5.1</td>
       <td><strong>Partial Creation Failure</strong></td>
-      <td>Line 334 <code>set({ email }, { merge: true })</code> succeeds but chained <code>.then(() => update({...}))</code> at lines 335-338 fails. Document exists with <code>{ email }</code> but no <code>sites.{siteId}</code> entry. Collaborator won't see site in Shared Sites list.</td>
+      <td>Line 339 <code>set({ email }, { merge: true })</code> succeeds but chained <code>.then(() => update({...}))</code> at lines 340-342 fails. Document exists with <code>{ email }</code> but no <code>sites.{siteId}</code> entry. Collaborator won't see site in Shared Sites list.</td>
       <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures auto-retry within 30s. <code>set({ merge: true })</code> is idempotent - re-running is safe.<br>(2) <strong>If retries fail (&gt;30s):</strong> Self-healing on next site edit via version sync path (2.6) which runs <code>update()</code> to add missing site entry.<br>(3) <strong>Manual recovery:</strong> Owner removes/re-adds collaborator.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:333-338</code><br>Recovery: 2.6<br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:338-343</code><br>Recovery: 2.6<br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr class="sub-item" data-group="group-2-5">
       <td>2.5.2</td>
       <td><strong>Complete Creation Failure</strong></td>
-      <td>Line 334 <code>set()</code> fails entirely (network timeout, Firebase service unavailable). No <code>shared_access</code> document created. Collaborator in site's <code>sharedWith</code> but can't discover site.</td>
+      <td>Line 339 <code>set()</code> fails entirely (network timeout, Firebase service unavailable). No <code>shared_access</code> document created. Collaborator in site's <code>sharedWith</code> but can't discover site.</td>
       <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures (gRPC 4,8,14) auto-retry within 30s.<br>(2) <strong>If retries fail (&gt;30s):</strong> Self-healing via 2.6.1 catch-and-recover on next site edit - version sync tries <code>update()</code>, catches NOT_FOUND (code 5), falls back to <code>set() + update()</code>.<br>(3) <strong>Manual recovery:</strong> Owner removes/re-adds collaborator.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:333-338</code><br>Recovery: 2.6.1<br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:338-343</code><br>Recovery: 2.6.1<br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -617,7 +617,7 @@
       <td><strong>Version Sync (Existing Collaborator)</strong> <span class="info-icon" onclick="event.stopPropagation(); showPopup('popup-2-6')">i</span></td>
       <td>Collaborator's client could have stale site data if they don't know the site was updated. Without version tracking, client would need to fetch full site document on every sync to detect changes, causing unnecessary Firestore reads and costs.</td>
       <td><strong>MITIGATED:</strong> CF stores <code>{ ownerUID, version }</code> in each collaborator's shared_access entry. On site update with <code>versionChanged=true</code>, version is updated for ALL existing shares. Client compares <code>localVersion &lt; remoteVersion</code> - only fetches if remote is higher.<br><br><strong>With retry:</strong> Transient failures auto-retry within 30s, ensuring version propagates reliably.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:345-380</code><br><span class="location-app">Client check</span><br><code>shared_site_service.dart:247</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:350-385</code><br><span class="location-app">Client check</span><br><code>shared_site_service.dart:247</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" onclick="event.stopPropagation()" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -625,8 +625,8 @@
       <td>2.6.1</td>
       <td><strong>Missing shared_access Document</strong></td>
       <td>For existing collaborators, if the <code>shared_access/{hash}</code> document doesn't exist (deleted, or previous CF failed and timed out), <code>update()</code> would throw gRPC error code 5 (NOT_FOUND).</td>
-      <td><strong>MITIGATED:</strong> Catch-and-recover pattern implemented. Normal path uses single <code>update()</code> (1 write). If NOT_FOUND error (code 5, line 365), falls back to <code>set({ merge: true })</code> + <code>update()</code> (2 writes). Self-healing - recreates missing doc. Email validation at line 348.<br><br><strong>Note:</strong> NOT_FOUND can occur if initial share creation (2.5) timed out after 30s.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:360-376</code><br><span class="check-yes">Verified</span></td>
+      <td><strong>MITIGATED:</strong> Catch-and-recover pattern implemented. Normal path uses single <code>update()</code> (1 write). If NOT_FOUND error (code 5, line 370), falls back to <code>set({ merge: true })</code> + <code>update()</code> (2 writes). Self-healing - recreates missing doc. Email validation at line 353.<br><br><strong>Note:</strong> NOT_FOUND can occur if initial share creation (2.5) timed out after 30s.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:365-380</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -634,8 +634,8 @@
       <td>2.6.2</td>
       <td><strong>Partial Update Failure</strong></td>
       <td><code>Promise.all(updatePromises)</code> fails fast - if ANY collaborator's update fails, the entire batch is marked failed. However, some updates may have already completed before the failure, leaving inconsistent state where some collaborators have updated version, others don't.</td>
-      <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures auto-retry within 30s. All Firestore operations are idempotent - safe to repeat.<br>(2) <code>Promise.all(updatePromises)</code> at line 420 fails fast.<br>(3) <strong>If retries fail (&gt;30s):</strong> Owner edits site again → triggers new <code>onSiteUpdated</code> → retries all updates. Inconsistency is temporary.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:420</code><br><span class="check-yes">Verified</span></td>
+      <td><strong>MITIGATED:</strong> (1) <strong>Retry:</strong> Transient failures auto-retry within 30s. All Firestore operations are idempotent - safe to repeat.<br>(2) <code>Promise.all(updatePromises)</code> at line 425 fails fast.<br>(3) <strong>If retries fail (&gt;30s):</strong> Owner edits site again → triggers new <code>onSiteUpdated</code> → retries all updates. Inconsistency is temporary.</td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:425</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -654,7 +654,7 @@
       <td><strong>Share Removal Cleanup</strong></td>
       <td>When owner removes a collaborator from <code>sharedWith</code> map, CF must delete that user's <code>shared_access/{emailHash}/sites/{siteId}</code> entry. <strong>Failure modes:</strong> (1) CF fails entirely → entry remains, collaborator retains stale access pointer. (2) <code>FieldValue.delete()</code> fails → entry remains. (3) Partial batch failure (multiple removals) → some entries remain. (4) <code>shared_access</code> doc doesn't exist (initial share timed out) → <code>update()</code> throws NOT_FOUND.</td>
       <td><strong>MITIGATED:</strong><br>(1) <strong>Retry:</strong> <code>retry: true</code> (line 248) ensures transient failures auto-retry within 30s.<br>(2) <strong>Idempotent:</strong> <code>FieldValue.delete()</code> (line 406) is safe to repeat - deleting already-deleted field is no-op.<br>(3) <strong>NOT_FOUND handling:</strong> Lines 407-416 catch gRPC code 5 and return success - if doc doesn't exist, nothing to clean up.<br>(4) <strong>Fallback:</strong> If retries fail, owner makes any edit → triggers new CF → cleanup retried.</td>
-      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:390-422</code><br><span class="check-yes">Verified</span></td>
+      <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:390-421</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -689,7 +689,7 @@
       <td>2.11</td>
       <td><strong>CF Failure/Recovery</strong></td>
       <td>CF fails after Firestore write succeeds. User's <code>sharedWith</code> map is updated but <code>shared_access</code> entries not created/updated/deleted. <strong>Impact:</strong> New collaborators can't discover shared site (no entry in their <code>shared_access</code>). Removed collaborators retain stale access pointer (entry not deleted). Version not propagated (collaborators have stale data).<br><br><strong>See:</strong> <code>Claude/00-CORE/CLOUD_FUNCTIONS_BEST_PRACTICES.md</code></td>
-      <td><strong>MITIGATED - Retry enabled with safeguards:</strong><br>(1) <strong>retry: true</strong> (line 248) - transient failures auto-retry.<br>(2) <strong>Event age check FIRST</strong> (lines 260-273) - events &gt;30s dropped. Runs before ANY code that could throw, preventing infinite retries. Uses safe access <code>event.params?.siteId</code>.<br>(3) <strong>Deferred emails</strong> (lines 431-441) - emails only sent AFTER <code>Promise.all(updatePromises)</code> succeeds, preventing duplicates on retry.<br>(4) <strong>Transient/permanent handling</strong> (lines 446-485) - transient errors (gRPC 4,8,14, network codes) throw to retry; permanent errors return gracefully.<br>(5) <strong>Idempotent writes</strong> - <code>set({merge:true})</code>, <code>update()</code>, <code>FieldValue.delete()</code> all safe to repeat.<br><br><strong>Trade-off:</strong> 30s timeout means some operations may not complete if all retries fail within window. Fallback: owner makes another edit.</td>
+      <td><strong>MITIGATED - Retry enabled with safeguards:</strong><br>(1) <strong>retry: true</strong> (line 248) - transient failures auto-retry.<br>(2) <strong>Event age check FIRST</strong> (lines 260-273) - events &gt;30s dropped. Runs before ANY code that could throw, preventing infinite retries. Uses safe access <code>event.params?.siteId</code>.<br>(3) <strong>Deferred emails</strong> (lines 433-441) - emails only sent AFTER <code>Promise.all(updatePromises)</code> succeeds, preventing duplicates on retry.<br>(4) <strong>Transient/permanent handling</strong> (lines 446-485) - transient errors (gRPC 4,8,14, network codes) throw to retry; permanent errors return gracefully.<br>(5) <strong>Idempotent writes</strong> - <code>set({merge:true})</code>, <code>update()</code>, <code>FieldValue.delete()</code> all safe to repeat.<br><br><strong>Trade-off:</strong> 30s timeout means some operations may not complete if all retries fail within window. Fallback: owner makes another edit.</td>
       <td><span class="location-cf">onSiteUpdated</span><br><code>functions/index.js:240-487</code><br><span class="location-app">Ref</span><br><code>CLOUD_FUNCTIONS_BEST_PRACTICES.md</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
