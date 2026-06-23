@@ -745,26 +745,26 @@
       <td>3.1</td>
       <td><strong>Email Enumeration</strong></td>
       <td>When site is deleted, CF iterates over sharedWith emails to clean up shared_access. If document paths used plain emails, cleanup operations would leak which emails had accounts.</td>
-      <td><strong>ACCEPTED:</strong> All emails are SHA256 hashed via <code>hashEmail()</code> (line 442) before constructing document paths. Cleanup operations use <code>/shared_access/{64-char-hash}</code> paths. Note: Full emails ARE logged (line 451) - covered by 3.5 as accepted PII logging.</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:442</code><br><span class="check-yes">Verified</span></td>
+      <td><strong>ACCEPTED:</strong> All emails are SHA256 hashed via <code>hashEmail()</code> (line 553) before constructing document paths. Cleanup operations use <code>/shared_access/{64-char-hash}</code> paths. Note: Full emails ARE logged (lines 571, 577) - covered by 3.5 as accepted PII logging.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:553</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>3.2</td>
       <td><strong>Cleanup Completeness</strong></td>
-      <td>If CF partially processes sharedWith (timeout mid-loop), some shared_access entries remain. On next sync, client fetches site from Firestore → 404 → client deletes local copy (<code>shared_site_service.dart:267-277</code>). Site disappears from list. Self-cleaning.</td>
-      <td><strong>ACCEPTED:</strong> CF iterates ALL keys via <code>Promise.all(updatePromises)</code> (line 454). If any fails, error thrown and admin alerted. Client-side cleanup handles orphaned pointers gracefully (same as 3.3).</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:441-454</code><br><span class="location-app">Client cleanup</span><br><code>shared_site_service.dart:267-277</code><br><span class="check-yes">Verified</span></td>
+      <td>If CF partially processes sharedWith (timeout mid-loop), some shared_access entries remain. These orphaned entries persist because client's version check (line 247) skips Firestore fetch when local version matches remote - never discovers deletion.</td>
+      <td><strong>ACCEPTED:</strong> (1) CF uses <code>Promise.all(updatePromises)</code> (line 580) - all removals must complete or all retry together. (2) <code>retry: true</code> (line 500) handles transient failures within 30s. (3) If ALL retries exhausted, orphaned entries persist until admin cleanup. Edge case - accepted risk.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:550-580</code><br><span class="location-app">Version check</span><br><code>shared_site_service.dart:247</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
     <tr>
       <td>3.3</td>
       <td><strong>CF Failure (Orphaned Pointers)</strong></td>
-      <td>If CF fails after all retries (30s timeout), shared_access entries remain pointing to deleted site. On next sync, client fetches from shared_access, tries Firestore → 404, triggers cleanup.</td>
-      <td><strong>MITIGATED:</strong> (1) <strong>retry: true</strong> enabled (line 480) - transient failures auto-retry within 30s.<br>(2) <strong>Event age check:</strong> Events &gt;30s dropped (lines 488-502).<br>(3) <strong>Error handling:</strong> Transient vs permanent errors distinguished (lines 564-594).<br>(4) <strong>NOT_FOUND handling:</strong> Missing docs treated as success (lines 537-546).<br>(5) <strong>Fallback:</strong> Client-side handles gracefully: <code>shared_site_service.dart</code> detects site not in Firestore (lines 267-277), deletes local copy + snags. Site silently disappears.</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:473-597</code><br><span class="location-app">App Logic</span><br><code>shared_site_service.dart:267-277</code><br><span class="check-yes">Verified</span></td>
+      <td>If CF fails after all retries (30s timeout), shared_access entries remain pointing to deleted site. Client version check (line 247) skips Firestore fetch when versions match - does NOT self-clean via 404.</td>
+      <td><strong>MITIGATED:</strong> (1) <strong>retry: true</strong> enabled (line 500) - transient failures auto-retry within 30s.<br>(2) <strong>Event age check:</strong> Events &gt;30s dropped (lines 511-524).<br>(3) <strong>Error handling:</strong> Transient vs permanent errors distinguished (lines 586-624).<br>(4) <strong>NOT_FOUND handling:</strong> Missing docs treated as success (lines 566-575).<br>(5) <strong>Residual risk:</strong> If all retries fail, orphaned entries persist showing stale local data. No automatic client cleanup - manual admin intervention required. Rare edge case - accepted.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:493-626</code><br><span class="location-app">Version check</span><br><code>shared_site_service.dart:247</code><br><span class="check-yes">Verified</span></td>
       <td><span class="status-mitigated">MITIGATED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -772,8 +772,8 @@
       <td>3.4</td>
       <td><strong>Information Disclosure (Logs)</strong></td>
       <td>Sensitive error details exposed in Cloud Function logs</td>
-      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code>. Requires Firebase project access (admin only).</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:461</code><br><span class="check-yes">Accepted</span></td>
+      <td><strong>ACCEPTED.</strong> Stack traces logged via <code>console.error()</code> (lines 616, 622). Requires Firebase project access (admin only).</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:616,622</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span><br><span class="severity-low">Low</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
@@ -781,8 +781,8 @@
       <td>3.5</td>
       <td><strong>Log Data Leakage (PII)</strong></td>
       <td>Full email addresses logged during cleanup, exposing PII</td>
-      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged at line 451 to aid troubleshooting.</td>
-      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:451</code><br><span class="check-yes">Accepted</span></td>
+      <td><strong>ACCEPTED.</strong> Logs only accessible to Firebase project admins. Full emails logged at lines 571, 577 to aid troubleshooting.</td>
+      <td><span class="location-cf">onSiteDeleted</span><br><code>functions/index.js:571,577</code><br><span class="check-yes">Accepted</span></td>
       <td><span class="status-accepted">ACCEPTED</span></td>
       <td><select class="test-select" style="background: rgb(190, 227, 248); color: rgb(42, 67, 101);"><option value=""></option><option value="Tested">Tested</option><option value="N/A">N/A</option><option value="Accept" selected="selected">Accept</option></select></td>
     </tr>
