@@ -2,7 +2,7 @@
 
 > **CRITICAL REFERENCE DOCUMENT**
 > All Risk Assessments involving Cloud Functions MUST reference this document.
-> Last Updated: 2026-06-19
+> Last Updated: 2026-07-02
 
 ## Official Sources
 
@@ -190,15 +190,65 @@ try {
 
 ### Common Error Types
 
-| Error Type | Transient? | Action |
-|------------|------------|--------|
-| Network timeout (ETIMEDOUT) | Yes | Throw - retry |
-| Connection reset (ECONNRESET) | Yes | Throw - retry |
-| DNS failure (ENOTFOUND) | Maybe | Throw - retry (might resolve) |
-| Invalid input data | No | Return - don't retry |
-| Authentication failure | No | Return - don't retry |
-| Document not found | No | Return - don't retry |
-| Code bug / TypeError | No | Return - don't retry (fix the bug!) |
+| Error Type | Code | Transient? | Action |
+|------------|------|------------|--------|
+| Network timeout | ETIMEDOUT | Yes | Throw - retry |
+| Connection reset | ECONNRESET | Yes | Throw - retry |
+| DNS failure | ENOTFOUND | Maybe | Throw - retry (might resolve) |
+| DNS again | EAI_AGAIN | Yes | Throw - retry |
+| Deadline exceeded | 4 (gRPC) | Yes | Throw - retry |
+| Resource exhausted | 8 (gRPC) | Yes | Throw - retry |
+| Service unavailable | 14 (gRPC) | Yes | Throw - retry |
+| Not found | 5 (gRPC) | No | Return - don't retry |
+| Permission denied | 7 (gRPC) | No | Return - don't retry |
+| Invalid argument | 3 (gRPC) | No | Return - don't retry |
+| Invalid input data | - | No | Return - don't retry |
+| Code bug / TypeError | - | No | Return - don't retry (fix the bug!) |
+
+### IMPORTANT: gRPC Numeric Codes
+
+**nodejs-firestore returns numeric error codes, not strings!**
+
+```javascript
+// WRONG - string comparison fails
+if (error.code === 'UNAVAILABLE') { ... }  // Won't match!
+
+// CORRECT - numeric comparison
+const transientErrors = {
+  4: true,   // DEADLINE_EXCEEDED
+  8: true,   // RESOURCE_EXHAUSTED
+  14: true,  // UNAVAILABLE
+};
+if (transientErrors[error.code]) { ... }  // Works!
+```
+
+**Reference:** [gRPC Status Codes](https://grpc.io/docs/guides/status-codes/)
+
+### NOT_FOUND Handling for Cleanup Operations
+
+When deleting/removing data, NOT_FOUND (code 5) often means "already clean" - treat as success:
+
+```javascript
+// Example: Removing site from shared_access during cleanup
+accessRef.update({
+  [`sites.${siteId}`]: FieldValue.delete(),
+}).catch(err => {
+  // gRPC NOT_FOUND = 5
+  const isNotFound = err.code === 5 ||
+                     (err.message && err.message.includes('NOT_FOUND'));
+  if (isNotFound) {
+    // Document doesn't exist - nothing to delete = success
+    console.log('Doc not found, already clean');
+    return; // Resolve successfully, don't throw
+  }
+  throw err; // Re-throw other errors
+});
+```
+
+**When NOT_FOUND = success:**
+- Cleanup operations (deleting entries that may not exist)
+- Removing references from documents that were already deleted
+- Edge cases where initial creation failed (so nothing to clean up)
 
 ---
 
@@ -370,3 +420,4 @@ When creating Risk Assessments for Cloud Functions, include these items:
 |------|--------|
 | 2026-06-19 | Initial creation based on official Firebase/Google Cloud docs |
 | 2026-06-20 | Added "When NOT to Enable Retry" section, retry decision framework, no retry limit info |
+| 2026-07-02 | Added gRPC numeric error codes (nodejs-firestore returns numbers, not strings). Added NOT_FOUND handling pattern for cleanup operations. |

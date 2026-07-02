@@ -1,7 +1,7 @@
 # Site Sharing & Cloud Functions - Decision Log
 
-**Version:** 1.1.0
-**Last Updated:** 2026-06-10
+**Version:** 1.2.0
+**Last Updated:** 2026-07-02
 **Status:** In Progress (Security Model Finalized)
 
 **Related Documents:**
@@ -45,9 +45,9 @@ This document tracks decisions related to site sharing functionality and Cloud F
 ```
 
 **Cloud Functions (functions/index.js):**
-- `onSiteCreated` (lines 97-171) - New site with initial sharedWith
-- `onSiteUpdated` (lines 177-293) - Existing site, sharedWith changed
-- `onSiteDeleted` (lines 300-356) - Cleanup shared_access entries
+- `onSiteCreated` (lines 97-234) - New site with initial sharedWith
+- `onSiteUpdated` (lines 240-487) - Existing site, sharedWith changed (**retry: true**)
+- `onSiteDeleted` (lines 493-626) - Cleanup shared_access entries (**retry: true**)
 
 ---
 
@@ -62,31 +62,44 @@ Action: Update shared_access document for affected user
 
 ### Failure Handling
 
-| Decision | Approach |
+| Function | Retry | Recovery |
+|----------|-------|----------|
+| `onSiteCreated` | No | User edits site → triggers `onSiteUpdated` |
+| `onSiteUpdated` | **Yes (30s)** | Auto-retry handles transient failures |
+| `onSiteDeleted` | **Yes (30s)** | Auto-retry handles transient failures |
+
+**Why 30 seconds?** Event age check drops events older than 30s. This allows 1-2 transient retries (first retry ~10s with exponential backoff) while preventing runaway billing.
+
+### Retry Protection (onSiteUpdated & onSiteDeleted)
+
+```
+Event triggers CF
+       │
+       ▼
+Event age < 30s? ──No──→ Drop event (return successfully)
+       │
+      Yes
+       ▼
+Process event
+       │
+       ▼
+Success? ──Yes──→ Done
+       │
+       No
+       ▼
+Transient error? ──Yes──→ Throw → Firebase retries
+       │
+       No
+       ▼
+Permanent error → Log and return (stop retry)
+```
+
+### Manual Recovery (if all retries fail)
+
+| Scenario | Recovery |
 |----------|----------|
-| CF failure rate | ~0.5% (rare) |
-| Recovery method | User A removes and re-adds User B |
-| Special refresh button | Not needed (keep it simple) |
-| Two consecutive failures | 0.0025% chance, manual fix acceptable |
-| Admin involvement | Only for system-wide issues, not individual cases |
-
-### Failure Scenario
-
-```
-User A shares Site X with User B
-       │
-       ▼
-CF fails (0.5% chance)
-       │
-       ▼
-User B reports: "I don't see the site"
-       │
-       ▼
-User A removes User B, then re-adds
-       │
-       ▼
-CF triggers again → works (99.5% success)
-```
+| Share not propagated | Owner removes and re-adds collaborator |
+| Orphaned shared_access | Admin cleanup (rare edge case) |
 
 ---
 
@@ -192,6 +205,11 @@ Tier validation and share limits are enforced client-side. This is acceptable be
 | 2026-06-14 | Self-share prevention in Firestore rules | Owner can't add themselves to sharedWith; validated server-side | RA 2.6 |
 | 2026-06-14 | Sync button 30s cooldown | Prevents rapid sync abuse; stored in service singleton | RA 4.9 |
 | 2026-06-14 | Version-based sync in shared_access | CF stores `{ ownerUID, version }`. Client compares versions before fetching (shared_site_service.dart:244-254). Orphan cleanup removes unshared sites (lines 362-374). | RA 4.10, RA 2.7 |
+| 2026-07-02 | Enable retry on onSiteUpdated | 30s event age check + transient/permanent error handling. Ensures share removal propagates. | RA 2.7-2.13 |
+| 2026-07-02 | Enable retry on onSiteDeleted | 30s event age check + transient/permanent error handling. Prevents orphaned shared_access entries. | RA 3.2-3.3 |
+| 2026-07-02 | Version check prevents 404 self-clean | Client skips Firestore fetch when local version >= remote. If CF fails completely, orphaned entries persist (no automatic cleanup). Accepted edge case. | RA 3.2-3.3 |
+| 2026-07-02 | gRPC numeric error codes | nodejs-firestore returns numeric codes (4=DEADLINE_EXCEEDED, 8=RESOURCE_EXHAUSTED, 14=UNAVAILABLE), not strings. Error handling updated. | - |
+| 2026-07-02 | NOT_FOUND = success for removals | When removing shared_access entry, NOT_FOUND (code 5) is treated as success - nothing to delete means already clean. | RA 3.3 |
 
 ---
 
@@ -210,9 +228,19 @@ Tier validation and share limits are enforced client-side. This is acceptable be
 
 ## Completed
 
-- [x] Orphaned site pointer cleanup (RA 2.7): Two-layer cleanup. If site not in Firestore (CF failure), delete local + snags (lines 267-277). If site not in shared_access, orphan cleanup removes it (lines 370-381).
+- [x] Orphaned site pointer cleanup (RA 2.7): If site not in shared_access, orphan cleanup removes local copy (lines 370-381).
 - [x] Version-based sync client-side (RA 4.10): Client compares local vs remote versions before fetching (lines 244-254). Skips fetch if local >= remote.
 - [x] Race condition fix (RA 4.8): If user removed from sharedWith but CF hasn't updated shared_access yet, delete local copy when fetching site (lines 284-297).
+- [x] Retry enabled on onSiteUpdated (RA 2.7-2.13): 30s event age check, transient/permanent error handling, deferred email execution.
+- [x] Retry enabled on onSiteDeleted (RA 3.2-3.3): 30s event age check, transient/permanent error handling, NOT_FOUND = success.
+
+### Important Note: Version Check Limitation
+
+Client's version check (line 247) skips Firestore fetch when `local >= remote`. This means:
+- If `onSiteDeleted` fails **completely** (all retries exhausted), the `shared_access` entry persists
+- Client sees same version → skips fetch → never discovers site was deleted
+- **No automatic 404 self-cleaning** - orphaned entries require admin cleanup
+- This is an accepted edge case (retry handles most failures)
 
 ---
 
@@ -222,6 +250,7 @@ Tier validation and share limits are enforced client-side. This is acceptable be
 |------|---------|--------|
 | 2026-06-10 | 1.0.0 | Initial document - sharing flow and CF failure handling |
 | 2026-06-10 | 1.1.0 | Added 5-layer security model, rate limiting decision, freeRASP planned |
+| 2026-07-02 | 1.2.0 | Enabled retry on onSiteUpdated/onSiteDeleted with 30s event age check. Documented version check limitation (no 404 self-clean). Updated CF line numbers. Added gRPC numeric codes decision. |
 
 ---
 
